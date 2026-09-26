@@ -463,6 +463,10 @@
     const EXTRA_WAREHOUSE_POP = 20;                               // island residents needed per existing warehouse
     const extraWarehouseCost = (count) => ({ coins: 100 + 50 * count, planks: 30 + 15 * count, stone: 25 + 15 * count });
     const STARVE_TICKS = 5;                                       // without food, one resident leaves every N ticks
+    // Getting a new island going: the founding ship brings supplies, and an island's first few settlers
+    // bring their own provisions (no food needed), so they can staff the first fisher.
+    const FOUNDING_SUPPLIES = { planks: 30, fish: 20 };
+    const FREE_SETTLERS = 4;
     const UPGRADE_EVERY = 3;                                      // at most one house upgrade per island every N ticks
 
     // Natural resources on the map run out. Wood grows back (slowly, faster with a forester); stone does not.
@@ -494,7 +498,7 @@
     // workers: residents needed to run it · upkeep: coins/s · tier: house level needed to unlock
     const DEFS = {
       house: { id: 'house', name: 'Bolig', w: 2, h: 2, cost: { coins: 20, planks: 8 }, house: true,
-        desc: 'Bolig for 6 pionerer. Opgraderes af sig selv til Borgere (12) og Købmænd (20), når deres behov er dækket.' },
+        desc: 'Bolig for 6 pionerer. De første 4 beboere på en ø klarer sig uden mad; resten skal have fisk eller kød. Opgraderes til Borgere (12) og Købmænd (20).' },
       woodcutter: { id: 'woodcutter', name: 'Skovhugger', w: 2, h: 2, cost: { coins: 30, planks: 10 }, workers: 2, upkeep: 0.04,
         produces: 'wood', rate: 0.8, near: { terrain: 'forest', label: 'skov' },
         harvest: { terrain: 'forest', key: 'wood', radius: 4, label: 'træer' },
@@ -536,7 +540,7 @@
         coastal: true, needsRoad: true,
         desc: 'Bygger skibe. Skal ligge ved havet og have vej til et lager. Klik på den for at bygge skibe.' },
       warehouse: { id: 'warehouse', name: 'Lager', w: 2, h: 2, cost: {}, storage: WAREHOUSE_CAP, upkeep: 0.05,
-        desc: 'Lageret samler varer for hele øen. Første lager på en ø skal ligge ved havet; flere lagre øger pladsen, men kræver beboere.' },
+        desc: 'Lageret samler varer for hele øen. Første lager på en ny ø skal ligge ved havet, og skibet har 30 planker og 20 fisk med som startforsyning.' },
       road: { id: 'road', name: 'Vej', w: 1, h: 1, cost: {},
         desc: 'Forbinder bygninger med lageret. Træk for at bygge. Gennem skov fældes træerne; over en kanal bliver det en bro.' },
       canal: { id: 'canal', name: 'Kanal', w: 1, h: 1, cost: { coins: 5, planks: 1, stone: 2 },
@@ -2696,6 +2700,19 @@
       return { ok: true, ...pc };
     }
 
+    // Moves the founding supplies (as much as is available) from one island to a newly founded one
+    function deliverSupplies(from, to) {
+      const got = {};
+      for (const [k, n] of Object.entries(FOUNDING_SUPPLIES)) {
+        const amt = Math.floor(Math.min(n, from?.resources[k] || 0));
+        if (from) from.resources[k] -= amt;
+        to.resources[k] += amt;
+        if (amt) got[k] = amt;
+      }
+      to.supplied = true;
+      return got;
+    }
+
     // quiet = true for per-frame checks (ghost preview) so the log isn't flooded
     function canPlaceBuilding(tx, ty, def, quiet = false) {
       const r = checkPlacement(tx, ty, def.id);
@@ -2731,8 +2748,9 @@
       updateIslandStats();
 
       if (r.kind === 'found') {
+        const got = deliverSupplies(r.payer, isl);
         log(`✓ ${isl.name} er grundlagt – materialer sejlet over fra ${r.payer.name}`, 'ok');
-        showToast(`⚓ ${isl.name} er grundlagt!`);
+        notify(`⚓ ${isl.name} er grundlagt! Skibet havde ${fmtCost(got)} med som startforsyning`);
       } else {
         log(`✓ ${def.name} bygget på ${isl.name}`, 'ok');
       }
@@ -4240,6 +4258,7 @@
     let lastSavedAt = null;
     let saveDisabled = false; // set when starting a new game, so the unload handler doesn't re-save
     let oldSaveIgnored = false;
+    const pendingNotices = []; // messages from loading, shown once the UI is up
     let migratedFrom = null;
 
     function saveGame(manual = false) {
@@ -4257,7 +4276,7 @@
         roads: [...GAME.roads],
         // Islands are matched on load by their anchor tile, since ids come from re-labelling the map
         islands: [...GAME.islands.values()].map(i => ({ anchor: i.anchor, name: i.name, home: i.home, start: i.start,
-                                                         resources: i.resources, pop: i.pop, fertility: i.fertility })),
+                                                         resources: i.resources, pop: i.pop, fertility: i.fertility, supplied: i.supplied })),
         ships: GAME.ships.map(({ id, type, name, x, y, dir, routeId, cargo, state, trips }) => ({ id, type, name, x, y, dir, routeId, cargo, state, trips })),
         shipCounter: GAME.shipCounter,
         routes: GAME.routes.map(({ id, from, to, waypoints, res, back }) => ({ id, from, to, waypoints, res, back })),
@@ -4347,7 +4366,7 @@
         const saved = data.islands.find(i => tileAt(i.anchor[0], i.anchor[1])?.island === c.id);
         const isl = newIsland(c);
         if (saved) {
-          Object.assign(isl, { name: saved.name, home: saved.home, start: saved.start, pop: saved.pop, fertility: saved.fertility || [] });
+          Object.assign(isl, { name: saved.name, home: saved.home, start: saved.start, pop: saved.pop, fertility: saved.fertility || [], supplied: saved.supplied });
           Object.assign(isl.resources, saved.resources); // merge: resources added later keep 0
         }
         GAME.islands.set(c.id, isl);
@@ -4358,6 +4377,13 @@
         assignFertility(home.id);
       }
       updateIslandStats();
+      // Colonies founded before founding supplies existed get them delivered once
+      for (const isl of GAME.islands.values()) {
+        if (!isl.home && isl.warehouses && !isl.supplied) {
+          const got = deliverSupplies(homeIsland(), isl);
+          pendingNotices.push(`⚓ ${isl.name} har fået en startforsyning: ${fmtCost(got)}`);
+        }
+      }
 
       GAME.routes = (data.routes || []).map(r => ({ ...r, length: 0 }));
       GAME.routeCounter = data.routeCounter || GAME.routes.length;
@@ -4619,7 +4645,7 @@
           meat: upper * NEED_RATES.meat,
           cloth: upper * NEED_RATES.cloth,
           beer: byL[3] * NEED_RATES.beer,
-          food: isl.pop * NEED_RATES.food
+          food: Math.max(0, isl.pop - FREE_SETTLERS) * NEED_RATES.food
         };
         // Meat is eaten as a need first; general food (fish or meat) afterwards
         for (const need of ['meat', 'cloth', 'beer', 'food']) {
@@ -4636,6 +4662,7 @@
         }
         if (isl.pop > isl.popCap) isl.pop--;
         else if (fed && hasFood && isl.pop < isl.popCap) isl.pop = Math.min(isl.popCap, isl.pop + 1 + Math.floor(isl.popCap / 60));
+        else if (isl.pop < Math.min(isl.popCap, FREE_SETTLERS)) isl.pop++; // first settlers come even without food
 
         for (let L = 1; L <= 3; L++) {
           const happy = HOUSE_LEVELS[L].needs.every(n => isl.needsMet[n]);
@@ -4776,6 +4803,7 @@
       // Save right away so even the freshly generated map survives a reload
       if (!loaded) saveGame();
       renderQuest();
+      for (const msg of pendingNotices) notify(msg, false);
       requestAnimationFrame(gameLoop);
     });
   </script>
