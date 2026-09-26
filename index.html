@@ -68,6 +68,33 @@
       box-shadow: 0 6px 16px rgba(0,0,0,0.5);
     }
     #game-menu[hidden] { display: none; }
+    #game-menu .menu-title { font-size: 10px; text-transform: uppercase; letter-spacing: 1px; color: #c9a24e; margin-top: 6px; }
+    #game-menu .menu-row { display: flex; gap: 4px; }
+    #game-menu .menu-row button { flex: 1; }
+    #game-menu .slot { display: flex; align-items: center; gap: 4px; font-size: 11px; color: #f0e2c0; }
+    #game-menu .slot span { flex: 1; }
+    #game-menu .slot small { display: block; color: #b8a680; font-size: 9px; }
+    #game-menu .slot button { padding: 2px 6px; font-size: 11px; }
+    #game-menu .menu-check { font-size: 11px; color: #f0e2c0; display: flex; gap: 6px; align-items: center; cursor: pointer; }
+
+    #info-body table.trade { width: 100%; border-collapse: collapse; font-size: 11px; }
+    #info-body table.trade th { font-weight: normal; color: #7a6448; text-align: left; padding: 2px; }
+    #info-body table.trade td { padding: 1px 2px; }
+    #info-body table.trade input { width: 58px; padding: 2px; font-size: 11px; }
+
+    #victory { position: absolute; inset: 0; background: rgba(10,8,4,0.6); z-index: 30; display: flex; align-items: center; justify-content: center; }
+    #victory[hidden] { display: none; }
+    .victory-box {
+      width: 420px; max-width: calc(100vw - 32px);
+      background: linear-gradient(#f2e7cb, #e0cfa6);
+      border: 3px solid #c9a24e; border-radius: 10px;
+      padding: 22px; color: #3a2616; text-align: center;
+      box-shadow: 0 10px 40px rgba(0,0,0,0.6);
+    }
+    .victory-title { font-family: Georgia, serif; font-size: 24px; color: #7a4a10; margin-bottom: 10px; }
+    .victory-box p { margin: 8px 0; line-height: 1.4; }
+    #victory-stats { margin: 12px 0; font-size: 13px; }
+    #victory-close { padding: 8px 20px; background: #4a6fa5; border: none; border-radius: 5px; color: #fff; font-size: 14px; cursor: pointer; }
     #game-menu button { text-align: left; display: flex; justify-content: space-between; gap: 10px; }
     #game-menu small { color: #b8a680; }
     #game-menu #saved-at { color: #b8a680; font-size: 10px; padding: 2px 4px 0; }
@@ -93,8 +120,8 @@
     /* Recent messages, bottom left */
     #messages {
       position: absolute;
-      bottom: 12px; left: 10px;
-      max-width: 340px;
+      bottom: 64px; left: 10px; /* above the build tabs */
+      max-width: 300px;
       display: flex; flex-direction: column-reverse; gap: 3px;
       z-index: 9;
       pointer-events: none;
@@ -136,16 +163,17 @@
       display: flex;
       align-items: center;
       gap: 6px;
-      padding: 7px 14px;
+      padding: 6px 10px;
       background: linear-gradient(#5a4028, #3e2c1a);
       border: 1px solid #7a5a32;
       border-radius: 5px;
       color: #f0e2c0;
-      font-size: 13px;
+      font-size: 12px;
       cursor: pointer;
       white-space: nowrap;
     }
-    .build-tab .tab-icon { font-size: 17px; }
+    .build-tab .tab-icon { font-size: 16px; }
+    @media (max-width: 1250px) { .build-tab .tab-key { display: none; } .build-tab { padding: 6px 8px; } }
     .build-tab .tab-key { font-size: 10px; color: #b09a6a; }
     .build-tab:hover { background: linear-gradient(#6a4c30, #4a3420); }
     .build-tab.active { background: linear-gradient(#8a6a34, #6a4c22); border-color: #ffd700; color: #fff; }
@@ -333,18 +361,36 @@
       <button data-speed="0">⏸</button><button data-speed="1">1×</button><button data-speed="2">2×</button><button data-speed="3">3×</button>
     </span>
     <span class="sep"></span>
+    <button id="btn-islands" title="Oversigt over dine øer">📍 Øer</button>
     <button id="btn-routes" title="Handelsruter – tegn ruter og sæt skibe på">🗺️ Ruter</button>
     <button id="btn-economy" title="Økonomioverblik">📊 Økonomi</button>
     <span id="tick">Tick: 0</span>
     <button id="btn-menu" title="Menu">☰</button>
     <div id="game-menu" hidden>
       <button id="btn-save">💾 Gem spil <small>Ctrl+S</small></button>
-      <button id="btn-new">🆕 Nyt spil</button>
       <div id="saved-at"></div>
+      <div class="menu-title">Gemmepladser</div>
+      <div id="save-slots"></div>
+      <div class="menu-row">
+        <button id="btn-export" title="Download spillet som en fil">⬇ Eksportér</button>
+        <button id="btn-import" title="Indlæs et spil fra en fil">⬆ Importér</button>
+        <input type="file" id="import-file" accept=".json,application/json" hidden>
+      </div>
+      <div class="menu-title">Indstillinger</div>
+      <label class="menu-check"><input type="checkbox" id="opt-events"> Begivenheder (brand, storm, pirater)</label>
+      <button id="btn-new">🆕 Nyt spil</button>
     </div>
   </div>
 
   <div id="quest" hidden></div>
+  <div id="victory" hidden>
+    <div class="victory-box">
+      <div class="victory-title">🏆 Monumentet står færdigt!</div>
+      <p>Dit ørige er blevet en blomstrende handelsmagt. Tillykke – du har vundet spillet!</p>
+      <div id="victory-stats"></div>
+      <button id="victory-close">Spil videre</button>
+    </div>
+  </div>
   <div id="messages"></div>
 
   <div id="toast"></div>
@@ -416,6 +462,11 @@
       routes: [],              // player-drawn trade routes (several ships can sail one route)
       routeCounter: 0,
       routeDraw: null,         // state while the player is drawing a route on the map
+      trader: null,            // the trader's ship (null while he's away)
+      events: true,            // random events (fire, storms, pirates) on/off
+      storm: 0,                // ticks left of a storm
+      history: [],             // snapshots of total stock and coins for the economy graphs
+      won: false,
       coins: 0,
       tierReached: 1,          // highest house level reached so far (unlocks buildings and ships)
       questIndex: 0,
@@ -437,7 +488,12 @@
       wool:   { name: 'Uld',        icon: '🐑' },
       cloth:  { name: 'Tøj',        icon: '👕' },
       hops:   { name: 'Humle',      icon: '🌿' },
-      beer:   { name: 'Øl',         icon: '🍺' }
+      beer:   { name: 'Øl',         icon: '🍺' },
+      clay:   { name: 'Ler',        icon: '🟤' },
+      bricks: { name: 'Mursten',    icon: '🧱' },
+      coal:   { name: 'Kul',        icon: '⚫' },
+      ore:    { name: 'Jernmalm',   icon: '⛏️' },
+      tools:  { name: 'Værktøj',    icon: '🛠️' }
     };
     const RES_KEYS = Object.keys(RESOURCES);
     const FOOD_KEYS = RES_KEYS.filter(k => RESOURCES[k].food);
@@ -476,6 +532,33 @@
     const REGROW_CHANCE = 0.25;     // chance a sampled forest tile grows one wood unit (~1 tree per hour or so)
     const STUMP_SPROUT_CHANCE = 0.1;// chance a sampled clearing with stumps sprouts a sapling
     const FORESTER_RADIUS = 5;
+    const ORE_PER_TILE = 60;        // iron ore in a rock tile on an ore island, never replenished
+
+    // Public buildings serve houses within a radius (tiles from the building's edge)
+    const SERVICES = {
+      market: { name: 'Markedsplads', icon: '🏪' },
+      chapel: { name: 'Kapel',        icon: '⛪' },
+      tavern: { name: 'Kro',          icon: '🍻' },
+      fire:   { name: 'Brandstation', icon: '🚒' }
+    };
+    const WAREHOUSE_MARKET_RADIUS = 6; // a warehouse doubles as a small market for nearby houses
+    const UNSERVED_CAP = 2;            // pioneers living outside any market's reach
+
+    // Trader: sails between port warehouses; players set per-island "sell above" / "buy up to" levels
+    const PRICES = { wood: 2, planks: 4, stone: 5, fish: 3, grain: 2, pork: 6, beef: 7, wool: 4, cloth: 10, hops: 3,
+                     beer: 9, clay: 2, bricks: 8, coal: 4, ore: 5, tools: 14 };
+    const BUY_MARKUP = 1.6;            // buying from the trader costs more than he pays you
+    const TRADE_PER_VISIT = 30;        // max units per good per visit
+    const TRADER_WAIT = 4;             // seconds the trader stays at each port
+
+    // Events (can be switched off in the game menu)
+    const FIRE_CHANCE = 1 / 25000;     // per building per tick
+    const FIRE_TICKS = 30;             // unattended fires destroy the building after this long
+    const STORM_CHANCE = 1 / 900;      // per tick
+    const STORM_TICKS = 60;
+    const PIRATE_MIN_LENGTH = 50;      // routes longer than this risk pirates
+    const PIRATE_CHANCE = 0.2;         // per long voyage
+    const MONUMENT_POP = 100;          // Købmænd needed before the monument can be built
 
     // What each resident consumes per second, by need
     const NEED_RATES = { food: 0.02, meat: 0.008, cloth: 0.006, beer: 0.008 };
@@ -488,11 +571,14 @@
 
     // House levels. A house upgrades when its needs are met, the next level's goods are in stock
     // and the island can pay the upgrade materials. Unmet needs drop capacity to the level below.
+    // services: public buildings the house must be within reach of
     const HOUSE_LEVELS = [
       null,
-      { name: 'Pionerer', cap: 6,  tax: 0.02, needs: ['food'],                          upgrade: { coins: 30, planks: 10, stone: 4 } },
-      { name: 'Borgere',  cap: 12, tax: 0.05, needs: ['food', 'meat', 'cloth'],         upgrade: { coins: 80, planks: 15, stone: 12 } },
-      { name: 'Købmænd',  cap: 20, tax: 0.10, needs: ['food', 'meat', 'cloth', 'beer'] }
+      { name: 'Pionerer', cap: 6,  tax: 0.02, needs: ['food'],                  services: ['market'],
+        upgrade: { coins: 30, planks: 10, stone: 4 } },
+      { name: 'Borgere',  cap: 12, tax: 0.05, needs: ['food', 'meat', 'cloth'], services: ['market', 'chapel'],
+        upgrade: { coins: 120, planks: 15, bricks: 10, tools: 5 } },
+      { name: 'Købmænd',  cap: 20, tax: 0.10, needs: ['food', 'meat', 'cloth', 'beer'], services: ['market', 'chapel', 'tavern'] }
     ];
 
     // workers: residents needed to run it · upkeep: coins/s · tier: house level needed to unlock
@@ -536,6 +622,36 @@
       brewery: { id: 'brewery', name: 'Bryggeri', w: 2, h: 2, cost: { coins: 150, planks: 30, stone: 25 }, workers: 4, upkeep: 0.12, tier: 2,
         consumes: { grain: 0.3, hops: 0.3 }, produces: 'beer', rate: 0.5,
         desc: 'Brygger øl af korn og humle. Købmænd skal have øl.' },
+      claypit: { id: 'claypit', name: 'Lergrav', w: 2, h: 2, cost: { coins: 60, planks: 15 }, workers: 2, upkeep: 0.04, tier: 2,
+        produces: 'clay', rate: 0.5, near: { terrain: 'beach', label: 'strand', min: 3, radius: 3 },
+        desc: 'Graver ler ved kysten. Skal have strand i nærheden.' },
+      brickworks: { id: 'brickworks', name: 'Teglværk', w: 2, h: 2, cost: { coins: 120, planks: 25, stone: 15 }, workers: 3, upkeep: 0.08, tier: 2,
+        consumes: { clay: 0.5 }, produces: 'bricks', rate: 0.5,
+        desc: 'Brænder ler til mursten, som Købmændenes huse og store bygninger skal bruge.' },
+      charcoal: { id: 'charcoal', name: 'Kulmile', w: 2, h: 2, cost: { coins: 60, planks: 15 }, workers: 2, upkeep: 0.05, tier: 2,
+        consumes: { wood: 0.6 }, produces: 'coal', rate: 0.4,
+        desc: 'Brænder træ til trækul til smedjen.' },
+      mine: { id: 'mine', name: 'Jernmine', w: 2, h: 2, cost: { coins: 150, planks: 30, stone: 20 }, workers: 4, upkeep: 0.1, tier: 2,
+        produces: 'ore', rate: 0.4, near: { key: 'ore', label: 'jernmalm', min: 1, radius: 3 },
+        harvest: { terrain: 'rock', key: 'ore', radius: 3, label: 'jernmalm' },
+        desc: 'Bryder jernmalm i klipper med malmårer (kun på nogle øer). Malmen slipper op.' },
+      smithy: { id: 'smithy', name: 'Smedje', w: 2, h: 2, cost: { coins: 200, planks: 30, stone: 30, bricks: 10 }, workers: 4, upkeep: 0.12, tier: 2,
+        consumes: { ore: 0.3, coal: 0.3 }, produces: 'tools', rate: 0.3,
+        desc: 'Smeder værktøj af jernmalm og kul.' },
+      marketplace: { id: 'marketplace', name: 'Markedsplads', w: 3, h: 3, cost: { coins: 60, planks: 15 }, upkeep: 0.05,
+        service: 'market', radius: 10,
+        desc: 'Alle boliger skal ligge inden for rækkevidde af et marked for at få varer. Lageret virker selv som et lille marked.' },
+      chapel: { id: 'chapel', name: 'Kapel', w: 2, h: 2, cost: { coins: 120, planks: 20, stone: 20 }, workers: 1, upkeep: 0.08,
+        service: 'chapel', radius: 10,
+        desc: 'Borgere og Købmænd skal bo inden for rækkevidde af et kapel.' },
+      tavern: { id: 'tavern', name: 'Kro', w: 2, h: 2, cost: { coins: 150, planks: 25, stone: 15 }, workers: 2, upkeep: 0.1, tier: 2,
+        service: 'tavern', radius: 10,
+        desc: 'Købmænd skal bo inden for rækkevidde af en kro.' },
+      firestation: { id: 'firestation', name: 'Brandstation', w: 2, h: 2, cost: { coins: 80, planks: 15, stone: 10 }, workers: 2, upkeep: 0.06,
+        service: 'fire', radius: 9,
+        desc: 'Slukker brande inden for rækkevidde, før de når at ødelægge bygninger.' },
+      monument: { id: 'monument', name: 'Monument', w: 4, h: 4, cost: { coins: 5000, planks: 100, stone: 150, bricks: 150, tools: 80 }, tier: 3,
+        desc: `Rigets store monument – spillets endemål. Kræver ${MONUMENT_POP} Købmænd i alt.` },
       shipyard: { id: 'shipyard', name: 'Skibsbygger', w: 3, h: 3, cost: { coins: 150, planks: 40, stone: 20 }, workers: 5, upkeep: 0.1,
         coastal: true, needsRoad: true,
         desc: 'Bygger skibe. Skal ligge ved havet og have vej til et lager. Klik på den for at bygge skibe.' },
@@ -551,7 +667,7 @@
     const SHIP_TYPES = {
       jolle:   { id: 'jolle',   name: 'Jolle',   cost: { coins: 60, planks: 15 },              cargo: 20,  range: 35,  speed: 2.2, buildTime: 15, tier: 1, upkeep: 0.05, size: 0.8 },
       kogge:   { id: 'kogge',   name: 'Kogge',   cost: { coins: 200, planks: 50, stone: 15 },  cargo: 60,  range: 80,  speed: 2.0, buildTime: 30, tier: 2, upkeep: 0.15, size: 1.1 },
-      karavel: { id: 'karavel', name: 'Karavel', cost: { coins: 500, planks: 100, stone: 40 }, cargo: 150, range: 200, speed: 2.6, buildTime: 45, tier: 3, upkeep: 0.3,  size: 1.4 }
+      karavel: { id: 'karavel', name: 'Karavel', cost: { coins: 500, planks: 100, stone: 40, tools: 20 }, cargo: 150, range: 200, speed: 2.6, buildTime: 45, tier: 3, upkeep: 0.3,  size: 1.4 }
     };
     const tierName = (t) => HOUSE_LEVELS[t].name;
 
@@ -565,7 +681,9 @@
     const CATEGORIES = [
       { id: 'terrain', name: 'Terræn', icon: '🛤️', items: ['road', 'canal', 'demolish'] },
       { id: 'housing', name: 'Boliger', icon: '🏠', items: ['house'] },
+      { id: 'public', name: 'Offentligt', icon: '🏪', items: ['marketplace', 'chapel', 'tavern', 'firestation', 'monument'] },
       { id: 'production', name: 'Produktion', icon: '🪵', items: ['woodcutter', 'forester', 'sawmill', 'stonecutter', 'sheepfarm', 'weaver'] },
+      { id: 'industry', name: 'Industri', icon: '⚒️', items: ['claypit', 'brickworks', 'charcoal', 'mine', 'smithy'] },
       { id: 'food', name: 'Mad & drikke', icon: '🌾', items: ['fisher', 'grainfarm', 'pigfarm', 'cattlefarm', 'hopfarm', 'brewery'] },
       { id: 'harbor', name: 'Lager & havn', icon: '⚓', items: ['warehouse', 'shipyard'] }
     ];
@@ -682,6 +800,20 @@
       }
     }
 
+    // Iron ore veins: the rock on two islands (never the start island) holds ore. Farther islands first,
+    // so tools require real shipping.
+    function assignOre(startId) {
+      const start = GAME.islands.get(startId);
+      const sx = start.anchor[0], sy = start.anchor[1];
+      const cands = [...GAME.islands.values()].filter(i => i.id !== startId && i.size >= 12 &&
+        GAME.grid.some(t => t.island === i.id && t.type === 'rock'));
+      cands.sort((a, b) => Math.hypot(a.anchor[0] - sx, a.anchor[1] - sy) - Math.hypot(b.anchor[0] - sx, b.anchor[1] - sy));
+      for (const isl of cands.slice(1, 3).concat(cands.length === 1 ? cands : [])) {
+        isl.ore = true;
+        for (const t of GAME.grid) if (t.island === isl.id && t.type === 'rock') t.ore = ORE_PER_TILE;
+      }
+    }
+
     // Labels connected land components (4-neighbour). Sets tile.island; returns the components.
     function labelIslands() {
       markOcean();
@@ -788,10 +920,38 @@
 
     const islandOfBuilding = (b) => GAME.islands.get(tileAt(b.x, b.y)?.island);
 
-    // A house's capacity: full for its level when that level's needs were met last tick, otherwise the level below
+    // Chebyshev distance between two building footprints (0 when they touch or overlap)
+    function footprintGap(a, b) {
+      const da = DEFS[a.type], db = DEFS[b.type];
+      const dx = Math.max(0, a.x - (b.x + db.w - 1), b.x - (a.x + da.w - 1));
+      const dy = Math.max(0, a.y - (b.y + db.h - 1), b.y - (a.y + da.h - 1));
+      return Math.max(dx, dy) - 1;
+    }
+
+    // A service building works when it isn't paused, has its workers and isn't on fire
+    const serviceActive = (b) => !b.paused && b.staffed !== false && !b.fire;
+
+    // Which services reach building b (market/chapel/tavern/fire); warehouses count as small markets
+    function coverageOf(b, isl) {
+      const cov = {};
+      for (const s of GAME.buildings) {
+        const def = DEFS[s.type];
+        const radius = def.service ? def.radius : s.type === 'warehouse' ? WAREHOUSE_MARKET_RADIUS : 0;
+        if (!radius || s === b || !serviceActive(s) || islandOfBuilding(s) !== isl) continue;
+        const kind = def.service || 'market';
+        if (!cov[kind] && footprintGap(b, s) <= radius) cov[kind] = true;
+      }
+      return cov;
+    }
+
+    const servicesMet = (b, L) => HOUSE_LEVELS[L].services.every(s => b.cov?.[s]);
+
+    // A house's capacity: full for its level when its goods needs (last tick) and services are met, otherwise
+    // the level below. Houses out of any market's reach only hold a couple of self-sufficient pioneers.
     function houseCap(b, isl) {
       const L = b.level || 1;
-      const met = HOUSE_LEVELS[L].needs.every(n => isl.needsMet[n] !== false);
+      if (!b.cov?.market) return UNSERVED_CAP;
+      const met = HOUSE_LEVELS[L].needs.every(n => isl.needsMet[n] !== false) && servicesMet(b, L);
       return HOUSE_LEVELS[met || L === 1 ? L : L - 1].cap;
     }
 
@@ -809,6 +969,7 @@
         if (!isl) continue;
         const def = DEFS[b.type];
         if (b.type === 'warehouse') { isl.warehouses++; isl.cap += def.storage; }
+        b.cov = coverageOf(b, isl);
         if (def.house) {
           const c = houseCap(b, isl);
           isl.popCap += c;
@@ -821,6 +982,7 @@
     // Residents per house level on an island (population is spread over the houses by capacity)
     const popByLevel = (isl) => isl.levelCap.map(c => isl.popCap ? isl.pop * c / isl.popCap : 0);
 
+    const totalMerchants = () => [...GAME.islands.values()].reduce((s, i) => s + popByLevel(i)[3], 0);
     const totalPopulation = () => [...GAME.islands.values()].reduce((s, i) => s + i.pop, 0);
     const totalPopCap = () => [...GAME.islands.values()].reduce((s, i) => s + i.popCap, 0);
     const homeIsland = () => [...GAME.islands.values()].find(i => i.home);
@@ -1189,6 +1351,16 @@
         for (const b of tri.bands) poly(b.col, b.pts, b.col);
       }
       rockTexture(tile.mountain.map(tri => tri.pts), 0.6);
+      if (tile.ore > 0) {
+        // Iron ore veins show as rusty streaks on the facets
+        const rnd = seeded(tile.x * 131 + tile.y * 977);
+        for (let i = 0; i < 4; i++) {
+          const tri = tile.mountain[Math.floor(rnd() * tile.mountain.length)];
+          const [a, bb, c] = tri.pts, w1 = rnd() * 0.5, w2 = rnd() * (1 - w1);
+          const q = { x: a.x + (bb.x - a.x) * w1 + (c.x - a.x) * w2, y: a.y + (bb.y - a.y) * w1 + (c.y - a.y) * w2 };
+          line(q, { x: q.x + 3, y: q.y + 1.5 }, '#b0582a', 2);
+        }
+      }
       // 'overlay' leaves near-white untouched, so snow gets a faint multiplied texture instead
       const snowPolys = tile.mountain.flatMap(tri => tri.bands.filter(b => b.snow).map(b => b.pts));
       if (snowPolys.length) rockTexture(snowPolys, 0.22, 'multiply');
@@ -1976,6 +2148,11 @@
       const k = 0.4 + 0.6 * ((tile.stone ?? ROCK_STONE) / ROCK_STONE); // boulders shrink as they are quarried
       boulder(x - 0.12 + rnd() * 0.1, y - 0.1 + rnd() * 0.1, (0.26 + rnd() * 0.08) * k, rnd);
       if (rnd() < 0.6 && k > 0.6) boulder(x + 0.18, y + 0.15, (0.14 + rnd() * 0.06) * k, rnd);
+      if (tile.ore > 0) {
+        const c = P(x, y, 6);
+        line({ x: c.x - 4, y: c.y }, { x: c.x + 2, y: c.y + 2 }, '#b0582a', 2);
+        line({ x: c.x + 3, y: c.y - 4 }, { x: c.x + 6, y: c.y - 2 }, '#b0582a', 2);
+      }
     }
 
     // Stack of cut stone blocks (pyramid, back to front)
@@ -2429,7 +2606,266 @@
       fence(U + 1.94, V + 0.1, U + 1.94, V + 1.94);
     }
 
+    // Stack of red bricks
+    function brickStack(u, v, n = 3) {
+      for (let i = 0; i < n; i++) {
+        const b = walls(u - 0.12, v - 0.08, u + 0.12, v + 0.08, i * 3.2, i * 3.2 + 3, '#b04a30', '#c8603e');
+        line(b.R.at(0, b.R.h / 2), b.R.at(b.R.len, b.R.h / 2), 'rgba(0,0,0,0.25)', 0.5);
+      }
+    }
+
+    // Clay pit: dug-out pit with clay mounds, drying racks and a small shed
+    function drawClayPit(U, V, rnd) {
+      ground(U, V, 2, 2, '#9a8a5a', rnd, '#7a6a40');
+      poly('#8a5a3a', uvRect(U + 0.9, V + 0.2, U + 1.85, V + 1.2), 'rgba(50,30,15,0.5)');
+      poly('#6a4228', uvRect(U + 1.05, V + 0.35, U + 1.7, V + 1.05), null);
+      for (const [u, v] of [[U + 1.2, V + 1.45], [U + 1.5, V + 1.6], [U + 0.9, V + 1.65]]) {
+        const p = P(u, v, 0);
+        ctx.fillStyle = '#a0643e';
+        ctx.beginPath(); ctx.ellipse(p.x, p.y - 2, 7, 4, 0, Math.PI, 0); ctx.fill();
+      }
+      const u0 = U + 0.12, u1 = U + 0.72, v0 = V + 0.15, v1 = V + 0.75;
+      ao(u0, v0, u1, v1);
+      const w = walls(u0, v0, u1, v1, 0, 10, '#8a6440');
+      boards(w.L, 0.08); boards(w.R, 0.08);
+      door(w.L, 0.3, 0.14, 7);
+      roofV(u0, v0, u1, v1, 10, 9, '#6e5a48', '#8a6440', { style: 'shingle' });
+      rowboat(U + 0.5, V + 1.35, 0.2, 0.08); // wheelbarrow-like trough
+    }
+
+    // Brickworks: brick kiln with a tall chimney and stacks of fresh bricks
+    function drawBrickworks(U, V, rnd) {
+      ground(U, V, 2, 2, '#9a8a6a', rnd, '#7a6a50');
+      const u0 = U + 0.14, u1 = U + 1.15, v0 = V + 0.14, v1 = V + 1.0;
+      ao(u0, v0, u1, v1);
+      const w = walls(u0, v0, u1, v1, 0, 16, '#a8543a');
+      stones(w.L); stones(w.R);
+      // Glowing kiln mouth
+      poly('#2a1a10', rectOn(w.L, 0.35, 0, 0.65, 8), null);
+      poly(`rgba(255,${140 + Math.floor(Math.sin(animTime / 200) * 40)},40,0.9)`, rectOn(w.L, 0.4, 1, 0.6, 6), null);
+      const surf = roofU(u0, v0, u1, v1, 16, 12, '#5e4e46', '#a8543a', { style: 'shingle' });
+      const vm = (v0 + v1) / 2;
+      chimney(u0 + 0.7, vm + 0.15, surf(vm + 0.21) - 2, surf(vm + 0.15) + 26, 0.2);
+      brickStack(U + 1.45, V + 0.4, 3);
+      brickStack(U + 1.45, V + 0.75, 2);
+      brickStack(U + 0.5, V + 1.4, 3);
+      brickStack(U + 0.85, V + 1.5, 2);
+    }
+
+    // Charcoal kiln: smoking earth-covered wood mound, split wood stacks
+    function drawCharcoal(U, V, rnd) {
+      ground(U, V, 2, 2, '#6a6048', rnd, '#3a3428');
+      const c = P(U + 0.95, V + 0.95, 0);
+      ctx.fillStyle = 'rgba(0,0,0,0.25)';
+      ctx.beginPath(); ctx.ellipse(c.x, c.y + 2, 34, 16, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#4a3e30';
+      ctx.beginPath(); ctx.ellipse(c.x, c.y, 30, 14, 0, Math.PI, 0); ctx.lineTo(c.x + 30, c.y); ctx.fill();
+      ctx.fillStyle = '#3a3026';
+      ctx.beginPath(); ctx.ellipse(c.x, c.y - 4, 22, 20, 0, Math.PI, 0); ctx.fill();
+      ctx.strokeStyle = 'rgba(0,0,0,0.4)'; ctx.lineWidth = 0.8; ctx.stroke();
+      smoke({ x: c.x - 4, y: c.y - 24 }, 0.1);
+      smoke({ x: c.x + 8, y: c.y - 18 }, 0.6);
+      logPile(U + 1.45, V + 1.2, U + 1.9, V + 1.85, 3);
+      logPile(U + 0.15, V + 1.4, U + 0.6, V + 1.85, 2);
+    }
+
+    // Iron mine: timbered tunnel mouth into a rocky hillock, rails and an ore cart
+    function drawMine(U, V, rnd) {
+      ground(U, V, 2, 2, '#8a8474', rnd, '#6a665c');
+      boulder(U + 0.8, V + 0.6, 0.55, rnd);
+      const m = P(U + 0.95, V + 1.05, 0);
+      poly('#1a1410', [{ x: m.x - 8, y: m.y }, { x: m.x + 8, y: m.y }, { x: m.x + 8, y: m.y - 13 }, { x: m.x, y: m.y - 17 }, { x: m.x - 8, y: m.y - 13 }], null);
+      line({ x: m.x - 9, y: m.y }, { x: m.x - 9, y: m.y - 14 }, '#6a4422', 2.4);
+      line({ x: m.x + 9, y: m.y }, { x: m.x + 9, y: m.y - 14 }, '#6a4422', 2.4);
+      line({ x: m.x - 11, y: m.y - 14 }, { x: m.x + 11, y: m.y - 14 }, '#6a4422', 2.6);
+      for (const off of [-0.07, 0.07]) line(P(U + 0.95 + off, V + 1.1), P(U + 0.95 + off, V + 1.9), '#5a5a5a', 1.2);
+      for (let i = 0; i < 5; i++) line(P(U + 0.85, V + 1.2 + i * 0.16), P(U + 1.05, V + 1.2 + i * 0.16), '#6a4422', 1.2);
+      const cart = walls(U + 0.85, V + 1.45, U + 1.05, V + 1.7, 1, 6, '#5a5a60', '#7a7a80');
+      dot(P(U + 0.95, V + 1.57, 7), 2.5, '#8a4a2a');
+      const pile = P(U + 1.55, V + 1.5, 0);
+      ctx.fillStyle = '#7a4a30';
+      ctx.beginPath(); ctx.ellipse(pile.x, pile.y - 2, 10, 6, 0, Math.PI, 0); ctx.fill();
+      for (let i = 0; i < 5; i++) dot({ x: pile.x - 6 + i * 3, y: pile.y - 3 - (i % 2) * 2 }, 1.4, '#b0582a');
+    }
+
+    // Smithy: stone forge with a glowing hearth, anvil and a big chimney
+    function drawSmithy(U, V, rnd) {
+      ground(U, V, 2, 2, '#8a8474', rnd, '#5a564c');
+      const u0 = U + 0.14, u1 = U + 1.1, v0 = V + 0.14, v1 = V + 1.0;
+      ao(u0, v0, u1, v1);
+      const w = walls(u0, v0, u1, v1, 0, 15, '#8e887c');
+      stones(w.L); stones(w.R);
+      const glow = 150 + Math.floor(Math.sin(animTime / 150) * 50);
+      poly('#2a1a10', rectOn(w.L, 0.3, 0, 0.7, 10), null);
+      poly(`rgba(255,${glow},50,0.85)`, rectOn(w.L, 0.36, 1, 0.64, 6), null);
+      win(w.R, 0.42, 6, 0.14, 6, { lit: true });
+      const surf = roofV(u0, v0, u1, v1, 15, 13, '#4a4a52', '#8e887c', { style: 'shingle' });
+      const cu = (u0 + u1) / 2 + 0.22;
+      chimney(cu, v0 + 0.25, surf(cu + 0.06) - 2, surf(cu) + 20, 0.8);
+      // Anvil on a stump
+      const a = cylinder(U + 1.4, V + 1.3, 0, 0.08, 5, '#6a4422', '#8a6034');
+      poly('#3a3a40', [{ x: a.t.x - 6, y: a.t.y - 1 }, { x: a.t.x + 6, y: a.t.y - 1 }, { x: a.t.x + 4, y: a.t.y - 5 }, { x: a.t.x - 7, y: a.t.y - 5 }]);
+      crate(U + 1.6, V + 0.5, 0.09);
+      barrel(U + 0.45, V + 1.4);
+    }
+
+    // Market stall with a striped awning
+    function stall(u, v, color, rnd) {
+      const w = walls(u - 0.2, v - 0.14, u + 0.2, v + 0.14, 0, 6, '#8a6440', '#a07850');
+      post(u - 0.2, v + 0.14, 13); post(u + 0.2, v + 0.14, 13);
+      const z = 13;
+      const aw = [P(u - 0.24, v - 0.18, z + 2), P(u + 0.24, v - 0.18, z + 2), P(u + 0.24, v + 0.22, z - 2), P(u - 0.24, v + 0.22, z - 2)];
+      poly(color, aw);
+      for (let i = 1; i < 4; i++) line(lerp(aw[0], aw[1], i / 4), lerp(aw[3], aw[2], i / 4), '#f4ecda', 1.6);
+      for (let i = 0; i < 4; i++) dot(P(u - 0.12 + i * 0.08, v, 7), 1.6, ['#e04a3a', '#f0c040', '#6aa03a', '#e88a2a'][Math.floor(rnd() * 4)]);
+    }
+
+    // Market square: cobbled square with stalls, crates and a well
+    function drawMarketplace(U, V, rnd) {
+      ground(U, V, 3, 3, '#a09884', rnd, '#8a8272');
+      for (let i = 1; i < 6; i++) {
+        line(P(U + 0.1, V + i * 0.5), P(U + 2.9, V + i * 0.5), 'rgba(80,70,60,0.25)', 0.6);
+        line(P(U + i * 0.5, V + 0.1), P(U + i * 0.5, V + 2.9), 'rgba(80,70,60,0.25)', 0.6);
+      }
+      stall(U + 0.6, V + 0.6, '#b03a3a', rnd);
+      stall(U + 1.5, V + 0.55, '#3a6ab0', rnd);
+      stall(U + 2.4, V + 0.6, '#3a8a4a', rnd);
+      stall(U + 0.6, V + 1.6, '#c8902a', rnd);
+      // Well in the middle
+      const wl = cylinder(U + 1.6, V + 1.7, 0, 0.18, 6, '#8e887c', '#3a5a7a');
+      post(U + 1.45, V + 1.7, 16); post(U + 1.75, V + 1.7, 16);
+      line(P(U + 1.45, V + 1.7, 16), P(U + 1.75, V + 1.7, 16), '#5a3a1e', 1.6);
+      crate(U + 2.4, V + 1.6, 0.1);
+      barrel(U + 2.55, V + 2.3);
+      sack(U + 0.8, V + 2.4);
+      sack(U + 1.0, V + 2.5);
+      stall(U + 2.2, V + 2.4, '#8a3a8a', rnd);
+    }
+
+    // Chapel: whitewashed stone nave with a bell tower and a cross
+    function drawChapel(U, V, rnd) {
+      ground(U, V, 2, 2, '#8a9a5a', rnd, '#6a7a3a');
+      const u0 = U + 0.12, u1 = U + 1.45, v0 = V + 0.3, v1 = V + 1.0;
+      ao(u0, v0, u1, v1);
+      const w = walls(u0, v0, u1, v1, 0, 16, '#e8e2d4');
+      stones(w.L); stones(w.R);
+      for (const s of [0.35, 0.75, 1.1]) {
+        poly('#4a6a9a', rectOn(w.L, s - 0.05, 5, s + 0.05, 12), '#3a2616');
+        dot(w.L.at(s, 12), 2.5, '#4a6a9a');
+      }
+      roofU(u0, v0, u1, v1, 16, 16, '#5a5a66', '#e8e2d4', { style: 'tile', vent: 0.1 });
+      // Bell tower at the front
+      const tu = u1 - 0.05, tv = v1 - 0.05;
+      const t = walls(tu - 0.28, tv - 0.28, tu + 0.12, tv + 0.12, 0, 34, '#e8e2d4');
+      stones(t.L); stones(t.R);
+      poly('#2a1a10', rectOn(t.R, 0.12, 24, 0.28, 30), null);
+      door(wallL(tu - 0.28, tu + 0.12, tv + 0.12, 0, 34), 0.2, 0.18, 12, '#6a3a1a');
+      const tip = P(tu - 0.08, tv - 0.08, 52);
+      poly('#4a4a56', [P(tu - 0.32, tv + 0.16, 34), P(tu + 0.16, tv + 0.16, 34), tip]);
+      poly('#5a5a66', [P(tu + 0.16, tv + 0.16, 34), P(tu + 0.16, tv - 0.32, 34), tip]);
+      line(tip, { x: tip.x, y: tip.y - 8 }, '#e8c040', 1.6);
+      line({ x: tip.x - 3, y: tip.y - 5.5 }, { x: tip.x + 3, y: tip.y - 5.5 }, '#e8c040', 1.6);
+      bush(U + 0.4, V + 1.55, 0.25);
+      bush(U + 1.7, V + 1.6, 0.28);
+    }
+
+    // Tavern: timbered inn with a hanging sign, benches and barrels
+    function drawTavern(U, V, rnd) {
+      ground(U, V, 2, 2, '#9a8a64', rnd);
+      const u0 = U + 0.14, u1 = U + 1.2, v0 = V + 0.14, v1 = V + 1.0;
+      ao(u0, v0, u1, v1);
+      const pl = walls(u0, v0, u1, v1, 0, 5, '#8c867a');
+      stones(pl.L); stones(pl.R);
+      const g = walls(u0, v0, u1, v1, 5, 18, '#ece0c4');
+      timber(g.L); timber(g.R);
+      const f1 = walls(u0, v0, u1 + 0.04, v1 + 0.04, 18, 29, '#ece0c4');
+      timber(f1.L); timber(f1.R);
+      door(wallL(u0, u1, v1, 0, 18), 0.55, 0.18, 13, '#6a3a1a');
+      for (const s of [0.22, 0.9]) win(g.L, s, 4, 0.14, 7, { lit: true });
+      for (const s of [0.3, 0.7]) { win(g.R, s, 4, 0.13, 7, { lit: true }); win(f1.R, s, 3, 0.13, 6, { shutter: '#7a2a2a' }); }
+      const surf = roofU(u0, v0, u1 + 0.04, v1 + 0.04, 29, 18, '#9c4a30', '#ece0c4', { style: 'tile', timber: '#4a3020' });
+      const vm = (v0 + v1) / 2;
+      chimney(u0 + 0.25, vm + 0.2, surf(vm + 0.26) - 2, surf(vm + 0.2) + 12, 0.45);
+      const sp = P(u0 + 0.1, v1 + 0.04, 20);
+      line(sp, { x: sp.x - 8, y: sp.y + 4 }, '#3a2616', 1.2);
+      poly('#e8c050', [{ x: sp.x - 12, y: sp.y + 4 }, { x: sp.x - 4, y: sp.y + 4 }, { x: sp.x - 4, y: sp.y + 11 }, { x: sp.x - 12, y: sp.y + 11 }]);
+      walls(U + 1.35, V + 0.4, U + 1.8, V + 0.52, 3, 4.5, '#7a5030', '#9a7048');
+      walls(U + 1.35, V + 0.9, U + 1.8, V + 1.02, 3, 4.5, '#7a5030', '#9a7048');
+      barrel(U + 1.5, V + 1.5); barrel(U + 1.7, V + 1.62); barrel(U + 0.4, V + 1.45);
+    }
+
+    // Fire station: brick house with a bell turret, water cart and buckets
+    function drawFireStation(U, V, rnd) {
+      ground(U, V, 2, 2, '#9a9282', rnd, '#7a7266');
+      const u0 = U + 0.14, u1 = U + 1.15, v0 = V + 0.14, v1 = V + 1.0;
+      ao(u0, v0, u1, v1);
+      const w = walls(u0, v0, u1, v1, 0, 17, '#a8503a');
+      stones(w.L); stones(w.R);
+      barnDoor(wallL(u0, u1, v1, 0, 17), 0.5, 0.36, 9);
+      win(w.R, 0.42, 7, 0.14, 6, { shutter: '#2a4a6a' });
+      roofV(u0, v0, u1, v1, 17, 14, '#5a5a66', '#a8503a', { style: 'tile' });
+      const um = (u0 + u1) / 2;
+      const tw = walls(um - 0.08, v0 + 0.25, um + 0.08, v0 + 0.41, 31, 39, '#6a4422', '#8a6034');
+      dot(P(um, v0 + 0.33, 36), 2.2, '#e8c040');
+      // Water cart
+      const c = cylinder(U + 1.5, V + 1.3, 3, 0.14, 8, '#6a4a2a', '#3a5a7a');
+      dot(P(U + 1.38, V + 1.45, 2), 3, '#3a2616');
+      dot(P(U + 1.62, V + 1.45, 2), 3, '#3a2616');
+      for (let i = 0; i < 3; i++) cylinder(U + 0.35 + i * 0.14, V + 1.4, 0, 0.04, 4, '#8a8e94', '#5a6a7a');
+    }
+
+    // Monument: a grand cathedral-like hall with two towers and a golden dome
+    function drawMonument(U, V, rnd) {
+      ground(U, V, 4, 4, '#b8b0a0', rnd, '#9a9282');
+      for (let i = 1; i < 8; i++) {
+        line(P(U + 0.1, V + i * 0.5), P(U + 3.9, V + i * 0.5), 'rgba(90,80,70,0.2)', 0.6);
+        line(P(U + i * 0.5, V + 0.1), P(U + i * 0.5, V + 3.9), 'rgba(90,80,70,0.2)', 0.6);
+      }
+      const u0 = U + 0.5, u1 = U + 3.5, v0 = V + 0.8, v1 = V + 3.2;
+      ao(u0, v0, u1, v1);
+      const base = walls(u0, v0, u1, v1, 0, 8, '#c8c0ae');
+      stones(base.L); stones(base.R);
+      const w = walls(u0 + 0.1, v0 + 0.1, u1 - 0.1, v1 - 0.1, 8, 34, '#ece6d6');
+      stones(w.L); stones(w.R);
+      for (let s = 0.3; s < w.L.len; s += 0.45) {
+        poly('#4a6a9a', rectOn(w.L, s - 0.08, 12, s + 0.08, 26), '#3a2616');
+        dot(w.L.at(s, 26), 4, '#4a6a9a');
+      }
+      for (let s = 0.3; s < w.R.len; s += 0.45) poly('#4a6a9a', rectOn(w.R, s - 0.08, 12, s + 0.08, 26), '#3a2616');
+      barnDoor(wallL(u0, u1, v1, 0, 34), 1.5, 0.5, 16);
+      roofU(u0 + 0.1, v0 + 0.1, u1 - 0.1, v1 - 0.1, 34, 22, '#4a5a6e', '#ece6d6', { style: 'tile', vent: 0.2 });
+      // Golden dome over the crossing
+      const d = P((u0 + u1) / 2, (v0 + v1) / 2, 60);
+      dot({ x: d.x, y: d.y }, 22, '#c89a30');
+      dot({ x: d.x - 6, y: d.y - 6 }, 12, '#e8c050');
+      poly('#ece6d6', [{ x: d.x - 22, y: d.y }, { x: d.x + 22, y: d.y }, { x: d.x + 22, y: d.y + 10 }, { x: d.x - 22, y: d.y + 10 }]);
+      line({ x: d.x, y: d.y - 22 }, { x: d.x, y: d.y - 34 }, '#e8c040', 2);
+      dot({ x: d.x, y: d.y - 36 }, 3, '#e8c040');
+      // Two towers at the front corners
+      for (const [tu, tv] of [[u0 + 0.05, v1 - 0.05], [u1 - 0.05, v1 - 0.05], [u1 - 0.05, v0 + 0.3]]) {
+        const t = walls(tu - 0.28, tv - 0.28, tu + 0.28, tv + 0.28, 0, 58, '#ece6d6');
+        stones(t.L); stones(t.R);
+        poly('#2a1a10', rectOn(t.L, 0.2, 44, 0.36, 52), null);
+        const tip = P(tu, tv, 88);
+        poly('#3e4a5c', [P(tu - 0.32, tv + 0.32, 58), P(tu + 0.32, tv + 0.32, 58), tip]);
+        poly('#4a5a6e', [P(tu + 0.32, tv + 0.32, 58), P(tu + 0.32, tv - 0.32, 58), tip]);
+        line(tip, { x: tip.x, y: tip.y - 8 }, '#e8c040', 1.6);
+      }
+      flag(U + 0.3, V + 3.6, 0, 30, '#2a5aa8');
+      flag(U + 3.7, V + 3.6, 0, 30, '#b02a2a');
+    }
+
     const BUILDING_RENDERERS = {
+      claypit: drawClayPit,
+      brickworks: drawBrickworks,
+      charcoal: drawCharcoal,
+      mine: drawMine,
+      smithy: drawSmithy,
+      marketplace: drawMarketplace,
+      chapel: drawChapel,
+      tavern: drawTavern,
+      firestation: drawFireStation,
+      monument: drawMonument,
       forester: drawForester,
       house: drawHouse,
       sheepfarm: drawSheepFarm,
@@ -2512,6 +2948,76 @@
       for (let i = 0; i < 5; i++) {
         dot(P(x - 0.25 + rnd() * 0.5, y - 0.25 + rnd() * 0.5), 0.9, rnd() < 0.5 ? '#9a865c' : '#d2c092');
       }
+    }
+
+    // Tiles within a service building's reach, drawn as a soft area with an outline
+    function drawRadiusArea(x, y, w, hgt, r, color) {
+      const u0 = x - r - 0.5, v0 = y - r - 0.5, u1 = x + w + r - 0.5, v1 = y + hgt + r - 0.5;
+      poly(color, [P(u0, v0), P(u1, v0), P(u1, v1), P(u0, v1)], 'rgba(255,240,180,0.8)');
+    }
+
+    // Show reach while placing a service building, or when one (or a warehouse) is selected
+    function drawServiceOverlay() {
+      const tool = GAME.selectedBuilding && DEFS[GAME.selectedBuilding];
+      const h = GAME.hoveredTile;
+      if (tool?.service && h) {
+        drawRadiusArea(h.tx, h.ty, tool.w, tool.h, tool.radius, 'rgba(120,200,120,0.14)');
+        return;
+      }
+      const sel = GAME.selectedInfo;
+      const b = sel?.kind === 'building' && buildingById(sel.id);
+      if (!b) return;
+      const def = DEFS[b.type];
+      const r = def.service ? def.radius : b.type === 'warehouse' ? WAREHOUSE_MARKET_RADIUS : 0;
+      if (r) drawRadiusArea(b.x, b.y, def.w, def.h, r, 'rgba(120,200,120,0.12)');
+    }
+
+    function drawStatusBubble(b, icon, color) {
+      const def = DEFS[b.type];
+      const p = P(b.x - 0.5 + def.w / 2, b.y - 0.5 + def.h / 2, 60);
+      ctx.fillStyle = color;
+      ctx.strokeStyle = '#fff';
+      ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.arc(p.x, p.y, 9, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+      ctx.fillStyle = '#fff';
+      ctx.font = '10px Arial';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(icon, p.x, p.y + 0.5);
+      ctx.textBaseline = 'alphabetic';
+    }
+
+    // Flickering flames and dark smoke over a burning building
+    function drawFire(b) {
+      const def = DEFS[b.type], t = animTime / 120;
+      for (let i = 0; i < 6; i++) {
+        const u = b.x - 0.3 + (i % 3) * (def.w - 0.4) / 2, v = b.y - 0.3 + Math.floor(i / 3) * (def.h - 0.4);
+        const p = P(u, v, 14 + Math.sin(t + i) * 3);
+        const s = 5 + Math.sin(t * 1.7 + i * 2) * 2;
+        dot({ x: p.x, y: p.y }, s + 3, 'rgba(230,90,20,0.8)');
+        dot({ x: p.x, y: p.y - 3 }, s, 'rgba(255,200,60,0.9)');
+      }
+      const c = P(b.x + (def.w - 1) / 2, b.y + (def.h - 1) / 2, 30);
+      for (let i = 0; i < 4; i++) {
+        const k = (animTime / 1800 + i / 4) % 1;
+        dot({ x: c.x + Math.sin(k * 6 + i) * 6, y: c.y - k * 40 }, 5 + k * 9, `rgba(50,45,40,${0.5 * (1 - k)})`);
+      }
+    }
+
+    // Storm: darker sky and slanted rain over the whole screen
+    function drawStorm() {
+      ctx.fillStyle = 'rgba(20,30,50,0.28)';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      ctx.strokeStyle = 'rgba(200,215,235,0.35)';
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      const off = (animTime / 3) % 40;
+      for (let i = 0; i < 160; i++) {
+        const x = (i * 97) % canvas.width, y = ((i * 57) % canvas.height + off * 6) % canvas.height;
+        ctx.moveTo(x, y);
+        ctx.lineTo(x - 6, y + 16);
+      }
+      ctx.stroke();
     }
 
     function drawNoRoadIcon(b) {
@@ -2646,6 +3152,9 @@
         return { cost: FOUNDING_COST, payer, kind: 'found', block: null };
       }
       if (def.tier && GAME.tierReached < def.tier) return { cost: def.cost, payer: isl, block: `Låses op, når du har ${tierName(def.tier)}` };
+      if (type === 'monument' && totalMerchants() < MONUMENT_POP) {
+        return { cost: def.cost, payer: isl, block: `Kræver ${MONUMENT_POP} Købmænd i alt (har ${Math.floor(totalMerchants())})` };
+      }
       if (!isl) return { cost: def.cost, payer: null, block: 'Skal bygges på land' };
       if (isl.warehouses === 0) return { cost: def.cost, payer: isl, block: `Byg først et lager på ${isl.name}` };
       if (def.fertility && !isl.fertility.includes(def.fertility)) {
@@ -2689,7 +3198,8 @@
         let count = 0;
         for (let dy = -r; dy < def.h + r; dy++) {
           for (let dx = -r; dx < def.w + r; dx++) {
-            if (tileAt(tx + dx, ty + dy)?.type === def.near.terrain) count++;
+            const nt = tileAt(tx + dx, ty + dy);
+            if (def.near.key ? nt?.[def.near.key] > 0 : nt?.type === def.near.terrain) count++;
           }
         }
         if (count < min) return no(`Ikke nok ${def.near.label} i nærheden`);
@@ -2756,6 +3266,7 @@
       }
       selectTool(null);
       if (r.kind === 'start') startPlaying();
+      if (type === 'monument' && !GAME.won) showVictory();
       recomputeConnectivity();
       saveGame();
       return true;
@@ -3052,7 +3563,9 @@
     // Render a building (or tool) into a card canvas by temporarily redirecting `ctx`
     const PREVIEW_H = { house: 40, woodcutter: 52, sawmill: 62, warehouse: 74, stonecutter: 52, road: 10,
                         canal: 10, fisher: 46, grainfarm: 40, pigfarm: 44, cattlefarm: 50, shipyard: 70,
-                        sheepfarm: 40, weaver: 60, hopfarm: 60, brewery: 62, forester: 44 };
+                        sheepfarm: 40, weaver: 60, hopfarm: 60, brewery: 62, forester: 44,
+                        claypit: 36, brickworks: 70, charcoal: 50, mine: 44, smithy: 64, marketplace: 36, chapel: 80,
+                        tavern: 70, firestation: 60, monument: 110 };
 
     function drawPreview(cv, id) {
       const dpr = window.devicePixelRatio || 1, cw = 96, ch = 72;
@@ -3177,6 +3690,8 @@
         }
         items.push({ depth: d, draw: () => drawBuilding(b) });
       }
+      const T = GAME.trader;
+      if (T && inView(P(T.x, T.y), 60, 30, 60)) items.push({ depth: T.x + T.y, draw: () => drawShip(T, false) });
       for (const s of GAME.ships) {
         if (inView(P(s.x, s.y), 60, 30, 60)) {
           items.push({ depth: s.x + s.y, draw: () => drawShip(s, sel?.kind === 'ship' && sel.id === s.id) });
@@ -3192,6 +3707,11 @@
       }
 
       drawRouteOverlay();
+      drawServiceOverlay();
+      for (const b of visibleBuildings) {
+        if (b.fire) drawFire(b);
+        else if (b.paused) drawStatusBubble(b, '⏸', '#6a6a6a');
+      }
 
       // Placement / tool preview
       if (GAME.selectedBuilding && GAME.hoveredTile) {
@@ -3202,6 +3722,7 @@
       }
 
       ctx.restore();
+      if (GAME.storm > 0) drawStorm();
     }
 
     // ===== CAMERA =====
@@ -3532,7 +4053,7 @@
 
     function createRoute(fromId, toId, waypoints) {
       GAME.routeCounter++;
-      const r = { id: `r_${GAME.routeCounter}`, from: fromId, to: toId, waypoints, res: ['planks'], back: [], length: 0 };
+      const r = { id: `r_${GAME.routeCounter}`, from: fromId, to: toId, waypoints, res: ['planks'], back: [], keepRes: {}, keepBack: {}, length: 0 };
       GAME.routes.push(r);
       routePath(r);
       return r;
@@ -3595,15 +4116,17 @@
       }
     }
 
-    function loadShip(ship, isl, goods) {
+    // keep: minimum stock per good that must stay on the island
+    function loadShip(ship, isl, goods, keep = {}) {
       let free = SHIP_TYPES[ship.type].cargo - cargoTotal(ship);
+      const spare = (k) => isl.resources[k] - (keep[k] || 0);
       // Share the hold between the chosen goods; a second pass tops up with whatever is left
       for (let pass = 0; pass < 2 && free >= 1; pass++) {
-        const wanted = goods.filter(k => isl.resources[k] >= 1);
+        const wanted = goods.filter(k => spare(k) >= 1);
         if (!wanted.length) break;
         const share = Math.max(1, Math.floor(free / wanted.length));
         for (const k of wanted) {
-          const take = Math.floor(Math.min(share, isl.resources[k], free));
+          const take = Math.floor(Math.min(share, spare(k), free));
           isl.resources[k] -= take;
           ship.cargo[k] += take;
           free -= take;
@@ -3617,13 +4140,15 @@
       if (!from || !to) { stopRoute(ship); return; }
       if (ship.state === 'loading') {
         const isl = islandOfBuilding(from);
+        pirateCheck(ship, r);
         unloadShip(ship, isl);          // return cargo from the last trip
-        loadShip(ship, isl, r.res);
+        loadShip(ship, isl, r.res, r.keepRes);
         sailTo(ship, to, 'toTo', r.waypoints);
       } else if (ship.state === 'unloading') {
         const isl = islandOfBuilding(to);
+        pirateCheck(ship, r);
         unloadShip(ship, isl);
-        loadShip(ship, isl, r.back);
+        loadShip(ship, isl, r.back, r.keepBack);
         ship.trips++;
         sailTo(ship, from, 'toFrom', [...r.waypoints].reverse());
       }
@@ -3638,7 +4163,7 @@
           continue;
         }
         if (!s.path.length) continue;
-        let move = SHIP_TYPES[s.type].speed * sec;
+        let move = SHIP_TYPES[s.type].speed * sec * (GAME.storm > 0 ? 0.5 : 1);
         while (move > 0 && s.path.length) {
           const [tx, ty] = s.path[0], dx = tx - s.x, dy = ty - s.y, d = Math.hypot(dx, dy);
           if (d > 0.001) s.dir = [dx / d, dy / d];
@@ -3713,11 +4238,12 @@
         const a = m * L * 2;
         line(pt(a, 0, deckZ), pt(a, 0, deckZ + mastH), '#4a3018', 1.4 * k);
         const sw = W * 2.3, s0 = deckZ + mastH * 0.35, s1 = deckZ + mastH * 0.92, belly = 0.07 * k;
-        poly('#f4ecda', [pt(a, -sw, s1), pt(a, sw, s1), pt(a + belly, sw * 0.95, s0), pt(a + belly, -sw * 0.95, s0)], 'rgba(60,50,40,0.5)');
+        poly(s.trader ? '#c84a3a' : '#f4ecda', [pt(a, -sw, s1), pt(a, sw, s1), pt(a + belly, sw * 0.95, s0), pt(a + belly, -sw * 0.95, s0)], 'rgba(60,50,40,0.5)');
+        if (s.trader) line(pt(a + belly * 0.5, 0, s0), pt(a, 0, s1), '#f4ecda', 2);
         if (i === 0) {
           const top = pt(a, 0, deckZ + mastH);
           const wave = Math.sin(animTime / 240 + s.x) * 1.5;
-          poly('#2a5aa8', [top, { x: top.x + 8 * k, y: top.y + 1 + wave }, { x: top.x + 8 * k, y: top.y + 5 + wave }, { x: top.x, y: top.y + 5 }]);
+          poly(s.trader ? '#e8c040' : '#2a5aa8', [top, { x: top.x + 8 * k, y: top.y + 1 + wave }, { x: top.x + 8 * k, y: top.y + 5 + wave }, { x: top.x, y: top.y + 5 }]);
         }
       });
     }
@@ -3731,6 +4257,114 @@
         if (d < bestD) { best = s; bestD = d; }
       }
       return best;
+    }
+
+    // ===== TRADER =====
+    // A free trader sails in from the edge of the map, visits every island that has trade settings, sells what
+    // you have in surplus (above your "sell above" level) and delivers what you're short of (up to "buy up to").
+    const buyPrice = (k) => Math.ceil(PRICES[k] * BUY_MARKUP);
+    const hasTradeSettings = (isl) => !!isl.trade && Object.values(isl.trade).some(v => v && (v.sell != null || v.buy != null));
+
+    // One port per island with trade settings
+    function tradePorts() {
+      const seen = new Set(), out = [];
+      for (const b of portWarehouses()) {
+        const isl = islandOfBuilding(b);
+        if (seen.has(isl) || !hasTradeSettings(isl)) continue;
+        seen.add(isl);
+        out.push(b);
+      }
+      return out;
+    }
+
+    // Open-sea tile on the map edge nearest to (x, y), where the trader appears and leaves
+    function edgeTileNear(x, y) {
+      let best = null, bestD = Infinity;
+      for (const t of GAME.grid) {
+        if (!t.ocean || (t.x && t.y && t.x < MAP_SIZE - 1 && t.y < MAP_SIZE - 1)) continue;
+        const d = Math.hypot(t.x - x, t.y - y);
+        if (d < bestD) { best = t; bestD = d; }
+      }
+      return best;
+    }
+
+    function traderTick() {
+      if (GAME.trader || GAME.phase !== 'play') return;
+      GAME.traderAway = (GAME.traderAway ?? 20) - 1;
+      if (GAME.traderAway > 0) return;
+      const ports = tradePorts();
+      if (!ports.length) { GAME.traderAway = 10; return; }
+      const e = edgeTileNear(ports[0].x, ports[0].y);
+      if (!e) { GAME.traderAway = 60; return; }
+      GAME.trader = { trader: true, type: 'kogge', name: 'Handelsmanden', x: e.x, y: e.y, dir: [1, 0], path: [],
+                      state: 'sailing', timer: 0, queue: ports.map(p => p.id), target: null, cargo: emptyStock() };
+      traderSailNext();
+    }
+
+    function traderSailNext() {
+      const T = GAME.trader;
+      while (T.queue.length) {
+        const b = buildingById(T.queue.shift());
+        const res = b && waterPath([[Math.round(T.x), Math.round(T.y)]], dockTiles(b));
+        if (res) { T.path = res.path; T.state = 'sailing'; T.target = b.id; return; }
+      }
+      // All ports visited: sail back out to sea
+      const e = edgeTileNear(T.x, T.y);
+      const res = e && waterPath([[Math.round(T.x), Math.round(T.y)]], [[e.x, e.y]]);
+      T.path = res ? res.path : [];
+      T.state = 'leaving';
+      T.target = null;
+    }
+
+    function updateTrader(dt) {
+      const T = GAME.trader;
+      if (!T) return;
+      const sec = dt / 1000;
+      if (T.timer > 0) {
+        T.timer -= sec;
+        if (T.timer <= 0) traderSailNext();
+        return;
+      }
+      let move = 2.4 * sec * (GAME.storm > 0 ? 0.5 : 1);
+      while (move > 0 && T.path.length) {
+        const [tx, ty] = T.path[0], dx = tx - T.x, dy = ty - T.y, d = Math.hypot(dx, dy);
+        if (d > 0.001) T.dir = [dx / d, dy / d];
+        if (d <= move) { T.x = tx; T.y = ty; T.path.shift(); move -= d; }
+        else { T.x += dx / d * move; T.y += dy / d * move; move = 0; }
+      }
+      if (T.path.length) return;
+      if (T.state === 'sailing' && T.target) {
+        const b = buildingById(T.target);
+        if (b) tradeAt(b);
+        T.state = 'trading';
+        T.timer = TRADER_WAIT;
+      } else if (T.state === 'leaving') {
+        GAME.trader = null;
+        GAME.traderAway = 60; // back in about a minute
+      }
+    }
+
+    function tradeAt(b) {
+      const isl = islandOfBuilding(b), sold = [], bought = [];
+      let income = 0, spent = 0;
+      for (const k of RES_KEYS) {
+        const s = isl.trade?.[k];
+        if (!s) continue;
+        if (s.sell != null && isl.resources[k] > s.sell) {
+          const q = Math.min(TRADE_PER_VISIT, Math.floor(isl.resources[k] - s.sell));
+          if (q > 0) { isl.resources[k] -= q; income += q * PRICES[k]; sold.push(`${q} ${RES_ICONS[k]}`); }
+        }
+        if (s.buy != null && isl.resources[k] < s.buy) {
+          const q = Math.min(TRADE_PER_VISIT, Math.floor(s.buy - isl.resources[k]), Math.floor(isl.cap - isl.resources[k]),
+                             Math.floor(Math.max(0, GAME.coins - spent) / buyPrice(k)));
+          if (q > 0) { isl.resources[k] += q; spent += q * buyPrice(k); bought.push(`${q} ${RES_ICONS[k]}`); }
+        }
+      }
+      GAME.coins += income - spent;
+      isl.lastTrade = { tick: GAME.tick, income, spent };
+      if (sold.length || bought.length) {
+        notify(`🛒 Handelsmanden på ${isl.name}: ${sold.length ? `solgte ${sold.join(' ')}` : ''}${sold.length && bought.length ? ' · ' : ''}${bought.length ? `købte ${bought.join(' ')}` : ''} (${income - spent >= 0 ? '+' : ''}${income - spent} 🪙)`, false);
+      }
     }
 
     // ===== ROUTE DRAWING =====
@@ -3943,19 +4577,26 @@
     const linked = (type) => GAME.buildings.some(b => b.type === type && GAME.connected.has(b.id));
     const QUESTS = [
       { text: 'Byg en fisker og forbind den med vej til lageret', done: () => linked('fisher'), reward: 100 },
-      { text: 'Byg 3 boliger', progress: () => `${countOf('house')}/3`, done: () => countOf('house') >= 3, reward: 100 },
+      { text: 'Byg 3 boliger tæt på lageret', progress: () => `${countOf('house')}/3`, done: () => countOf('house') >= 3, reward: 100 },
       { text: 'Byg en skovhugger og et savværk med vej til lageret', done: () => linked('woodcutter') && linked('sawmill'), reward: 150 },
       { text: 'Nå 20 indbyggere', progress: () => `${totalPopulation()}/20`, done: () => totalPopulation() >= 20, reward: 150 },
+      { text: 'Byg en markedsplads, så flere boliger får varer', done: () => countOf('marketplace') > 0, reward: 100 },
       { text: 'Byg en stenhugger', done: () => linked('stonecutter'), reward: 100 },
       { text: 'Skaf kød: byg en kornfarm og en svinefarm', done: () => linked('grainfarm') && linked('pigfarm'), reward: 150 },
       { text: 'Byg en skibsbygger og søsæt en jolle', done: () => GAME.ships.length > 0, reward: 200 },
       { text: 'Grundlæg et lager på en ø med får 🐑', done: () => [...GAME.islands.values()].some(i => !i.home && i.warehouses && i.fertility.includes('sheep')), reward: 200 },
-      { text: 'Opret en handelsrute med et skib', done: () => GAME.ships.some(s => s.routeId), reward: 150 },
+      { text: 'Tegn en handelsrute og sæt et skib på', done: () => GAME.ships.some(s => s.routeId), reward: 150 },
       { text: 'Skaf tøj: byg en fårefarm og en væver', done: () => linked('sheepfarm') && linked('weaver'), reward: 200 },
+      { text: 'Byg et kapel til de kommende Borgere', done: () => countOf('chapel') > 0, reward: 150 },
       { text: 'Opgrader en bolig til Borgere', done: () => GAME.tierReached >= 2, reward: 300 },
+      { text: 'Sæt handelsmanden i gang: vælg noget at sælge eller købe på et lager', done: () => [...GAME.islands.values()].some(hasTradeSettings), reward: 150 },
       { text: 'Nå 80 indbyggere', progress: () => `${totalPopulation()}/80`, done: () => totalPopulation() >= 80, reward: 300 },
-      { text: 'Byg et bryggeri', done: () => linked('brewery'), reward: 300 },
-      { text: 'Opgrader en bolig til Købmænd', done: () => GAME.tierReached >= 3, reward: 500 }
+      { text: 'Byg et bryggeri og en kro', done: () => linked('brewery') && countOf('tavern') > 0, reward: 300 },
+      { text: 'Lav mursten: byg en lergrav og et teglværk', done: () => linked('claypit') && linked('brickworks'), reward: 300 },
+      { text: 'Lav værktøj: jernmine, kulmile og smedje', done: () => linked('mine') && linked('charcoal') && linked('smithy'), reward: 400 },
+      { text: 'Opgrader en bolig til Købmænd', done: () => GAME.tierReached >= 3, reward: 500 },
+      { text: `Nå ${MONUMENT_POP} Købmænd`, progress: () => `${Math.floor(totalMerchants())}/${MONUMENT_POP}`, done: () => totalMerchants() >= MONUMENT_POP, reward: 1000 },
+      { text: 'Byg monumentet og vind spillet', done: () => countOf('monument') > 0, reward: 0 }
     ];
 
     function checkQuests() {
@@ -3984,7 +4625,8 @@
     const STATUS_TEXT = {
       ok: '✅ Producerer', noroad: '⚠ Mangler vej til et lager', noinput: '⚠ Mangler råvarer',
       full: '⚠ Lageret er fuldt', idle: 'Ledig', building: '🔨 Bygger skib', noworkers: '⚠ Mangler arbejdere',
-      planting: '🌱 Planter og plejer træer', noresource: '⚠ Intet tilbage at høste i nærheden'
+      planting: '🌱 Planter og plejer træer', noresource: '⚠ Intet tilbage at høste i nærheden',
+      paused: '⏸ På pause', fire: '🔥 Brænder!'
     };
     const esc = (s) => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 
@@ -4020,12 +4662,14 @@
       if (!sel) return;
       const panel = document.getElementById('info');
       // Don't rebuild while the player is using a dropdown
-      if (panel.contains(document.activeElement) && document.activeElement.tagName === 'SELECT') return;
+      if (panel.contains(document.activeElement) && ['SELECT', 'INPUT'].includes(document.activeElement.tagName) &&
+          document.activeElement.type !== 'checkbox') return;
       const title = document.getElementById('info-title'), body = document.getElementById('info-body');
 
       if (sel.kind === 'economy') { renderEconomy(title, body); return; }
 
       if (sel.kind === 'routes') { renderRoutes(title, body); return; }
+      if (sel.kind === 'islands') { renderIslands(title, body); return; }
       if (sel.kind === 'route') { renderRoute(title, body, sel); return; }
 
       if (sel.kind === 'ship') {
@@ -4072,10 +4716,15 @@
         const need = EXTRA_WAREHOUSE_POP * isl.warehouses;
         const shipsHere = GAME.ships.filter(s => { const r = shipRoute(s); return r && [r.from, r.to].some(id => islandOfBuilding(buildingById(id)) === isl); });
         const needs = ['food', 'meat', 'cloth', 'beer'].filter(n => n === 'food' || byL[2] + byL[3] > 0 || (n === 'beer' && byL[3] > 0));
+        const allow = isl.allowUpgrade !== false;
+        const T = GAME.trader;
+        const traderTxt = T && T.target === b.id && T.state === 'trading' ? 'er her nu'
+          : T ? 'er på vej rundt' : hasTradeSettings(isl) ? `kommer om ca. ${Math.max(1, GAME.traderAway ?? 0)} s` : 'kommer, når du har valgt varer';
+        const num = (v) => v == null ? '' : v;
         title.textContent = `🏚️ Lager – ${isl.name}`;
         body.innerHTML = `
           <p class="muted">Fælles lager for hele øen · ${isl.warehouses} lager${isl.warehouses > 1 ? 'e' : ''} · plads til ${isl.cap} af hver vare</p>
-          <div class="row"><span>🌱 Frugtbarhed</span><b>${fertTxt(isl)}</b></div>
+          <div class="row"><span>🌱 Frugtbarhed</span><b>${fertTxt(isl)}${isl.ore ? '<br>⛏️ Jernmalm' : ''}</b></div>
           <div class="stock">${RES_KEYS.map(k => `
             <div class="res"><span>${RES_ICONS[k]} ${RESOURCES[k].name}</span><b>${Math.floor(isl.resources[k])} / ${isl.cap}</b>${bar(isl.resources[k], isl.cap)}</div>`).join('')}
           </div>
@@ -4084,19 +4733,42 @@
           <div class="row"><span>👷 Ledige arbejdere</span><b>${isl.workersFree ?? isl.pop}</b></div>
           <div class="row"><span>Behov</span><b>${needs.map(n => needIcon(isl, n)).join('<br>')}</b></div>
           ${isl.hunger ? '<p class="err">Beboerne sulter! Byg fiskere eller farme.</p>' : ''}
+          <div class="btns"><span>Boliger må opgradere</span><button data-act="upgrade" class="${allow ? '' : 'alt'}">${allow ? '✅ Ja' : '⛔ Nej'}</button></div>
           <div class="row"><span>Næste lager</span><b>${isl.pop >= need ? fmtCost(extraWarehouseCost(isl.warehouses)) : `kræver ${need} beboere`}</b></div>
-          ${shipsHere.length ? `<h4>Skibe på ruter hertil</h4>${shipsHere.map(s => `<div class="row"><span>${esc(s.name)}</span><b>${SHIP_STATE_TEXT[s.state]}</b></div>`).join('')}` : ''}`;
+          ${shipsHere.length ? `<h4>Skibe på ruter hertil</h4>${shipsHere.map(s => `<div class="row"><span>${esc(s.name)}</span><b>${SHIP_STATE_TEXT[s.state]}</b></div>`).join('')}` : ''}
+          <h4>🛒 Handelsmand</h4>
+          ${dockTiles(b).length ? `
+            <p class="muted">Handelsmanden ${traderTxt}. Han køber alt over "Sælg over" og sælger dig op til "Køb op til". Tomt felt = ingen handel.</p>
+            <table class="trade"><tr><th></th><th>Sælg over</th><th>Køb op til</th></tr>
+            ${RES_KEYS.map(k => `<tr><td title="Han betaler ${PRICES[k]} · du betaler ${buyPrice(k)}">${RES_ICONS[k]} <small>${PRICES[k]}/${buyPrice(k)}</small></td>
+              <td><input type="number" min="0" data-trade="sell" data-res="${k}" value="${num(isl.trade?.[k]?.sell)}" placeholder="–"></td>
+              <td><input type="number" min="0" data-trade="buy" data-res="${k}" value="${num(isl.trade?.[k]?.buy)}" placeholder="–"></td></tr>`).join('')}
+            </table>
+            ${isl.lastTrade ? `<p class="muted">Seneste handel: +${isl.lastTrade.income} / −${isl.lastTrade.spent} 🪙</p>` : ''}`
+          : '<p class="muted">Kun lagre ved vandet kan handle med handelsmanden.</p>'}`;
+        body.querySelector('[data-act="upgrade"]').addEventListener('click', () => {
+          isl.allowUpgrade = !allow;
+          saveGame();
+          renderInfo();
+        });
+        body.querySelectorAll('input[data-trade]').forEach(el => el.addEventListener('change', () => {
+          const k = el.dataset.res, v = el.value === '' ? null : Math.max(0, Math.floor(Number(el.value)));
+          isl.trade = isl.trade || {};
+          isl.trade[k] = { ...(isl.trade[k] || {}), [el.dataset.trade]: v };
+          saveGame();
+        }));
         return;
       }
 
       if (b.type === 'shipyard') {
         const q = b.queue;
         title.textContent = `⚓ Skibsbygger – ${isl.name}`;
-        const status = !GAME.connected.has(b.id) ? STATUS_TEXT.noroad : !b.staffed ? STATUS_TEXT.noworkers : q ? `Bygger ${SHIP_TYPES[q.type].name}` : 'Klar';
+        const status = b.paused ? STATUS_TEXT.paused : !GAME.connected.has(b.id) ? STATUS_TEXT.noroad : !b.staffed ? STATUS_TEXT.noworkers : q ? `Bygger ${SHIP_TYPES[q.type].name}` : 'Klar';
         body.innerHTML = `
           <div class="row"><span>Status</span><b>${status}</b></div>
           <div class="row"><span>👷 Arbejdere</span><b>${def.workers} ${b.staffed ? '✅' : '❌'}</b></div>
           ${q ? bar(q.progress, SHIP_TYPES[q.type].buildTime) : ''}
+          ${pauseButton(b)}
           <h4>Byg skib</h4>
           ${Object.values(SHIP_TYPES).map(T => {
             const locked = GAME.tierReached < T.tier, afford = hasCost(isl.resources, T.cost);
@@ -4109,6 +4781,7 @@
           ${sel.error ? `<p class="err">${esc(sel.error)}</p>` : ''}
           <h4>Dine skibe</h4>
           ${GAME.ships.length ? GAME.ships.map(s => `<div class="row"><span>${esc(s.name)}</span><button class="link" data-pick="${s.id}">${SHIP_STATE_TEXT[s.state]} ›</button></div>`).join('') : '<p class="muted">Ingen skibe endnu.</p>'}`;
+        bindPause(body, b);
         body.querySelectorAll('[data-ship]').forEach(el => el.addEventListener('click', () => {
           sel.error = startShipBuild(b, el.dataset.ship) || '';
           renderInfo();
@@ -4125,16 +4798,28 @@
         const L = b.level || 1, lvl = HOUSE_LEVELS[L], next = HOUSE_LEVELS[L + 1];
         title.textContent = `🏠 Bolig – ${lvl.name}`;
         const nextNeeds = next ? next.needs.filter(n => !lvl.needs.includes(n)) : [];
+        const nextServices = next ? next.services.filter(s => !lvl.services.includes(s)) : [];
         body.innerHTML = `
           <p class="muted">${esc(isl.name)}</p>
           <div class="row"><span>Pladser</span><b>${houseCap(b, isl)} / ${lvl.cap}</b></div>
+          ${!b.cov?.market ? '<p class="err">Ligger uden for et markeds rækkevidde – kun 2 beboere. Byg en markedsplads i nærheden.</p>' : ''}
           <div class="row"><span>👥 Beboere på øen</span><b>${isl.pop} / ${isl.popCap}</b></div>
           <div class="row"><span>🪙 Skat</span><b>${rate(lvl.tax)} pr. beboer/s</b></div>
-          <div class="row"><span>Behov</span><b>${lvl.needs.map(n => needIcon(isl, n)).join('<br>')}</b></div>
+          <div class="row"><span>Varer</span><b>${lvl.needs.map(n => needIcon(isl, n)).join('<br>')}</b></div>
+          <div class="row"><span>Offentligt</span><b>${lvl.services.map(s => serviceIcon(b, s)).join('<br>')}</b></div>
+          ${b.fire ? '<p class="err">🔥 Huset brænder!</p>' : ''}
           ${next ? `<h4>Næste niveau: ${next.name}</h4>
-            <p>Opgraderer af sig selv, når boligerne er fulde, behovene ovenfor er dækket, og øen har
-            ${nextNeeds.map(n => `${NEED_INFO[n].icon} ${NEED_INFO[n].name.toLowerCase()}`).join(' og ')} på lager.</p>
-            <div class="row"><span>Materialer</span><b>${fmtCost(lvl.upgrade)}</b></div>` : '<p class="muted">Højeste niveau.</p>'}`;
+            <p>Opgraderer af sig selv, når boligerne er fulde, behovene ovenfor er dækket, øen har
+            ${nextNeeds.map(n => `${NEED_INFO[n].icon} ${NEED_INFO[n].name.toLowerCase()}`).join(' og ')} på lager${nextServices.length ? `, og huset er inden for rækkevidde af ${nextServices.map(s => `${SERVICES[s].icon} ${SERVICES[s].name.toLowerCase()}`).join(' og ')}` : ''}.</p>
+            <div class="row"><span>Materialer</span><b>${fmtCost(lvl.upgrade)}</b></div>
+            <div class="btns"><span>${b.lockLevel ? '🔒 Niveauet er låst' : 'Må opgradere'}</span><button data-act="lock" class="${b.lockLevel ? 'alt' : ''}">${b.lockLevel ? 'Lås op' : '🔒 Lås niveau'}</button></div>`
+            : '<p class="muted">Højeste niveau.</p>'}
+          ${isl.allowUpgrade === false ? '<p class="muted">Opgradering er slået fra for hele øen (se lageret).</p>' : ''}`;
+        body.querySelector('[data-act="lock"]')?.addEventListener('click', () => {
+          b.lockLevel = !b.lockLevel;
+          saveGame();
+          renderInfo();
+        });
         return;
       }
 
@@ -4152,9 +4837,57 @@
         if (b.status === 'noresource') details += `<p class="err">Ingen ${def.harvest.label} tilbage inden for ${def.harvest.radius} felter.${def.harvest.key === 'wood' ? ' Byg en skovfoged i nærheden.' : ' Sten kommer ikke igen – find nye klipper.'}</p>`;
       }
       if (b.type === 'forester') details += `<div class="row"><span>Status</span><b>${STATUS_TEXT[b.status] || STATUS_TEXT.idle}</b></div>`;
+      if (def.service) {
+        const served = GAME.buildings.filter(o => DEFS[o.type].house && islandOfBuilding(o) === isl && footprintGap(o, b) <= def.radius).length;
+        details += `<div class="row"><span>Status</span><b>${b.paused ? STATUS_TEXT.paused : b.fire ? STATUS_TEXT.fire : serviceActive(b) ? '✅ I drift' : STATUS_TEXT.noworkers}</b></div>
+                    <div class="row"><span>Rækkevidde</span><b>${def.radius} felter · ${served} boliger</b></div>`;
+      }
+      if (b.fire) details += '<p class="err">🔥 Bygningen brænder!</p>';
       if (def.workers) details += `<div class="row"><span>👷 Arbejdere</span><b>${def.workers} ${b.staffed ? '✅' : '❌'}</b></div>`;
       if (def.upkeep) details += `<div class="row"><span>🪙 Drift</span><b>−${rate(def.upkeep)}/s</b></div>`;
-      body.innerHTML = `<p class="muted">${esc(isl.name)}</p>${details}<p>${esc(def.desc)}</p>`;
+      const pausable = def.workers || def.produces || def.service;
+      body.innerHTML = `<p class="muted">${esc(isl.name)}</p>${details}${pausable ? pauseButton(b) : ''}<p>${esc(def.desc)}</p>`;
+      bindPause(body, b);
+    }
+
+    // Pause / resume button for any building with workers, production or a service
+    const pauseButton = (b) => `<div class="btns"><button data-act="pause" class="${b.paused ? '' : 'alt'}">${b.paused ? '▶ Genoptag' : '⏸ Sæt på pause'}</button><span class="muted">Pause: ingen arbejdere, ingen drift</span></div>`;
+    function bindPause(body, b) {
+      body.querySelector('[data-act="pause"]')?.addEventListener('click', () => {
+        b.paused = !b.paused;
+        updateIslandStats();
+        saveGame();
+        renderInfo();
+      });
+    }
+    const serviceIcon = (b, s) => `${SERVICES[s].icon} ${SERVICES[s].name} ${b.cov?.[s] ? '✅' : '❌'}`;
+
+    // Tiny inline SVG line chart for the economy panel
+    function sparkline(values, w = 110, hgt = 22) {
+      if (values.length < 2) return '';
+      const min = Math.min(...values), max = Math.max(...values), span = max - min || 1;
+      const pts = values.map((v, i) => `${(i / (values.length - 1) * w).toFixed(1)},${(hgt - 2 - (v - min) / span * (hgt - 4)).toFixed(1)}`).join(' ');
+      return `<svg width="${w}" height="${hgt}" style="vertical-align:middle"><polyline points="${pts}" fill="none" stroke="#8a5a2a" stroke-width="1.5"/></svg>`;
+    }
+
+    function renderIslands(title, body) {
+      title.textContent = '📍 Øer';
+      const list = [...GAME.islands.values()].filter(i => i.size >= 12).sort((a, b) => (b.warehouses > 0) - (a.warehouses > 0) || b.size - a.size);
+      body.innerHTML = list.map(isl => {
+        const fert = [...isl.fertility.map(f => FERTILITY[f].icon), isl.ore ? '⛏️' : ''].join('');
+        if (!isl.warehouses) return `<div class="row"><span>${esc(isl.name)} ${fert}</span><button class="link" data-go="${isl.id}">Ikke grundlagt ›</button></div>`;
+        const full = RES_KEYS.filter(k => isl.resources[k] >= isl.cap).length;
+        return `<div class="ship-card">
+          <div><b>${esc(isl.name)}</b> ${fert} <small>${isl.home ? '· hjemø' : ''}</small></div>
+          <div class="muted">👥 ${isl.pop}/${isl.popCap} · 👷 ledige ${isl.workersFree ?? 0} · 🍽️ ${isl.hunger ? '❌ sult' : '✅'}${full ? ` · 📦 ${full} fulde varer` : ''}</div>
+          <div class="btns"><span></span><button data-go="${isl.id}">Vis</button></div></div>`;
+      }).join('');
+      body.querySelectorAll('[data-go]').forEach(el => el.addEventListener('click', () => {
+        const isl = GAME.islands.get(Number(el.dataset.go));
+        const wh = GAME.buildings.find(b => b.type === 'warehouse' && islandOfBuilding(b) === isl);
+        if (wh) { centerOn(wh.x + 0.5, wh.y + 0.5); openInfo('building', wh.id); }
+        else centerOn(isl.anchor[0], isl.anchor[1]);
+      }));
     }
 
     function renderRoutes(title, body) {
@@ -4174,6 +4907,14 @@
       body.querySelectorAll('[data-open]').forEach(el => el.addEventListener('click', () => openInfo('route', el.dataset.open)));
     }
 
+    // "Keep at least N" inputs for the goods chosen on one leg of a route
+    function keepInputs(r, listField, keepField, islandName) {
+      if (!r[listField].length) return '';
+      const keep = r[keepField] || {};
+      return `<p class="muted">Behold mindst (på ${islandName}):</p><div class="goods">${r[listField].map(k =>
+        `<label class="chk">${RES_ICONS[k]} <input type="number" min="0" style="width:52px" data-keep="${keepField}" data-res="${k}" value="${keep[k] ?? ''}" placeholder="0"></label>`).join('')}</div>`;
+    }
+
     function renderRoute(title, body, sel) {
       const r = routeById(sel.id);
       if (!r) { openInfo('routes'); return; }
@@ -4188,8 +4929,10 @@
         <div class="row"><span>Punkter</span><b>${r.waypoints.length}</b></div>
         <h4>Varer ud (${fromName} → ${toName})</h4>
         <div class="goods">${goodsChecks('res', r.res)}</div>
+        ${keepInputs(r, 'res', 'keepRes', fromName)}
         <h4>Returlast (${toName} → ${fromName})</h4>
         <div class="goods">${goodsChecks('back', r.back)}</div>
+        ${keepInputs(r, 'back', 'keepBack', toName)}
         <h4>Skibe på ruten</h4>
         ${onRoute.length ? onRoute.map(s => `<div class="row"><span>${esc(s.name)} <small>(${SHIP_STATE_TEXT[s.state]})</small></span><button class="link" data-unassign="${s.id}">Fjern</button></div>`).join('') : '<p class="muted">Ingen skibe endnu.</p>'}
         ${others.length ? `<label>Sæt skib på <select data-f="ship">${others.map(s =>
@@ -4199,9 +4942,17 @@
         <div class="btns"><button class="link" data-act="all">‹ Alle ruter</button></div>
         ${sel.error ? `<p class="err">${esc(sel.error)}</p>` : ''}`;
       // Goods changes apply right away, also to ships already sailing the route
-      body.querySelectorAll('input[data-res]').forEach(el => el.addEventListener('change', () => {
+      body.querySelectorAll('input[data-list]').forEach(el => el.addEventListener('change', () => {
         const f = el.dataset.list, k = el.dataset.res;
         r[f] = el.checked ? [...new Set([...r[f], k])] : r[f].filter(x => x !== k);
+        saveGame();
+        renderInfo();
+      }));
+      body.querySelectorAll('input[data-keep]').forEach(el => el.addEventListener('change', () => {
+        const f = el.dataset.keep, k = el.dataset.res;
+        r[f] = r[f] || {};
+        if (el.value === '' || Number(el.value) <= 0) delete r[f][k];
+        else r[f][k] = Math.floor(Number(el.value));
         saveGame();
       }));
       body.querySelector('[data-f="ship"]')?.addEventListener('change', (e) => { sel.pickShip = e.target.value; e.target.blur(); });
@@ -4235,6 +4986,10 @@
         <div class="row"><span>Skat</span><b>+${rate(GAME.lastTax || 0)}/s</b></div>
         <div class="row"><span>Drift</span><b>−${rate(GAME.lastUpkeep || 0)}/s</b></div>
         <div class="row"><span>Balance</span><b class="${net < 0 ? 'err' : ''}">${net >= 0 ? '+' : ''}${rate(net)}/s</b></div>
+        ${GAME.history.length > 1 ? `<h4>Udvikling (sidste ${Math.round(GAME.history.length * 10 / 60)} min.)</h4>
+          <div class="row"><span>🪙 Mønter</span>${sparkline(GAME.history.map(s => s.coins))}</div>
+          ${RES_KEYS.filter(k => GAME.history.some(s => s.stock[k] > 0)).map(k =>
+            `<div class="row"><span>${RES_ICONS[k]} ${RESOURCES[k].name} <small>${GAME.history[GAME.history.length - 1].stock[k]}</small></span>${sparkline(GAME.history.map(s => s.stock[k]))}</div>`).join('')}` : ''}
         ${islands.map(isl => {
           const rows = RES_KEYS.filter(k => isl.resources[k] >= 1 || isl.flowIn?.[k] || isl.flowOut?.[k]).map(k => {
             const d = (isl.flowIn?.[k] || 0) - (isl.flowOut?.[k] || 0);
@@ -4272,14 +5027,20 @@
         // Only tiles that differ from "full" are stored: [tile index, amount]
         wood: GAME.grid.flatMap((t, i) => t.type === 'forest' && t.wood < t.woodMax ? [[i, t.wood]] : []),
         stone: GAME.grid.flatMap((t, i) => t.type === 'rock' && t.stone < ROCK_STONE ? [[i, t.stone]] : []),
-        buildings: GAME.buildings.map(({ id, type, x, y, queue, level }) => ({ id, type, x, y, queue, level })),
+        buildings: GAME.buildings.map(({ id, type, x, y, queue, level, paused, lockLevel, fire }) => ({ id, type, x, y, queue, level, paused, lockLevel, fire })),
         roads: [...GAME.roads],
         // Islands are matched on load by their anchor tile, since ids come from re-labelling the map
         islands: [...GAME.islands.values()].map(i => ({ anchor: i.anchor, name: i.name, home: i.home, start: i.start,
-                                                         resources: i.resources, pop: i.pop, fertility: i.fertility, supplied: i.supplied })),
+                                                         resources: i.resources, pop: i.pop, fertility: i.fertility, supplied: i.supplied,
+                                                         ore: i.ore, trade: i.trade, allowUpgrade: i.allowUpgrade })),
+        ore: GAME.grid.flatMap((t, i) => t.ore > 0 ? [[i, t.ore]] : []),
+        oreAssigned: true,
+        events: GAME.events,
+        won: GAME.won,
+        history: GAME.history,
         ships: GAME.ships.map(({ id, type, name, x, y, dir, routeId, cargo, state, trips }) => ({ id, type, name, x, y, dir, routeId, cargo, state, trips })),
         shipCounter: GAME.shipCounter,
-        routes: GAME.routes.map(({ id, from, to, waypoints, res, back }) => ({ id, from, to, waypoints, res, back })),
+        routes: GAME.routes.map(({ id, from, to, waypoints, res, back, keepRes, keepBack }) => ({ id, from, to, waypoints, res, back, keepRes, keepBack })),
         routeCounter: GAME.routeCounter,
         coins: GAME.coins,
         tierReached: GAME.tierReached,
@@ -4308,6 +5069,7 @@
       const start = [...GAME.islands.values()].sort((a, b) => b.size - a.size)[0];
       start.start = true;
       assignFertility(start.id);
+      assignOre(start.id);
       updateIslandStats();
     }
 
@@ -4349,6 +5111,7 @@
       // Depleted forests and quarries (older saves have none, so everything starts full)
       for (const [i, amt] of data.wood || []) GAME.grid[i].wood = amt;
       for (const [i, amt] of data.stone || []) GAME.grid[i].stone = amt;
+      for (const [i, amt] of data.ore || []) GAME.grid[i].ore = amt;
       GAME.buildings = data.buildings.filter(b => DEFS[b.type]);
       GAME.roads = new Set(data.roads);
       GAME.occupancy.clear();
@@ -4366,7 +5129,8 @@
         const saved = data.islands.find(i => tileAt(i.anchor[0], i.anchor[1])?.island === c.id);
         const isl = newIsland(c);
         if (saved) {
-          Object.assign(isl, { name: saved.name, home: saved.home, start: saved.start, pop: saved.pop, fertility: saved.fertility || [], supplied: saved.supplied });
+          Object.assign(isl, { name: saved.name, home: saved.home, start: saved.start, pop: saved.pop, fertility: saved.fertility || [], supplied: saved.supplied,
+                               ore: saved.ore, trade: saved.trade, allowUpgrade: saved.allowUpgrade });
           Object.assign(isl.resources, saved.resources); // merge: resources added later keep 0
         }
         GAME.islands.set(c.id, isl);
@@ -4375,6 +5139,11 @@
         const home = homeIsland() || [...GAME.islands.values()].sort((a, b) => b.size - a.size)[0];
         home.start = true;
         assignFertility(home.id);
+      }
+      // Saves from before iron ore get ore veins now
+      if (!data.oreAssigned) {
+        const start = [...GAME.islands.values()].find(i => i.start) || homeIsland() || [...GAME.islands.values()].sort((a, b) => b.size - a.size)[0];
+        assignOre(start.id);
       }
       updateIslandStats();
       // Colonies founded before founding supplies existed get them delivered once
@@ -4385,7 +5154,10 @@
         }
       }
 
-      GAME.routes = (data.routes || []).map(r => ({ ...r, length: 0 }));
+      GAME.routes = (data.routes || []).map(r => ({ keepRes: {}, keepBack: {}, ...r, length: 0 }));
+      GAME.events = data.events ?? true;
+      GAME.won = !!data.won;
+      GAME.history = data.history || [];
       GAME.routeCounter = data.routeCounter || GAME.routes.length;
       GAME.ships = (data.ships || []).filter(s => SHIP_TYPES[s.type]).map(s => {
         const ship = { ...s, cargo: { ...emptyStock(), ...s.cargo }, path: [], timer: 0, routeId: s.routeId || null };
@@ -4446,10 +5218,87 @@
     document.getElementById('btn-menu').addEventListener('click', (e) => {
       e.stopPropagation();
       gameMenu.hidden = !gameMenu.hidden;
+      if (!gameMenu.hidden) renderSlots();
     });
+
+    // ----- Save slots, export / import -----
+    const SLOT_KEY = (n) => `anno-online-slot-${n}`;
+    function slotInfo(n) {
+      try {
+        const d = JSON.parse(localStorage.getItem(SLOT_KEY(n)));
+        return d ? new Date(d.savedAt).toLocaleString('da-DK', { dateStyle: 'short', timeStyle: 'short' }) : null;
+      } catch { return null; }
+    }
+    function renderSlots() {
+      document.getElementById('save-slots').innerHTML = [1, 2, 3].map(n => {
+        const info = slotInfo(n);
+        return `<div class="slot"><span>Plads ${n}<small>${info || 'tom'}</small></span>
+          <button data-slot-save="${n}">Gem</button><button data-slot-load="${n}" ${info ? '' : 'disabled'}>Indlæs</button></div>`;
+      }).join('');
+      document.querySelectorAll('[data-slot-save]').forEach(b => b.addEventListener('click', (e) => {
+        e.stopPropagation();
+        if (!saveGame()) return;
+        localStorage.setItem(SLOT_KEY(b.dataset.slotSave), localStorage.getItem(SAVE_KEY));
+        showToast(`💾 Gemt i plads ${b.dataset.slotSave}`);
+        renderSlots();
+      }));
+      document.querySelectorAll('[data-slot-load]').forEach(b => b.addEventListener('click', (e) => {
+        e.stopPropagation();
+        if (!confirm(`Indlæse plads ${b.dataset.slotLoad}? Dit nuværende spil erstattes (gem det først, hvis du vil beholde det).`)) return;
+        loadSaveString(localStorage.getItem(SLOT_KEY(b.dataset.slotLoad)));
+      }));
+    }
+    // Replaces the autosave with the given save and restarts the page with it
+    function loadSaveString(str) {
+      try {
+        const d = JSON.parse(str);
+        if (!d || !d.terrain || d.mapSize !== MAP_SIZE) throw new Error('ugyldig');
+      } catch {
+        showToast('⚠ Filen er ikke et gyldigt gemt spil');
+        return;
+      }
+      saveDisabled = true;
+      localStorage.setItem(SAVE_KEY, str);
+      location.reload();
+    }
+    document.getElementById('btn-export').addEventListener('click', () => {
+      saveGame();
+      const blob = new Blob([localStorage.getItem(SAVE_KEY)], { type: 'application/json' });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = `anno-gem-${new Date().toISOString().slice(0, 10)}.json`;
+      a.click();
+      URL.revokeObjectURL(a.href);
+    });
+    document.getElementById('btn-import').addEventListener('click', () => document.getElementById('import-file').click());
+    document.getElementById('import-file').addEventListener('change', (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+      if (!confirm('Indlæse spillet fra filen? Dit nuværende spil erstattes.')) return;
+      file.text().then(loadSaveString);
+    });
+    const optEvents = document.getElementById('opt-events');
+    optEvents.addEventListener('change', () => {
+      GAME.events = optEvents.checked;
+      if (!GAME.events) GAME.storm = 0;
+      saveGame();
+    });
+
+    function showVictory() {
+      GAME.won = true;
+      const merchants = Math.floor(totalMerchants());
+      document.getElementById('victory-stats').innerHTML =
+        `👥 ${totalPopulation()} beboere · ${merchants} Købmænd<br>🏝️ ${[...GAME.islands.values()].filter(i => i.warehouses).length} øer · ⛵ ${GAME.ships.length} skibe<br>⏱️ ${Math.floor(GAME.tick / 60)} minutter`;
+      document.getElementById('victory').hidden = false;
+      saveGame();
+    }
+    document.getElementById('victory-close').addEventListener('click', () => { document.getElementById('victory').hidden = true; });
     document.addEventListener('click', (e) => { if (!gameMenu.contains(e.target)) gameMenu.hidden = true; });
     document.getElementById('btn-save').addEventListener('click', () => { saveGame(true); gameMenu.hidden = true; });
     document.getElementById('btn-new').addEventListener('click', () => { gameMenu.hidden = true; newGame(); });
+    document.getElementById('btn-islands').addEventListener('click', () => {
+      if (GAME.selectedInfo?.kind === 'islands') closeInfo(); else openInfo('islands');
+    });
     document.getElementById('btn-routes').addEventListener('click', () => {
       if (GAME.selectedInfo?.kind === 'routes') closeInfo(); else openInfo('routes');
     });
@@ -4571,6 +5420,70 @@
       }
     }
 
+    // ----- Events: fire, storms, pirates -----
+    const burnable = (b) => b.type !== 'warehouse' && b.type !== 'monument';
+
+    function rollEvents() {
+      for (const b of GAME.buildings) {
+        if (!b.fire && burnable(b) && Math.random() < FIRE_CHANCE) {
+          b.fire = FIRE_TICKS;
+          const isl = islandOfBuilding(b);
+          notify(`🔥 Brand i ${DEFS[b.type].name.toLowerCase()} på ${isl.name}!${b.cov?.fire ? ' Brandstationen rykker ud.' : ' Byg en brandstation i nærheden.'}`);
+        }
+      }
+      if (!GAME.storm && Math.random() < STORM_CHANCE) {
+        GAME.storm = STORM_TICKS;
+        notify('🌧️ Storm! Skibene sejler langsommere et stykke tid');
+      }
+    }
+
+    // Burning buildings: a nearby fire station puts the fire out quickly, otherwise the building burns down
+    function updateFires() {
+      for (const b of [...GAME.buildings]) {
+        if (!b.fire) continue;
+        b.fire--;
+        if (b.cov?.fire && b.fire <= FIRE_TICKS - 5) {
+          b.fire = 0;
+          notify(`🚒 Branden i ${DEFS[b.type].name.toLowerCase()} er slukket`, false);
+        } else if (b.fire <= 0) {
+          notify(`🔥 ${DEFS[b.type].name} på ${islandOfBuilding(b).name} er brændt ned`);
+          destroyBuilding(b);
+        }
+      }
+    }
+
+    // Removes a building without refund (fire). Keeps roads, routes and storage consistent.
+    function destroyBuilding(b) {
+      const def = DEFS[b.type], isl = islandOfBuilding(b);
+      GAME.buildings.splice(GAME.buildings.indexOf(b), 1);
+      for (let dy = 0; dy < def.h; dy++) {
+        for (let dx = 0; dx < def.w; dx++) GAME.occupancy.delete(`${b.x + dx},${b.y + dy}`);
+      }
+      updateIslandStats();
+      for (const r of RES_KEYS) isl.resources[r] = Math.min(isl.resources[r], isl.cap);
+      if (GAME.selectedInfo?.id === b.id) closeInfo();
+      recomputeConnectivity();
+    }
+
+    // Pirates may plunder part of the cargo on long voyages
+    function pirateCheck(ship, r) {
+      if (!GAME.events || r.length <= PIRATE_MIN_LENGTH || cargoTotal(ship) < 1 || Math.random() >= PIRATE_CHANCE) return;
+      let lost = 0;
+      for (const k of RES_KEYS) {
+        const t = Math.floor(ship.cargo[k] * 0.3);
+        ship.cargo[k] -= t;
+        lost += t;
+      }
+      if (lost) notify(`🏴‍☠️ Pirater plyndrede ${ship.name} for ${lost} varer`);
+    }
+
+    function recordHistory(islands) {
+      const stock = emptyStock();
+      for (const isl of islands) for (const k of RES_KEYS) stock[k] += isl.resources[k];
+      GAME.history.push({ tick: GAME.tick, coins: Math.round(GAME.coins), stock: Object.fromEntries(RES_KEYS.map(k => [k, Math.round(stock[k])])) });
+      if (GAME.history.length > 60) GAME.history.shift();
+    }
+
     function tick() {
       updateIslandStats();
       const islands = [...GAME.islands.values()];
@@ -4585,15 +5498,19 @@
         .sort((a, b) => (DEFS[b.type].food ? 1 : 0) - (DEFS[a.type].food ? 1 : 0));
       for (const b of staffed) {
         const isl = islandOfBuilding(b), need = DEFS[b.type].workers;
+        if (b.paused) { b.staffed = false; continue; } // paused buildings release their workers
         b.staffed = isl.workersFree >= need;
         if (b.staffed) isl.workersFree -= need;
       }
+      updateFires();
 
       // Production. Raw producers first, then processors, so this tick's raw output can be processed.
       const producers = GAME.buildings.filter(b => DEFS[b.type].produces);
       producers.sort((a, b) => !!DEFS[a.type].consumes - !!DEFS[b.type].consumes);
       for (const b of producers) {
         const def = DEFS[b.type], isl = islandOfBuilding(b), R = isl.resources, out = def.rate ?? 1;
+        if (b.paused) { b.status = 'paused'; continue; }
+        if (b.fire) { b.status = 'fire'; continue; }
         if (!GAME.connected.has(b.id)) { b.status = 'noroad'; continue; }
         if (!b.staffed) { b.status = 'noworkers'; continue; }
         if (R[def.produces] >= isl.cap) { b.status = 'full'; continue; }
@@ -4621,7 +5538,7 @@
       // Foresters plant and tend trees; the wild slowly grows back by itself
       for (const b of GAME.buildings) {
         if (b.type !== 'forester') continue;
-        b.status = !b.staffed ? 'noworkers' : tendForest(b) ? 'planting' : 'idle';
+        b.status = b.paused ? 'paused' : !b.staffed ? 'noworkers' : tendForest(b) ? 'planting' : 'idle';
       }
       naturalRegrowth();
 
@@ -4629,8 +5546,8 @@
       for (const b of GAME.buildings) {
         if (b.type !== 'shipyard') continue;
         const linked = GAME.connected.has(b.id);
-        b.status = !linked ? 'noroad' : !b.staffed ? 'noworkers' : b.queue ? 'building' : 'idle';
-        if (b.queue && linked && b.staffed && ++b.queue.progress >= SHIP_TYPES[b.queue.type].buildTime) {
+        b.status = b.paused ? 'paused' : !linked ? 'noroad' : !b.staffed ? 'noworkers' : b.queue ? 'building' : 'idle';
+        if (b.queue && linked && b.staffed && !b.paused && !b.fire && ++b.queue.progress >= SHIP_TYPES[b.queue.type].buildTime) {
           spawnShip(b.queue.type, b);
           b.queue = null;
         }
@@ -4680,7 +5597,7 @@
       }
 
       // Coins: taxes in, upkeep of buildings and ships out
-      const upkeep = GAME.buildings.reduce((s, b) => s + (DEFS[b.type].upkeep || 0), 0) +
+      const upkeep = GAME.buildings.reduce((s, b) => s + (b.paused ? 0 : DEFS[b.type].upkeep || 0), 0) +
                      GAME.ships.reduce((s, sh) => s + SHIP_TYPES[sh.type].upkeep, 0);
       GAME.coins += tax - upkeep;
       GAME.lastTax = tax;
@@ -4688,6 +5605,10 @@
       if (GAME.coins < 0) warnOnce('debt', '⚠ Du er i gæld! Byg ikke mere, før skatten overstiger driften.', 90);
 
       if (GAME.tick % UPGRADE_EVERY === 0) upgradeHouses(islands);
+      if (GAME.events) rollEvents();
+      if (GAME.storm > 0 && --GAME.storm === 0) notify('🌤️ Stormen er drevet over', false);
+      traderTick();
+      if (GAME.tick % 10 === 0) recordHistory(islands);
       checkQuests();
       if (rocksDirty) { rocksDirty = false; decorateTerrain(GAME.grid); } // rebuild shrinking mountains
 
@@ -4700,9 +5621,11 @@
     function upgradeHouses(islands) {
       for (const isl of islands) {
         if (!isl.houses || isl.pop < isl.popCap * 0.9) continue;
+        if (isl.allowUpgrade === false) continue;
         const b = GAME.buildings.find(h => DEFS[h.type].house && islandOfBuilding(h) === isl && (h.level || 1) < 3 &&
-          HOUSE_LEVELS[h.level || 1].needs.every(n => isl.needsMet[n]) &&
-          HOUSE_LEVELS[(h.level || 1) + 1].needs.every(n => inStock(isl, n)) &&
+          !h.lockLevel && !h.fire &&
+          HOUSE_LEVELS[h.level || 1].needs.every(n => isl.needsMet[n]) && servicesMet(h, h.level || 1) &&
+          HOUSE_LEVELS[(h.level || 1) + 1].needs.every(n => inStock(isl, n)) && servicesMet(h, (h.level || 1) + 1) &&
           hasCost(isl.resources, HOUSE_LEVELS[h.level || 1].upgrade));
         if (!b) continue;
         payCost(isl.resources, HOUSE_LEVELS[b.level].upgrade);
@@ -4728,6 +5651,7 @@
       updateKeyboardPan(dt);
       const gdt = dt * GAME.speed; // game time runs at the chosen speed (0 = paused)
       updateShips(gdt);
+      updateTrader(gdt);
 
       acc += gdt;
       while (acc >= 1000) {
@@ -4757,7 +5681,7 @@
       document.getElementById('pop').textContent = `👥 ${totalPopulation()} / ${totalPopCap()} · ${tierName(GAME.tierReached)}`;
       const fert = isl?.fertility.map(f => FERTILITY[f].icon).join('') || '';
       document.getElementById('island-name').textContent =
-        `📍 ${isl ? isl.name : 'Havet'} ${fert}${isl && !isl.warehouses ? ' (intet lager)' : ''}`;
+        `📍 ${isl ? isl.name : 'Havet'} ${fert}${isl?.ore ? '⛏️' : ''}${isl && !isl.warehouses ? ' (intet lager)' : ''}`;
       document.getElementById('tick').textContent = `Tick: ${GAME.tick}${GAME.speed === 0 ? ' · ⏸ Pause' : ''}`;
       const unlinked = GAME.buildings.filter(b => needsRoad(DEFS[b.type]) && !GAME.connected.has(b.id)).length;
       document.getElementById('status').textContent =
@@ -4785,6 +5709,7 @@
       decorateTerrain(GAME.grid);
       buildMenu();
       setSpeed(1);
+      document.getElementById('opt-events').checked = GAME.events;
 
       if (GAME.phase === 'play') {
         document.getElementById('banner').hidden = true;
