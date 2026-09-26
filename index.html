@@ -461,6 +461,14 @@
     const STARVE_TICKS = 5;                                       // without food, one resident leaves every N ticks
     const UPGRADE_EVERY = 3;                                      // at most one house upgrade per island every N ticks
 
+    // Natural resources on the map run out. Wood grows back (slowly, faster with a forester); stone does not.
+    const WOOD_PER_TREE = 10;       // wood units per tree (forest tiles hold 2-3 trees)
+    const ROCK_STONE = 80;          // stone units per rock tile, never replenished
+    const REGROW_SAMPLES = 60;      // tiles checked per tick for natural regrowth
+    const REGROW_CHANCE = 0.25;     // chance a sampled forest tile grows one wood unit (~1 tree per hour or so)
+    const STUMP_SPROUT_CHANCE = 0.1;// chance a sampled clearing with stumps sprouts a sapling
+    const FORESTER_RADIUS = 5;
+
     // What each resident consumes per second, by need
     const NEED_RATES = { food: 0.02, meat: 0.008, cloth: 0.006, beer: 0.008 };
     const NEED_INFO = {
@@ -485,13 +493,17 @@
         desc: 'Bolig for 6 pionerer. Opgraderes af sig selv til Borgere (12) og Købmænd (20), når deres behov er dækket.' },
       woodcutter: { id: 'woodcutter', name: 'Skovhugger', w: 2, h: 2, cost: { coins: 30, planks: 10 }, workers: 2, upkeep: 0.04,
         produces: 'wood', rate: 0.8, near: { terrain: 'forest', label: 'skov' },
-        desc: 'Fælder træ. Kræver skov i nærheden og vej til et lager.' },
+        harvest: { terrain: 'forest', key: 'wood', radius: 4, label: 'træer' },
+        desc: 'Fælder træerne omkring sig – skoven forsvinder efterhånden. Byg en skovfoged for at plante nye.' },
+      forester: { id: 'forester', name: 'Skovfoged', w: 2, h: 2, cost: { coins: 40, planks: 10 }, workers: 1, upkeep: 0.03,
+        desc: 'Planter og plejer træer inden for 5 felter – også på fri græsjord. Én skovfoged holder cirka én skovhugger i gang.' },
       sawmill: { id: 'sawmill', name: 'Savværk', w: 3, h: 2, cost: { coins: 50, planks: 20 }, workers: 3, upkeep: 0.06,
         consumes: { wood: 0.8 }, produces: 'planks', rate: 0.8,
         desc: 'Saver træ til planker. Kræver vej til et lager.' },
       stonecutter: { id: 'stonecutter', name: 'Stenhugger', w: 2, h: 2, cost: { coins: 60, planks: 20 }, workers: 3, upkeep: 0.06,
         produces: 'stone', rate: 0.5, near: { terrain: 'rock', label: 'klipper' },
-        desc: 'Hugger sten. Kræver klipper i nærheden og vej til et lager.' },
+        harvest: { terrain: 'rock', key: 'stone', radius: 4, label: 'sten' },
+        desc: 'Hugger sten af klipperne omkring sig. Sten kommer aldrig igen – klipperne skrumper og forsvinder.' },
       fisher: { id: 'fisher', name: 'Fisker', w: 2, h: 2, cost: { coins: 30, planks: 10 }, workers: 2, upkeep: 0.03,
         produces: 'fish', rate: 0.6, coastal: true, food: true, near: { terrain: 'water', label: 'vand', min: 8, radius: 3 },
         desc: 'Fanger fisk. Skal ligge ved kysten og have vej til et lager.' },
@@ -545,7 +557,7 @@
     const CATEGORIES = [
       { id: 'terrain', name: 'Terræn', icon: '🛤️', items: ['road', 'canal', 'demolish'] },
       { id: 'housing', name: 'Boliger', icon: '🏠', items: ['house'] },
-      { id: 'production', name: 'Produktion', icon: '🪵', items: ['woodcutter', 'sawmill', 'stonecutter', 'sheepfarm', 'weaver'] },
+      { id: 'production', name: 'Produktion', icon: '🪵', items: ['woodcutter', 'forester', 'sawmill', 'stonecutter', 'sheepfarm', 'weaver'] },
       { id: 'food', name: 'Mad & drikke', icon: '🌾', items: ['fisher', 'grainfarm', 'pigfarm', 'cattlefarm', 'hopfarm', 'brewery'] },
       { id: 'harbor', name: 'Lager & havn', icon: '⚓', items: ['warehouse', 'shipyard'] }
     ];
@@ -905,56 +917,72 @@
         }
       }
 
-      const slots = [[-0.22, -0.2], [0.2, -0.16], [-0.14, 0.2], [0.22, 0.2]];
-      for (const t of grid) {
-        const n = fbm(t.x / 6, t.y / 6);
-        const rnd = seeded(t.x * 7919 + t.y * 104729 + NOISE_SEED);
-        t.decor = null;
-        t.trees = null;
-        t.object = null;
-        const at2 = () => rnd() * 0.8 - 0.4;
-
-        if (t.type === 'grass') {
-          t.color = mix('#5a943a', '#86ba50', n);
-          t.decor = [];
-          for (let i = 0, m = 2 + Math.floor(rnd() * 3); i < m; i++) t.decor.push({ k: 'tuft', u: at2(), v: at2(), s: 0.7 + rnd() * 0.6 });
-          if (valueNoise(t.x / 4 + 50, t.y / 4 + 50) > 0.62) {
-            for (let i = 0, m = 2 + Math.floor(rnd() * 4); i < m; i++) {
-              t.decor.push({ k: 'flower', u: at2(), v: at2(), c: FLOWER_COLORS[Math.floor(rnd() * FLOWER_COLORS.length)] });
-            }
-          }
-          if (rnd() < 0.05) t.decor.push({ k: 'pebble', u: at2(), v: at2() });
-          const r = rnd();
-          if (r < 0.035) t.object = { k: 'bush', u: rnd() * 0.4 - 0.2, v: rnd() * 0.4 - 0.2, s: 0.24 + rnd() * 0.12 };
-          else if (r < 0.05) t.object = { k: 'tree', tree: makeTree(rnd, n, rnd() * 0.3 - 0.15, rnd() * 0.3 - 0.15) };
-        } else if (t.type === 'forest') {
-          t.color = mix('#3a6c2a', '#528a36', n);
-          const count = 2 + (rnd() < 0.45 ? 1 : 0);
-          const start = Math.floor(rnd() * 4);
-          t.trees = [];
-          for (let i = 0; i < count; i++) {
-            const [su, sv] = slots[(start + i) % 4];
-            t.trees.push(makeTree(rnd, n, su + rnd() * 0.12 - 0.06, sv + rnd() * 0.12 - 0.06));
-          }
-          t.trees.sort((a, b) => (a.u + a.v) - (b.u + b.v)); // back to front
-          t.decor = [{ k: 'tuft', u: at2(), v: at2(), s: 1 }];
-        } else if (t.type === 'beach') {
-          t.color = mix('#d4bd84', '#ecdca8', n);
-          t.decor = [];
-          for (let i = 0; i < 6; i++) t.decor.push({ k: 'speck', u: at2(), v: at2(), c: rnd() < 0.5 ? '#bfa872' : '#f6ecc8' });
-          if (rnd() < 0.12) t.decor.push({ k: 'shell', u: at2(), v: at2() });
-        } else if (t.type === 'water') {
-          const d = Math.min(t.depth, 4);
-          t.color = mix('#58b2d2', '#1e5e96', (d - 1) / 3);
-          t.wave = rnd() < 0.45 ? { u: at2() * 0.8, v: at2() * 0.8, ph: rnd() * Math.PI * 2 } : null;
-        } else if (t.type === 'rock') {
-          t.color = mix('#868272', '#a09a88', n);
-          t.decor = [];
-          for (let i = 0; i < 5; i++) t.decor.push({ k: 'speck', u: at2(), v: at2(), c: rnd() < 0.5 ? '#6e6a5e' : '#bcb6a4' });
-        }
-      }
-
+      for (const t of grid) decorateTile(t);
       groupRocks(grid, at);
+    }
+
+    // Per-tile colour, decoration and trees. Deterministic per position, so it can be re-run for a single
+    // tile (e.g. when a forester plants trees) without changing anything else.
+    const TREE_SLOTS = [[-0.22, -0.2], [0.2, -0.16], [-0.14, 0.2], [0.22, 0.2]];
+    function decorateTile(t) {
+      const n = fbm(t.x / 6, t.y / 6);
+      const rnd = seeded(t.x * 7919 + t.y * 104729 + NOISE_SEED);
+      t.decor = null;
+      t.trees = null;
+      t.object = null;
+      const at2 = () => rnd() * 0.8 - 0.4;
+
+      if (t.type === 'grass' && t.quarried) {
+        // Worked-out quarry: grey gravel that never grows back
+        t.color = mix('#8a8a70', '#a09c84', n);
+        t.decor = [];
+        for (let i = 0; i < 8; i++) t.decor.push({ k: 'speck', u: at2(), v: at2(), c: rnd() < 0.5 ? '#6e6a5e' : '#c4beac' });
+        t.decor.push({ k: 'pebble', u: at2(), v: at2() }, { k: 'tuft', u: at2(), v: at2(), s: 0.7 });
+      } else if (t.type === 'grass') {
+        t.color = mix('#5a943a', '#86ba50', n);
+        t.decor = [];
+        // Felled forest leaves stumps until trees grow back
+        if (t.stumps) for (let i = 0; i < 3; i++) t.decor.push({ k: 'stump', u: TREE_SLOTS[i][0], v: TREE_SLOTS[i][1] });
+        for (let i = 0, m = 2 + Math.floor(rnd() * 3); i < m; i++) t.decor.push({ k: 'tuft', u: at2(), v: at2(), s: 0.7 + rnd() * 0.6 });
+        if (valueNoise(t.x / 4 + 50, t.y / 4 + 50) > 0.62) {
+          for (let i = 0, m = 2 + Math.floor(rnd() * 4); i < m; i++) {
+            t.decor.push({ k: 'flower', u: at2(), v: at2(), c: FLOWER_COLORS[Math.floor(rnd() * FLOWER_COLORS.length)] });
+          }
+        }
+        if (rnd() < 0.05) t.decor.push({ k: 'pebble', u: at2(), v: at2() });
+        const r = rnd();
+        if (t.stumps) { /* no lone trees or bushes on a clearing */ }
+        else if (r < 0.035) t.object = { k: 'bush', u: rnd() * 0.4 - 0.2, v: rnd() * 0.4 - 0.2, s: 0.24 + rnd() * 0.12 };
+        else if (r < 0.05) t.object = { k: 'tree', tree: makeTree(rnd, n, rnd() * 0.3 - 0.15, rnd() * 0.3 - 0.15) };
+      } else if (t.type === 'forest') {
+        t.color = mix('#3a6c2a', '#528a36', n);
+        const count = 2 + (rnd() < 0.45 ? 1 : 0);
+        const start = Math.floor(rnd() * 4);
+        t.trees = [];
+        for (let i = 0; i < count; i++) {
+          const [su, sv] = TREE_SLOTS[(start + i) % 4];
+          t.trees.push(makeTree(rnd, n, su + rnd() * 0.12 - 0.06, sv + rnd() * 0.12 - 0.06));
+        }
+        t.trees.sort((a, b) => (a.u + a.v) - (b.u + b.v)); // back to front
+        t.decor = [{ k: 'tuft', u: at2(), v: at2(), s: 1 }];
+        // Harvestable wood: WOOD_PER_TREE per tree; a fresh map starts fully grown
+        t.woodMax = count * WOOD_PER_TREE;
+        t.wood = Math.min(t.wood ?? t.woodMax, t.woodMax);
+      } else if (t.type === 'beach') {
+        t.color = mix('#d4bd84', '#ecdca8', n);
+        t.decor = [];
+        for (let i = 0; i < 6; i++) t.decor.push({ k: 'speck', u: at2(), v: at2(), c: rnd() < 0.5 ? '#bfa872' : '#f6ecc8' });
+        if (rnd() < 0.12) t.decor.push({ k: 'shell', u: at2(), v: at2() });
+      } else if (t.type === 'water') {
+        const d = Math.min(t.depth, 4);
+        t.color = mix('#58b2d2', '#1e5e96', (d - 1) / 3);
+        t.wave = rnd() < 0.45 ? { u: at2() * 0.8, v: at2() * 0.8, ph: rnd() * Math.PI * 2 } : null;
+      } else if (t.type === 'rock') {
+        t.color = mix('#868272', '#a09a88', n);
+        t.decor = [];
+        for (let i = 0; i < 5; i++) t.decor.push({ k: 'speck', u: at2(), v: at2(), c: rnd() < 0.5 ? '#6e6a5e' : '#bcb6a4' });
+        t.stone = t.stone ?? ROCK_STONE; // finite: quarried stone never comes back
+      }
     }
 
     // ----- Mountains: connected rock tiles grouped (max 10) into small faceted peaks -----
@@ -1020,7 +1048,8 @@
       const dmax = Math.max(...group.map(t => Math.hypot(t.x - cx, t.y - cy))) + 0.7;
       const sizeF = Math.sqrt(n / MOUNTAIN_MAX); // bigger groups grow taller
       for (const t of group) {
-        t.hc = 10 + 6 * sizeF + 38 * sizeF * (1 - Math.hypot(t.x - cx, t.y - cy) / dmax) + jit(t.x, t.y, 4);
+        const left = 0.35 + 0.65 * ((t.stone ?? ROCK_STONE) / ROCK_STONE); // quarried tiles sink
+        t.hc = (10 + 6 * sizeF + 38 * sizeF * (1 - Math.hypot(t.x - cx, t.y - cy) / dmax)) * left + jit(t.x, t.y, 4);
       }
       const peak = Math.max(...group.map(t => t.hc));
       const snowLine = n >= 8 ? peak * 0.84 : Infinity; // only the biggest peaks get a snow cap
@@ -1228,6 +1257,11 @@
           dot({ x: q.x + 0.6, y: q.y - 0.4 }, 0.8, '#c4c0b4');
         } else if (d.k === 'speck') {
           dot(q, 0.8, d.c);
+        } else if (d.k === 'stump') {
+          ctx.fillStyle = '#5a3c20';
+          ctx.fillRect(q.x - 2.2, q.y - 3, 4.4, 3);
+          ctx.fillStyle = '#c8a070';
+          ctx.beginPath(); ctx.ellipse(q.x, q.y - 3, 2.2, 1.1, 0, 0, Math.PI * 2); ctx.fill();
         } else if (d.k === 'shell') {
           ctx.fillStyle = '#f8ece0';
           ctx.beginPath(); ctx.arc(q.x, q.y, 1.8, Math.PI, 0); ctx.fill();
@@ -1357,8 +1391,15 @@
       blobs(0, 2.6, -2.8, 0.34, tr.light, CANOPY.slice(1, 5));
     }
 
+    // Trees are drawn according to how much wood is left: felled trees disappear,
+    // a regrowing tree starts as a small sapling and grows to full size
     function drawForest(x, y, tile) {
-      for (const tr of tile.trees) drawTreeAt(x + tr.u, y + tr.v, tr);
+      const wood = tile.wood ?? tile.woodMax;
+      tile.trees.forEach((tr, i) => {
+        const frac = Math.min(1, (wood - i * WOOD_PER_TREE) / WOOD_PER_TREE);
+        if (frac <= 0.05) return;
+        drawTreeAt(x + tr.u, y + tr.v, frac >= 1 ? tr : { ...tr, s: tr.s * (0.3 + 0.7 * frac) });
+      });
     }
 
     // ===== BUILDING RENDERING =====
@@ -1923,8 +1964,9 @@
     // Rock terrain tile: one or two boulders, stable per tile
     function drawRock(x, y, tile) {
       const rnd = seeded(Math.floor(hash2(x, y) * 1e9) + 7);
-      boulder(x - 0.12 + rnd() * 0.1, y - 0.1 + rnd() * 0.1, 0.26 + rnd() * 0.08, rnd);
-      if (rnd() < 0.6) boulder(x + 0.18, y + 0.15, 0.14 + rnd() * 0.06, rnd);
+      const k = 0.4 + 0.6 * ((tile.stone ?? ROCK_STONE) / ROCK_STONE); // boulders shrink as they are quarried
+      boulder(x - 0.12 + rnd() * 0.1, y - 0.1 + rnd() * 0.1, (0.26 + rnd() * 0.08) * k, rnd);
+      if (rnd() < 0.6 && k > 0.6) boulder(x + 0.18, y + 0.15, (0.14 + rnd() * 0.06) * k, rnd);
     }
 
     // Stack of cut stone blocks (pyramid, back to front)
@@ -2352,7 +2394,34 @@
       crate(U + 1.5, V + 1.35, 0.1);
     }
 
+    // Forester: small log lodge with a green roof, a tree nursery and a watering can
+    function drawForester(U, V, rnd) {
+      ground(U, V, 2, 2, '#7a8a4a', rnd, '#5a6a36');
+      poly('#6a5232', uvRect(U + 1.05, V + 0.12, U + 1.9, V + 1.9), 'rgba(40,30,15,0.4)');
+      const u0 = U + 0.14, u1 = U + 0.92, v0 = V + 0.14, v1 = V + 0.9, wh = 12;
+      ao(u0, v0, u1, v1);
+      const w = walls(u0, v0, u1, v1, 0, wh, '#8a5a30');
+      logCourses(w.L, 4); logCourses(w.R, 4);
+      door(w.L, 0.45, 0.15, 9, '#4a2a12');
+      win(w.R, 0.38, 4, 0.13, 5, { shutter: '#3a6a3a' });
+      roofV(u0, v0, u1, v1, wh, 13, '#4a7a3a', '#8a5a30', { style: 'shingle', boards: true });
+      // Rows of saplings in the nursery
+      for (let r = 0; r < 3; r++) {
+        for (let c = 0; c < 3; c++) {
+          const tr = { u: 0, v: 0, s: 0.32 + ((r + c) % 3) * 0.08, conifer: (r + c) % 2 === 0, key: (r + c) % 2 ? 'd1' : 'c1',
+                       dark: '#2e6624', mid: '#4a9232', light: '#7abe50' };
+          drawTreeAt(U + 1.25 + c * 0.28, V + 0.35 + r * 0.55, tr);
+        }
+      }
+      const wc = P(U + 0.55, V + 1.35, 0);
+      poly('#8a9aa8', [{ x: wc.x - 3, y: wc.y }, { x: wc.x + 3, y: wc.y }, { x: wc.x + 3, y: wc.y - 5 }, { x: wc.x - 3, y: wc.y - 5 }]);
+      line({ x: wc.x + 3, y: wc.y - 4 }, { x: wc.x + 7, y: wc.y - 7 }, '#8a9aa8', 1.4);
+      fence(U + 1.02, V + 1.94, U + 1.94, V + 1.94);
+      fence(U + 1.94, V + 0.1, U + 1.94, V + 1.94);
+    }
+
     const BUILDING_RENDERERS = {
+      forester: drawForester,
       house: drawHouse,
       sheepfarm: drawSheepFarm,
       weaver: drawWeaver,
@@ -2959,7 +3028,7 @@
     // Render a building (or tool) into a card canvas by temporarily redirecting `ctx`
     const PREVIEW_H = { house: 40, woodcutter: 52, sawmill: 62, warehouse: 74, stonecutter: 52, road: 10,
                         canal: 10, fisher: 46, grainfarm: 40, pigfarm: 44, cattlefarm: 50, shipyard: 70,
-                        sheepfarm: 40, weaver: 60, hopfarm: 60, brewery: 62 };
+                        sheepfarm: 40, weaver: 60, hopfarm: 60, brewery: 62, forester: 44 };
 
     function drawPreview(cv, id) {
       const dpr = window.devicePixelRatio || 1, cw = 96, ch = 72;
@@ -3666,7 +3735,8 @@
     GAME.selectedInfo = null;
     const STATUS_TEXT = {
       ok: '✅ Producerer', noroad: '⚠ Mangler vej til et lager', noinput: '⚠ Mangler råvarer',
-      full: '⚠ Lageret er fuldt', idle: 'Ledig', building: '🔨 Bygger skib', noworkers: '⚠ Mangler arbejdere'
+      full: '⚠ Lageret er fuldt', idle: 'Ledig', building: '🔨 Bygger skib', noworkers: '⚠ Mangler arbejdere',
+      planting: '🌱 Planter og plejer træer', noresource: '⚠ Intet tilbage at høste i nærheden'
     };
     const esc = (s) => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 
@@ -3836,6 +3906,12 @@
         details = `<div class="row"><span>Status</span><b>${STATUS_TEXT[b.status] || STATUS_TEXT.idle}</b></div>
                    <div class="row"><span>Produktion</span><b>${ins}${rate(def.rate ?? 1)} ${RES_ICONS[def.produces]} /s</b></div>`;
       }
+      if (def.harvest) {
+        const left = harvestLeft(b);
+        details += `<div class="row"><span>Tilbage i området</span><b class="${left ? '' : 'err'}">${left} ${RES_ICONS[def.harvest.key]}</b></div>`;
+        if (b.status === 'noresource') details += `<p class="err">Ingen ${def.harvest.label} tilbage inden for ${def.harvest.radius} felter.${def.harvest.key === 'wood' ? ' Byg en skovfoged i nærheden.' : ' Sten kommer ikke igen – find nye klipper.'}</p>`;
+      }
+      if (b.type === 'forester') details += `<div class="row"><span>Status</span><b>${STATUS_TEXT[b.status] || STATUS_TEXT.idle}</b></div>`;
       if (def.workers) details += `<div class="row"><span>👷 Arbejdere</span><b>${def.workers} ${b.staffed ? '✅' : '❌'}</b></div>`;
       if (def.upkeep) details += `<div class="row"><span>🪙 Drift</span><b>−${rate(def.upkeep)}/s</b></div>`;
       body.innerHTML = `<p class="muted">${esc(isl.name)}</p>${details}<p>${esc(def.desc)}</p>`;
@@ -3881,7 +3957,11 @@
         v: SAVE_VERSION,
         mapSize: MAP_SIZE,
         noiseSeed: NOISE_SEED,
-        terrain: GAME.grid.map(t => t.canal ? 'c' : TYPE_CODES[t.type]).join(''),
+        // Extra codes: c = canal, s = clearing with stumps, q = worked-out quarry
+        terrain: GAME.grid.map(t => t.canal ? 'c' : t.stumps ? 's' : t.quarried ? 'q' : TYPE_CODES[t.type]).join(''),
+        // Only tiles that differ from "full" are stored: [tile index, amount]
+        wood: GAME.grid.flatMap((t, i) => t.type === 'forest' && t.wood < t.woodMax ? [[i, t.wood]] : []),
+        stone: GAME.grid.flatMap((t, i) => t.type === 'rock' && t.stone < ROCK_STONE ? [[i, t.stone]] : []),
         buildings: GAME.buildings.map(({ id, type, x, y, queue, level }) => ({ id, type, x, y, queue, level })),
         roads: [...GAME.roads],
         // Islands are matched on load by their anchor tile, since ids come from re-labelling the map
@@ -3951,8 +4031,12 @@
       NOISE_SEED = data.noiseSeed;
       GAME.grid = [...data.terrain].map((c, i) => ({
         x: i % MAP_SIZE, y: Math.floor(i / MAP_SIZE),
-        type: c === 'c' ? 'water' : (CODE_TYPES[c] || 'grass'), canal: c === 'c'
+        type: c === 'c' ? 'water' : (c === 's' || c === 'q') ? 'grass' : (CODE_TYPES[c] || 'grass'),
+        canal: c === 'c', stumps: c === 's', quarried: c === 'q'
       }));
+      // Depleted forests and quarries (older saves have none, so everything starts full)
+      for (const [i, amt] of data.wood || []) GAME.grid[i].wood = amt;
+      for (const [i, amt] of data.stone || []) GAME.grid[i].stone = amt;
       GAME.buildings = data.buildings.filter(b => DEFS[b.type]);
       GAME.roads = new Set(data.roads);
       GAME.occupancy.clear();
@@ -4074,6 +4158,87 @@
 
     const inStock = (isl, need) => NEED_INFO[need].keys.some(k => isl.resources[k] >= 1);
 
+    // ----- Natural resources -----
+    let rocksDirty = false; // set when quarrying visibly changes a rock tile; mountains are rebuilt once per tick
+
+    // Tiles within `r` of a building's footprint, nearest first
+    function tilesAround(b, r) {
+      const def = DEFS[b.type], cx = b.x + (def.w - 1) / 2, cy = b.y + (def.h - 1) / 2, out = [];
+      for (let y = b.y - r; y < b.y + def.h + r; y++) {
+        for (let x = b.x - r; x < b.x + def.w + r; x++) {
+          const t = tileAt(x, y);
+          if (t) out.push(t);
+        }
+      }
+      return out.sort((a, c) => Math.hypot(a.x - cx, a.y - cy) - Math.hypot(c.x - cx, c.y - cy));
+    }
+
+    // The tile a harvester is working on: keeps chopping the same one until it's empty, then the nearest next
+    function harvestTarget(b) {
+      const { terrain, key, radius } = DEFS[b.type].harvest;
+      const ok = (t) => t && t.type === terrain && t[key] > 0;
+      let t = b.harvestAt && tileAt(b.harvestAt[0], b.harvestAt[1]);
+      if (!ok(t)) {
+        t = tilesAround(b, radius).find(ok) || null;
+        b.harvestAt = t ? [t.x, t.y] : null;
+      }
+      return t;
+    }
+
+    // Remaining harvestable amount around a harvester (for the info panel)
+    const harvestLeft = (b) => {
+      const { terrain, key, radius } = DEFS[b.type].harvest;
+      return Math.round(tilesAround(b, radius).reduce((s, t) => s + (t.type === terrain ? t[key] || 0 : 0), 0));
+    };
+
+    // Turns emptied tiles into clearings (forest) or gravel (rock), and flags visible rock changes
+    function depleteTile(t) {
+      if (t.type === 'forest' && t.wood <= 0) {
+        t.type = 'grass';
+        t.stumps = true;
+        t.wood = 0;
+        decorateTile(t);
+      } else if (t.type === 'rock') {
+        const stage = Math.ceil((t.stone / ROCK_STONE) * 4);
+        if (t.stone <= 0) {
+          t.type = 'grass';
+          t.quarried = true;
+          rocksDirty = true;
+        } else if (stage !== t.stoneStage) {
+          rocksDirty = true;
+        }
+        t.stoneStage = stage;
+      }
+    }
+
+    // Grows a sapling on an empty clearing or grass tile
+    function plantTree(t) {
+      t.type = 'forest';
+      t.stumps = false;
+      t.wood = 1;
+      decorateTile(t);
+    }
+
+    const canPlantOn = (t) => t.type === 'grass' && !t.quarried && !GAME.occupancy.has(`${t.x},${t.y}`);
+
+    // One unit of growth per tick: first tend young or thinned trees, then plant on stumps, then on free grass
+    function tendForest(b) {
+      const around = tilesAround(b, FORESTER_RADIUS);
+      const grow = around.find(t => t.type === 'forest' && t.wood < t.woodMax);
+      if (grow) { grow.wood++; return true; }
+      const spot = around.find(t => canPlantOn(t) && t.stumps) || around.find(canPlantOn);
+      if (spot) { plantTree(spot); return true; }
+      return false;
+    }
+
+    function naturalRegrowth() {
+      for (let i = 0; i < REGROW_SAMPLES; i++) {
+        const t = GAME.grid[Math.floor(Math.random() * GAME.grid.length)];
+        if (t.type === 'forest' && t.wood < t.woodMax && Math.random() < REGROW_CHANCE) t.wood++;
+        else if (t.stumps && canPlantOn(t) && Math.random() < STUMP_SPROUT_CHANCE) plantTree(t);
+      }
+    }
+
     function tick() {
       updateIslandStats();
       const islands = [...GAME.islands.values()];
@@ -4102,11 +4267,31 @@
         if (R[def.produces] >= isl.cap) { b.status = 'full'; continue; }
         const inputs = Object.entries(def.consumes || {});
         if (inputs.some(([r, n]) => R[r] < n)) { b.status = 'noinput'; continue; }
+        let made = out;
+        if (def.harvest) {
+          // Woodcutters and stonecutters take their goods from the map around them
+          const src = harvestTarget(b);
+          if (!src) {
+            b.status = 'noresource';
+            warnOnce(`depleted-${b.id}`, `🪓 ${def.name} på ${isl.name} har ikke flere ${def.harvest.label} i nærheden`, 600);
+            continue;
+          }
+          made = Math.min(out, src[def.harvest.key]);
+          src[def.harvest.key] -= made;
+          depleteTile(src);
+        }
         for (const [r, n] of inputs) { R[r] -= n; isl.flowOut[r] += n; }
-        R[def.produces] = Math.min(isl.cap, R[def.produces] + out);
-        isl.flowIn[def.produces] += out;
+        R[def.produces] = Math.min(isl.cap, R[def.produces] + made);
+        isl.flowIn[def.produces] += made;
         b.status = 'ok';
       }
+
+      // Foresters plant and tend trees; the wild slowly grows back by itself
+      for (const b of GAME.buildings) {
+        if (b.type !== 'forester') continue;
+        b.status = !b.staffed ? 'noworkers' : tendForest(b) ? 'planting' : 'idle';
+      }
+      naturalRegrowth();
 
       // Shipyards
       for (const b of GAME.buildings) {
@@ -4171,6 +4356,7 @@
 
       if (GAME.tick % UPGRADE_EVERY === 0) upgradeHouses(islands);
       checkQuests();
+      if (rocksDirty) { rocksDirty = false; decorateTerrain(GAME.grid); } // rebuild shrinking mountains
 
       GAME.tick++;
       if (GAME.tick % AUTOSAVE_TICKS === 0) saveGame();
