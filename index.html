@@ -333,6 +333,7 @@
       <button data-speed="0">⏸</button><button data-speed="1">1×</button><button data-speed="2">2×</button><button data-speed="3">3×</button>
     </span>
     <span class="sep"></span>
+    <button id="btn-routes" title="Handelsruter – tegn ruter og sæt skibe på">🗺️ Ruter</button>
     <button id="btn-economy" title="Økonomioverblik">📊 Økonomi</button>
     <span id="tick">Tick: 0</span>
     <button id="btn-menu" title="Menu">☰</button>
@@ -412,6 +413,9 @@
       phase: 'setup',          // 'setup' until the first warehouse is placed, then 'play'
       roadDrag: null,          // start tile while dragging out a road or canal
       shipCounter: 0,
+      routes: [],              // player-drawn trade routes (several ships can sail one route)
+      routeCounter: 0,
+      routeDraw: null,         // state while the player is drawing a route on the map
       coins: 0,
       tierReached: 1,          // highest house level reached so far (unlocks buildings and ships)
       questIndex: 0,
@@ -775,6 +779,7 @@
         isl.fertility = [...new Set([...isl.fertility, ...old.fertility])];
       }
       updateIslandStats();
+      invalidateRoutes(); // water paths may have changed
     }
 
     const islandOfBuilding = (b) => GAME.islands.get(tileAt(b.x, b.y)?.island);
@@ -2862,7 +2867,7 @@
       }
       // Ships lose routes that used this warehouse
       if (b.type === 'warehouse') {
-        for (const s of GAME.ships) if (s.route && (s.route.from === b.id || s.route.to === b.id)) stopRoute(s);
+        for (const r of GAME.routes.filter(r => r.from === b.id || r.to === b.id)) deleteRoute(r);
       }
 
       updateIslandStats();
@@ -2929,6 +2934,7 @@
     }
 
     function selectTool(type) {
+      if (type && GAME.routeDraw) cancelRouteDraw();
       GAME.selectedBuilding = type;
       GAME.roadDrag = null;
       refreshMenuState();
@@ -3167,6 +3173,8 @@
         if (needsRoad(DEFS[b.type]) && !GAME.connected.has(b.id)) drawNoRoadIcon(b);
       }
 
+      drawRouteOverlay();
+
       // Placement / tool preview
       if (GAME.selectedBuilding && GAME.hoveredTile) {
         if (GAME.selectedBuilding === 'road') drawRoadGhost();
@@ -3242,6 +3250,7 @@
     const isDragTool = (tool) => tool === 'road' || tool === 'canal';
 
     function useToolAtHover() {
+      if (GAME.routeDraw) { if (GAME.hoveredTile) handleRouteClick(GAME.hoveredTile.tx, GAME.hoveredTile.ty); return; }
       const tool = GAME.selectedBuilding;
       if (!tool) { selectAtHover(); return; } // no tool: clicking inspects buildings and ships
       if (!GAME.hoveredTile) return;
@@ -3304,6 +3313,7 @@
       drag.active = false;
       canvas.style.cursor = '';
       if (wasClick && e.button === 0 && e.target === canvas) useToolAtHover();
+      if (wasClick && e.button === 2 && GAME.routeDraw) undoRoutePoint();
     });
 
     canvas.addEventListener('contextmenu', (e) => e.preventDefault());
@@ -3329,7 +3339,8 @@
       if (k === 'escape' && GAME.phase === 'play') {
         // Esc closes the game menu, then drops the tool, then closes the info panel, then the build panel
         const gm = document.getElementById('game-menu');
-        if (!gm.hidden) gm.hidden = true;
+        if (GAME.routeDraw) cancelRouteDraw();
+        else if (!gm.hidden) gm.hidden = true;
         else if (GAME.selectedBuilding) selectTool(null);
         else if (GAME.selectedInfo) closeInfo();
         else openBuildCategory(null);
@@ -3344,6 +3355,7 @@
       if (k === '+' || k === '=') zoomAt(1.2);
       if (k === '-') zoomAt(1 / 1.2);
       if (k === 'h') centerHome();
+      if (k === 'backspace' && GAME.routeDraw) { e.preventDefault(); undoRoutePoint(); }
       // Developer log, hidden by default
       if (e.key === '`' || e.key === '§' || e.key === '½') {
         const dbg = document.getElementById('debug');
@@ -3469,36 +3481,79 @@
     // Warehouses that ships can use (they need a water tile next to them)
     const portWarehouses = () => GAME.buildings.filter(b => b.type === 'warehouse' && dockTiles(b).length);
 
-    // Validates and starts a trade route. `res` is carried out, `back` is the return cargo.
-    // Returns an error string, or null on success.
-    function setRoute(ship, fromId, toId, res, back = []) {
-      const from = buildingById(fromId), to = buildingById(toId);
-      if (!from || !to) return 'Vælg to lagre';
-      if (islandOfBuilding(from) === islandOfBuilding(to)) return 'Lagrene skal ligge på hver sin ø';
-      if (!res.length && !back.length) return 'Vælg mindst én vare';
-      const leg = waterPath(dockTiles(from), dockTiles(to));
-      if (!leg) return 'Der er ingen sejlrute mellem de to lagre';
+    // ----- Trade routes -----
+    // A route is drawn by the player: a start warehouse, waypoints in the water and an end warehouse on
+    // another island. Several ships can sail one route; goods out (res) and back (back) can change any time.
+    const routeById = (id) => GAME.routes.find(r => r.id === id);
+    const shipRoute = (s) => (s.routeId && routeById(s.routeId)) || null;
+    const routeName = (r) => `${islandOfBuilding(buildingById(r.from))?.name ?? '?'} ⇄ ${islandOfBuilding(buildingById(r.to))?.name ?? '?'}`;
+
+    // Water path from any start tile, through each waypoint in order, to any goal tile
+    function pathVia(starts, waypoints, goals) {
+      let path = [], length = 0, from = starts;
+      for (const target of [...waypoints.map(p => [p]), goals]) {
+        const leg = waterPath(from, target);
+        if (!leg) return null;
+        path = path.length ? path.concat(leg.path.slice(1)) : leg.path;
+        length += leg.length;
+        from = [leg.path[leg.path.length - 1]];
+      }
+      return { path, length };
+    }
+
+    // Outbound path of a route, cached until the terrain changes (canals, bridges)
+    function routePath(r) {
+      if (r._path === undefined || r._path === null) {
+        const from = buildingById(r.from), to = buildingById(r.to);
+        r._path = from && to ? pathVia(dockTiles(from), r.waypoints, dockTiles(to)) : null;
+        if (r._path) r.length = Math.round(r._path.length);
+      }
+      return r._path;
+    }
+    const invalidateRoutes = () => { for (const r of GAME.routes) r._path = null; };
+
+    function createRoute(fromId, toId, waypoints) {
+      GAME.routeCounter++;
+      const r = { id: `r_${GAME.routeCounter}`, from: fromId, to: toId, waypoints, res: ['planks'], back: [], length: 0 };
+      GAME.routes.push(r);
+      routePath(r);
+      return r;
+    }
+
+    function deleteRoute(r) {
+      for (const s of GAME.ships) if (s.routeId === r.id) stopRoute(s);
+      GAME.routes.splice(GAME.routes.indexOf(r), 1);
+    }
+
+    // Puts a ship on a route. Returns an error string, or null on success.
+    function assignShip(ship, routeId) {
+      const r = routeById(routeId);
+      if (!r) return 'Vælg en rute';
+      const p = routePath(r);
+      if (!p) return 'Ruten kan ikke længere sejles – tegn den om';
       const range = SHIP_TYPES[ship.type].range;
-      if (leg.length > range) return `Ruten er ${Math.round(leg.length)} felter – ${ship.name} kan kun sejle ${range}`;
+      if (p.length > range) return `Ruten er ${Math.round(p.length)} felter – ${ship.name} kan kun sejle ${range}`;
+      const from = buildingById(r.from);
       if (!waterPath([[Math.round(ship.x), Math.round(ship.y)]], dockTiles(from))) {
         return `${ship.name} kan ikke sejle hen til lageret på ${islandOfBuilding(from).name}`;
       }
-      ship.route = { from: fromId, to: toId, res: [...res], back: [...back], length: Math.round(leg.length) };
+      ship.routeId = r.id;
       sailTo(ship, from, 'toFrom');
       return null;
     }
 
     function stopRoute(ship) {
-      ship.route = null;
+      ship.routeId = null;
       ship.path = [];
       ship.timer = 0;
       ship.state = 'idle';
     }
 
-    function sailTo(ship, target, state) {
-      const res = waterPath([[Math.round(ship.x), Math.round(ship.y)]], dockTiles(target));
+    // Sail from the ship's position, through the waypoints, to a warehouse
+    function sailTo(ship, target, state, waypoints = []) {
+      const res = pathVia([[Math.round(ship.x), Math.round(ship.y)]], waypoints, dockTiles(target));
       if (!res) {
-        notify(`⚠ ${ship.name} kan ikke finde en sejlrute og har stoppet sin rute`);
+        notify(`⚠ ${ship.name} kan ikke finde en sejlrute og har stoppet`);
         stopRoute(ship);
         return;
       }
@@ -3508,7 +3563,7 @@
     }
 
     function arriveShip(ship) {
-      if (!ship.route) { ship.state = 'idle'; return; }
+      if (!shipRoute(ship)) { ship.state = 'idle'; return; }
       if (ship.state === 'toFrom') { ship.state = 'loading'; ship.timer = 2; }
       else if (ship.state === 'toTo') { ship.state = 'unloading'; ship.timer = 2; }
     }
@@ -3539,20 +3594,20 @@
     }
 
     function finishShipStop(ship) {
-      const r = ship.route;
+      const r = shipRoute(ship);
       const from = r && buildingById(r.from), to = r && buildingById(r.to);
       if (!from || !to) { stopRoute(ship); return; }
       if (ship.state === 'loading') {
         const isl = islandOfBuilding(from);
         unloadShip(ship, isl);          // return cargo from the last trip
         loadShip(ship, isl, r.res);
-        sailTo(ship, to, 'toTo');
+        sailTo(ship, to, 'toTo', r.waypoints);
       } else if (ship.state === 'unloading') {
         const isl = islandOfBuilding(to);
         unloadShip(ship, isl);
-        loadShip(ship, isl, r.back || []);
+        loadShip(ship, isl, r.back);
         ship.trips++;
-        sailTo(ship, from, 'toFrom');
+        sailTo(ship, from, 'toFrom', [...r.waypoints].reverse());
       }
     }
 
@@ -3660,6 +3715,181 @@
       return best;
     }
 
+    // ===== ROUTE DRAWING =====
+    // Click a port warehouse to start, click water to add waypoints, click a warehouse on another island to finish.
+    // Right-click or Backspace removes the last point, Esc cancels. Segments between points follow the water.
+    function startRouteDraw(opts = {}) {
+      selectTool(null);
+      GAME.routeDraw = { from: null, points: [], segs: [], editId: opts.editId || null, assignShip: opts.assignShip || null,
+                         preview: null, previewKey: '' };
+      const r = opts.editId && routeById(opts.editId);
+      if (r) GAME.routeDraw.from = r.from; // redrawing keeps the start warehouse
+      updateRouteBanner();
+    }
+
+    function cancelRouteDraw() {
+      GAME.routeDraw = null;
+      document.getElementById('banner').hidden = true;
+    }
+
+    function updateRouteBanner() {
+      const d = GAME.routeDraw, el = document.getElementById('banner');
+      el.hidden = false;
+      const step = !d.from ? '1. Klik på et lager ved havet, hvor ruten starter'
+        : `2. Klik i vandet for at sætte punkter (${d.points.length} sat) – klik på et lager på en anden ø for at afslutte`;
+      el.innerHTML = `🗺️ Tegn handelsrute<small>${step}. Højreklik/Backspace fortryder · Esc afbryder</small>`;
+    }
+
+    const portAt = (tx, ty) => {
+      const occ = GAME.occupancy.get(`${tx},${ty}`);
+      const b = occ && occ !== 'road' ? buildingById(occ) : null;
+      return b && b.type === 'warehouse' && dockTiles(b).length ? b : null;
+    };
+    // Where the next segment starts: the last waypoint, or the start warehouse's docks
+    const routeAnchor = (d) => d.points.length ? [d.points[d.points.length - 1]] : dockTiles(buildingById(d.from));
+
+    function handleRouteClick(tx, ty) {
+      const d = GAME.routeDraw, port = portAt(tx, ty);
+      if (!d.from) {
+        if (!port) { showToast('Klik på et lager ved havet for at starte ruten'); return; }
+        d.from = port.id;
+        updateRouteBanner();
+        return;
+      }
+      if (port) {
+        if (islandOfBuilding(port) === islandOfBuilding(buildingById(d.from))) { showToast('Ruten skal ende ved et lager på en anden ø'); return; }
+        if (!waterPath(routeAnchor(d), dockTiles(port))) { showToast('Der er ingen sejlvej derhen'); return; }
+        finishRouteDraw(port);
+        return;
+      }
+      if (!isWater(tx, ty)) { showToast('Klik i vandet for at sætte et punkt'); return; }
+      const seg = waterPath(routeAnchor(d), [[tx, ty]]);
+      if (!seg) { showToast('Det punkt kan ikke nås ad vandvejen'); return; }
+      d.points.push([tx, ty]);
+      d.segs.push(seg.path);
+      updateRouteBanner();
+    }
+
+    function undoRoutePoint() {
+      const d = GAME.routeDraw;
+      if (!d) return;
+      if (d.points.length) { d.points.pop(); d.segs.pop(); }
+      else if (d.from && !d.editId) d.from = null;
+      d.previewKey = '';
+      updateRouteBanner();
+    }
+
+    function finishRouteDraw(endPort) {
+      const d = GAME.routeDraw;
+      let r = d.editId && routeById(d.editId);
+      if (r) {
+        Object.assign(r, { from: d.from, to: endPort.id, waypoints: d.points, _path: null });
+        routePath(r);
+        // Ships on a redrawn route re-check range and start over
+        for (const s of GAME.ships.filter(s => s.routeId === r.id)) {
+          const err = assignShip(s, r.id);
+          if (err) { stopRoute(s); notify(`⚠ ${s.name}: ${err}`); }
+        }
+      } else {
+        r = createRoute(d.from, endPort.id, d.points);
+      }
+      cancelRouteDraw();
+      notify(`🗺️ Ruten ${routeName(r)} er tegnet (${r.length} felter)`);
+      const ship = d.assignShip && GAME.ships.find(s => s.id === d.assignShip);
+      openInfo('route', r.id);
+      if (ship) GAME.selectedInfo.error = assignShip(ship, r.id) || '';
+      saveGame();
+      renderInfo();
+    }
+
+    // Dashed route line along tile centres, with direction arrows
+    function drawPathLine(path, color, width = 2.5, dash = [7, 5]) {
+      if (!path || path.length < 2) return;
+      const pts = path.map(([x, y]) => P(x, y, 1));
+      ctx.save();
+      ctx.setLineDash(dash);
+      ctx.beginPath();
+      pts.forEach((p, i) => i ? ctx.lineTo(p.x, p.y) : ctx.moveTo(p.x, p.y));
+      ctx.strokeStyle = 'rgba(0,0,0,0.35)';
+      ctx.lineWidth = width + 2;
+      ctx.stroke();
+      ctx.strokeStyle = color;
+      ctx.lineWidth = width;
+      ctx.stroke();
+      ctx.setLineDash([]);
+      for (let i = 4; i < pts.length - 1; i += 6) {
+        const a = pts[i - 1], b = pts[i], ang = Math.atan2(b.y - a.y, b.x - a.x);
+        ctx.fillStyle = color;
+        ctx.beginPath();
+        ctx.moveTo(b.x + Math.cos(ang) * 6, b.y + Math.sin(ang) * 6);
+        ctx.lineTo(b.x + Math.cos(ang + 2.5) * 5, b.y + Math.sin(ang + 2.5) * 5);
+        ctx.lineTo(b.x + Math.cos(ang - 2.5) * 5, b.y + Math.sin(ang - 2.5) * 5);
+        ctx.fill();
+      }
+      ctx.restore();
+    }
+
+    function drawWaypointFlag(x, y, label, color = '#e8c040') {
+      const base = P(x, y, 0), top = { x: base.x, y: base.y - 18 };
+      ctx.fillStyle = 'rgba(0,0,0,0.25)';
+      ctx.beginPath(); ctx.ellipse(base.x, base.y, 5, 2.5, 0, 0, Math.PI * 2); ctx.fill();
+      line(base, top, '#4a3018', 1.6);
+      poly(color, [top, { x: top.x + 11, y: top.y + 3.5 }, { x: top.x, y: top.y + 7 }]);
+      ctx.fillStyle = '#2a1a0a';
+      ctx.font = 'bold 7px Arial';
+      ctx.textAlign = 'center';
+      ctx.fillText(label, top.x + 4, top.y + 5.5);
+    }
+
+    function drawAnchorMarker(b, color) {
+      const def = DEFS[b.type], c = P(b.x + (def.w - 1) / 2, b.y + (def.h - 1) / 2, 0);
+      ctx.strokeStyle = color;
+      ctx.lineWidth = 3;
+      ctx.beginPath(); ctx.ellipse(c.x, c.y, 44, 22, 0, 0, Math.PI * 2); ctx.stroke();
+    }
+
+    function drawRouteOnMap(r, color, flags = true) {
+      const p = routePath(r);
+      if (!p) return;
+      drawPathLine(p.path, color);
+      if (flags) r.waypoints.forEach(([x, y], i) => drawWaypointFlag(x, y, String(i + 1)));
+    }
+
+    // Route overlays: the route being drawn (with a live preview to the cursor), or the selected route/ship's route
+    function drawRouteOverlay() {
+      const d = GAME.routeDraw, sel = GAME.selectedInfo;
+      if (d) {
+        if (d.from) drawAnchorMarker(buildingById(d.from), '#ffd700');
+        for (const seg of d.segs) drawPathLine(seg, '#ffd700');
+        d.points.forEach(([x, y], i) => drawWaypointFlag(x, y, String(i + 1)));
+        const h = GAME.hoveredTile;
+        if (d.from && h) {
+          const port = portAt(h.tx, h.ty);
+          const key = `${h.tx},${h.ty},${d.points.length}`;
+          if (key !== d.previewKey) {
+            // Only recompute the preview path when the cursor moves to another tile
+            d.previewKey = key;
+            const goals = port ? dockTiles(port) : isWater(h.tx, h.ty) ? [[h.tx, h.ty]] : null;
+            d.preview = goals ? waterPath(routeAnchor(d), goals) : null;
+            d.previewOk = !!d.preview && !(port && islandOfBuilding(port) === islandOfBuilding(buildingById(d.from)));
+          }
+          if (d.preview) drawPathLine(d.preview.path, d.previewOk ? 'rgba(255,255,255,0.85)' : 'rgba(230,80,80,0.85)', 2, [4, 4]);
+          if (port && port.id !== d.from) drawAnchorMarker(port, d.previewOk ? '#9ad06a' : '#e05050');
+        }
+        return;
+      }
+      if (sel?.kind === 'route') {
+        const r = routeById(sel.id);
+        if (r) drawRouteOnMap(r, '#ffd700');
+      } else if (sel?.kind === 'routes') {
+        GAME.routes.forEach(r => drawRouteOnMap(r, 'rgba(255,215,0,0.55)', false));
+      } else if (sel?.kind === 'ship') {
+        const s = GAME.ships.find(x => x.id === sel.id);
+        const r = s && shipRoute(s);
+        if (r) drawRouteOnMap(r, '#ffd700');
+      }
+    }
+
     // ===== NOTIFICATIONS =====
     // Messages appear as a toast and stay in the message list (bottom left) for a while.
     GAME.messages = [];
@@ -3702,7 +3932,7 @@
       { text: 'Skaf kød: byg en kornfarm og en svinefarm', done: () => linked('grainfarm') && linked('pigfarm'), reward: 150 },
       { text: 'Byg en skibsbygger og søsæt en jolle', done: () => GAME.ships.length > 0, reward: 200 },
       { text: 'Grundlæg et lager på en ø med får 🐑', done: () => [...GAME.islands.values()].some(i => !i.home && i.warehouses && i.fertility.includes('sheep')), reward: 200 },
-      { text: 'Opret en handelsrute med et skib', done: () => GAME.ships.some(s => s.route), reward: 150 },
+      { text: 'Opret en handelsrute med et skib', done: () => GAME.ships.some(s => s.routeId), reward: 150 },
       { text: 'Skaf tøj: byg en fårefarm og en væver', done: () => linked('sheepfarm') && linked('weaver'), reward: 200 },
       { text: 'Opgrader en bolig til Borgere', done: () => GAME.tierReached >= 2, reward: 300 },
       { text: 'Nå 80 indbyggere', progress: () => `${totalPopulation()}/80`, done: () => totalPopulation() >= 80, reward: 300 },
@@ -3741,13 +3971,7 @@
     const esc = (s) => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 
     function openInfo(kind, id) {
-      GAME.selectedInfo = { kind, id, draft: null, error: '' };
-      if (kind === 'ship') {
-        const s = GAME.ships.find(x => x.id === id);
-        const ports = portWarehouses();
-        GAME.selectedInfo.draft = s.route ? { ...s.route, res: [...s.route.res], back: [...(s.route.back || [])] }
-                                          : { from: ports[0]?.id || '', to: ports[1]?.id || '', res: ['planks'], back: [] };
-      }
+      GAME.selectedInfo = { kind, id, error: '', pickRoute: null, pickShip: null };
       document.getElementById('info').hidden = false;
       renderInfo();
     }
@@ -3783,43 +4007,41 @@
 
       if (sel.kind === 'economy') { renderEconomy(title, body); return; }
 
+      if (sel.kind === 'routes') { renderRoutes(title, body); return; }
+      if (sel.kind === 'route') { renderRoute(title, body, sel); return; }
+
       if (sel.kind === 'ship') {
         const s = GAME.ships.find(x => x.id === sel.id);
         if (!s) { closeInfo(); return; }
-        const T = SHIP_TYPES[s.type], d = sel.draft, ports = portWarehouses();
-        const portOpt = (sel) => ports.map(p => `<option value="${p.id}" ${p.id === sel ? 'selected' : ''}>${esc(islandOfBuilding(p).name)} (${p.x},${p.y})</option>`).join('');
+        const T = SHIP_TYPES[s.type], r = shipRoute(s);
         const cargo = RES_KEYS.filter(k => s.cargo[k] > 0).map(k => `${RES_ICONS[k]} ${s.cargo[k]}`).join(' ') || 'Tom';
-        const icons = (list) => list.map(k => RES_ICONS[k]).join('') || '–';
-        const routeTxt = s.route
-          ? `${esc(islandOfBuilding(buildingById(s.route.from))?.name)} ⇄ ${esc(islandOfBuilding(buildingById(s.route.to))?.name)} (${s.route.length} felter)<br>ud: ${icons(s.route.res)} · retur: ${icons(s.route.back || [])}`
-          : 'Ingen rute';
+        const pick = sel.pickRoute ?? r?.id ?? GAME.routes[0]?.id ?? '';
         title.textContent = `⛵ ${s.name}`;
         body.innerHTML = `
           <div class="row"><span>Status</span><b>${SHIP_STATE_TEXT[s.state]}</b></div>
           <div class="row"><span>Last</span><b>${cargo} <small>/ ${T.cargo}</small></b></div>
           <div class="row"><span>Rækkevidde</span><b>${T.range} felter</b></div>
           <div class="row"><span>Drift</span><b>−${rate(T.upkeep)} 🪙/s</b></div>
-          <div class="row"><span>Rute</span><b>${routeTxt}</b></div>
           <div class="row"><span>Ture</span><b>${s.trips}</b></div>
-          <h4>Handelsrute</h4>
-          ${ports.length < 2 ? '<p class="muted">Du skal have lagre ved havet på mindst to øer for at lave en rute.</p>' : `
-          <label>Hent fra <select data-f="from">${portOpt(d.from)}</select></label>
-          <label>Lever til <select data-f="to">${portOpt(d.to)}</select></label>
-          <p class="muted">Varer ud:</p><div class="goods">${goodsChecks('res', d.res)}</div>
-          <p class="muted">Returlast:</p><div class="goods">${goodsChecks('back', d.back)}</div>
-          <div class="btns"><button data-act="route">▶ Start rute</button>${s.route ? '<button data-act="stop" class="alt">■ Stop</button>' : ''}</div>`}
+          <h4>Rute</h4>
+          ${r ? `<div class="row"><span>Sejler</span><button class="link" data-open-route="${r.id}">${esc(routeName(r))} (${r.length} felter) ›</button></div>` : '<p class="muted">Skibet har ingen rute.</p>'}
+          ${GAME.routes.length ? `<label>Vælg rute <select data-f="route">${GAME.routes.map(x =>
+              `<option value="${x.id}" ${x.id === pick ? 'selected' : ''}>${esc(routeName(x))} · ${x.length} felter${x.length > T.range ? ' (for lang)' : ''}</option>`).join('')}</select></label>` : ''}
+          <div class="btns">
+            ${GAME.routes.length ? '<button data-act="assign">▶ Sejl ruten</button>' : ''}
+            ${r ? '<button data-act="stop" class="alt">■ Stop</button>' : ''}
+          </div>
+          <div class="btns"><button data-act="draw">✏️ Tegn ny rute til skibet</button></div>
           ${sel.error ? `<p class="err">${esc(sel.error)}</p>` : ''}`;
-        body.querySelectorAll('select').forEach(el => el.addEventListener('change', () => { d[el.dataset.f] = el.value; el.blur(); }));
-        body.querySelectorAll('input[data-res]').forEach(el => el.addEventListener('change', () => {
-          const f = el.dataset.list, k = el.dataset.res;
-          d[f] = el.checked ? [...new Set([...d[f], k])] : d[f].filter(x => x !== k);
-        }));
-        body.querySelector('[data-act="route"]')?.addEventListener('click', () => {
-          sel.error = setRoute(s, d.from, d.to, d.res, d.back) || '';
-          if (!sel.error) { notify(`⛵ ${s.name} har fået en rute`); saveGame(); }
+        body.querySelector('[data-f="route"]')?.addEventListener('change', (e) => { sel.pickRoute = e.target.value; e.target.blur(); });
+        body.querySelector('[data-act="assign"]')?.addEventListener('click', () => {
+          sel.error = assignShip(s, sel.pickRoute ?? pick) || '';
+          if (!sel.error) { notify(`⛵ ${s.name} sejler nu ${routeName(shipRoute(s))}`); saveGame(); }
           renderInfo();
         });
         body.querySelector('[data-act="stop"]')?.addEventListener('click', () => { stopRoute(s); saveGame(); renderInfo(); });
+        body.querySelector('[data-act="draw"]')?.addEventListener('click', () => startRouteDraw({ assignShip: s.id }));
+        body.querySelector('[data-open-route]')?.addEventListener('click', (e) => openInfo('route', e.currentTarget.dataset.openRoute));
         return;
       }
 
@@ -3830,7 +4052,7 @@
 
       if (b.type === 'warehouse') {
         const need = EXTRA_WAREHOUSE_POP * isl.warehouses;
-        const shipsHere = GAME.ships.filter(s => s.route && [s.route.from, s.route.to].some(id => islandOfBuilding(buildingById(id)) === isl));
+        const shipsHere = GAME.ships.filter(s => { const r = shipRoute(s); return r && [r.from, r.to].some(id => islandOfBuilding(buildingById(id)) === isl); });
         const needs = ['food', 'meat', 'cloth', 'beer'].filter(n => n === 'food' || byL[2] + byL[3] > 0 || (n === 'beer' && byL[3] > 0));
         title.textContent = `🏚️ Lager – ${isl.name}`;
         body.innerHTML = `
@@ -3917,6 +4139,75 @@
       body.innerHTML = `<p class="muted">${esc(isl.name)}</p>${details}<p>${esc(def.desc)}</p>`;
     }
 
+    function renderRoutes(title, body) {
+      title.textContent = '🗺️ Handelsruter';
+      body.innerHTML = `
+        <p class="muted">Tegn ruter i vandet mellem lagre på forskellige øer, vælg varer begge veje og sæt skibe på.</p>
+        <div class="btns"><button data-act="draw">✏️ Tegn ny rute</button></div>
+        ${GAME.routes.length ? GAME.routes.map(r => {
+          const ships = GAME.ships.filter(s => s.routeId === r.id).length;
+          const ok = !!routePath(r);
+          return `<div class="ship-card">
+            <div><b>${esc(routeName(r))}</b> <small>${ok ? `${r.length} felter · ${r.waypoints.length} punkter` : '<span class="err">kan ikke sejles</span>'}</small></div>
+            <div class="muted">Ud: ${r.res.map(k => RES_ICONS[k]).join('') || '–'} · Retur: ${r.back.map(k => RES_ICONS[k]).join('') || '–'} · ⛵ ${ships}</div>
+            <div class="btns"><span></span><button data-open="${r.id}">Åbn</button></div></div>`;
+        }).join('') : '<p class="muted">Ingen ruter endnu.</p>'}`;
+      body.querySelector('[data-act="draw"]').addEventListener('click', () => startRouteDraw());
+      body.querySelectorAll('[data-open]').forEach(el => el.addEventListener('click', () => openInfo('route', el.dataset.open)));
+    }
+
+    function renderRoute(title, body, sel) {
+      const r = routeById(sel.id);
+      if (!r) { openInfo('routes'); return; }
+      const p = routePath(r);
+      const fromName = esc(islandOfBuilding(buildingById(r.from))?.name), toName = esc(islandOfBuilding(buildingById(r.to))?.name);
+      const onRoute = GAME.ships.filter(s => s.routeId === r.id);
+      const others = GAME.ships.filter(s => s.routeId !== r.id);
+      const pick = sel.pickShip ?? others[0]?.id ?? '';
+      title.textContent = `🗺️ ${routeName(r)}`;
+      body.innerHTML = `
+        <div class="row"><span>Længde</span><b>${p ? `${r.length} felter` : '<span class="err">kan ikke sejles – tegn om</span>'}</b></div>
+        <div class="row"><span>Punkter</span><b>${r.waypoints.length}</b></div>
+        <h4>Varer ud (${fromName} → ${toName})</h4>
+        <div class="goods">${goodsChecks('res', r.res)}</div>
+        <h4>Returlast (${toName} → ${fromName})</h4>
+        <div class="goods">${goodsChecks('back', r.back)}</div>
+        <h4>Skibe på ruten</h4>
+        ${onRoute.length ? onRoute.map(s => `<div class="row"><span>${esc(s.name)} <small>(${SHIP_STATE_TEXT[s.state]})</small></span><button class="link" data-unassign="${s.id}">Fjern</button></div>`).join('') : '<p class="muted">Ingen skibe endnu.</p>'}
+        ${others.length ? `<label>Sæt skib på <select data-f="ship">${others.map(s =>
+            `<option value="${s.id}" ${s.id === pick ? 'selected' : ''}>${esc(s.name)} · rækkevidde ${SHIP_TYPES[s.type].range}${shipRoute(s) ? ' (har rute)' : ''}</option>`).join('')}</select></label>
+          <div class="btns"><button data-act="assign">⛵ Sæt på ruten</button></div>` : ''}
+        <div class="btns"><button data-act="redraw">✏️ Tegn om</button><button data-act="delete" class="alt">🗑 Slet rute</button></div>
+        <div class="btns"><button class="link" data-act="all">‹ Alle ruter</button></div>
+        ${sel.error ? `<p class="err">${esc(sel.error)}</p>` : ''}`;
+      // Goods changes apply right away, also to ships already sailing the route
+      body.querySelectorAll('input[data-res]').forEach(el => el.addEventListener('change', () => {
+        const f = el.dataset.list, k = el.dataset.res;
+        r[f] = el.checked ? [...new Set([...r[f], k])] : r[f].filter(x => x !== k);
+        saveGame();
+      }));
+      body.querySelector('[data-f="ship"]')?.addEventListener('change', (e) => { sel.pickShip = e.target.value; e.target.blur(); });
+      body.querySelector('[data-act="assign"]')?.addEventListener('click', () => {
+        const s = GAME.ships.find(x => x.id === (sel.pickShip ?? pick));
+        sel.error = s ? assignShip(s, r.id) || '' : 'Vælg et skib';
+        if (!sel.error) { sel.pickShip = null; notify(`⛵ ${s.name} sejler nu ${routeName(r)}`); saveGame(); }
+        renderInfo();
+      });
+      body.querySelectorAll('[data-unassign]').forEach(el => el.addEventListener('click', () => {
+        stopRoute(GAME.ships.find(x => x.id === el.dataset.unassign));
+        saveGame();
+        renderInfo();
+      }));
+      body.querySelector('[data-act="redraw"]').addEventListener('click', () => startRouteDraw({ editId: r.id }));
+      body.querySelector('[data-act="delete"]').addEventListener('click', () => {
+        if (!confirm(`Slette ruten ${routeName(r)}?`)) return;
+        deleteRoute(r);
+        saveGame();
+        openInfo('routes');
+      });
+      body.querySelector('[data-act="all"]').addEventListener('click', () => openInfo('routes'));
+    }
+
     function renderEconomy(title, body) {
       title.textContent = '📊 Økonomi';
       const net = (GAME.lastTax || 0) - (GAME.lastUpkeep || 0);
@@ -3967,8 +4258,10 @@
         // Islands are matched on load by their anchor tile, since ids come from re-labelling the map
         islands: [...GAME.islands.values()].map(i => ({ anchor: i.anchor, name: i.name, home: i.home, start: i.start,
                                                          resources: i.resources, pop: i.pop, fertility: i.fertility })),
-        ships: GAME.ships.map(({ id, type, name, x, y, dir, route, cargo, state, trips }) => ({ id, type, name, x, y, dir, route, cargo, state, trips })),
+        ships: GAME.ships.map(({ id, type, name, x, y, dir, routeId, cargo, state, trips }) => ({ id, type, name, x, y, dir, routeId, cargo, state, trips })),
         shipCounter: GAME.shipCounter,
+        routes: GAME.routes.map(({ id, from, to, waypoints, res, back }) => ({ id, from, to, waypoints, res, back })),
+        routeCounter: GAME.routeCounter,
         coins: GAME.coins,
         tierReached: GAME.tierReached,
         questIndex: GAME.questIndex,
@@ -4066,10 +4359,19 @@
       }
       updateIslandStats();
 
-      GAME.ships = (data.ships || []).filter(s => SHIP_TYPES[s.type]).map(s => ({
-        ...s, cargo: { ...emptyStock(), ...s.cargo }, path: [], timer: 0,
-        route: s.route ? { back: [], ...s.route } : null
-      }));
+      GAME.routes = (data.routes || []).map(r => ({ ...r, length: 0 }));
+      GAME.routeCounter = data.routeCounter || GAME.routes.length;
+      GAME.ships = (data.ships || []).filter(s => SHIP_TYPES[s.type]).map(s => {
+        const ship = { ...s, cargo: { ...emptyStock(), ...s.cargo }, path: [], timer: 0, routeId: s.routeId || null };
+        if (s.route) {
+          GAME.routeCounter++;
+          const r = { id: `r_${GAME.routeCounter}`, from: s.route.from, to: s.route.to, waypoints: [], res: s.route.res || [], back: s.route.back || [], length: 0 };
+          GAME.routes.push(r);
+          ship.routeId = r.id;
+          delete ship.route;
+        }
+        return ship;
+      });
       GAME.shipCounter = data.shipCounter || GAME.ships.length;
       GAME.coins = data.coins ?? START_COINS;
       GAME.tierReached = data.tierReached || 1;
@@ -4084,11 +4386,12 @@
     // Ships resume their route after loading (paths aren't saved)
     function resumeShips() {
       for (const s of GAME.ships) {
-        const r = s.route;
+        const r = shipRoute(s);
         const from = r && buildingById(r.from), to = r && buildingById(r.to);
         if (!from || !to) { stopRoute(s); continue; }
         if (s.state === 'loading' || s.state === 'unloading') s.timer = 1;
-        else sailTo(s, s.state === 'toTo' ? to : from, s.state === 'toTo' ? 'toTo' : 'toFrom');
+        else if (s.state === 'toTo') sailTo(s, to, 'toTo', r.waypoints);
+        else sailTo(s, from, 'toFrom', [...r.waypoints].reverse());
       }
     }
 
@@ -4121,6 +4424,9 @@
     document.addEventListener('click', (e) => { if (!gameMenu.contains(e.target)) gameMenu.hidden = true; });
     document.getElementById('btn-save').addEventListener('click', () => { saveGame(true); gameMenu.hidden = true; });
     document.getElementById('btn-new').addEventListener('click', () => { gameMenu.hidden = true; newGame(); });
+    document.getElementById('btn-routes').addEventListener('click', () => {
+      if (GAME.selectedInfo?.kind === 'routes') closeInfo(); else openInfo('routes');
+    });
     document.getElementById('btn-economy').addEventListener('click', () => {
       if (GAME.selectedInfo?.kind === 'economy') closeInfo(); else openInfo('economy');
     });
