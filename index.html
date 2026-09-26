@@ -96,6 +96,43 @@
     #victory-stats { margin: 12px 0; font-size: 13px; }
     #victory-close { padding: 8px 20px; background: #4a6fa5; border: none; border-radius: 5px; color: #fff; font-size: 14px; cursor: pointer; }
     #game-menu button { text-align: left; display: flex; justify-content: space-between; gap: 10px; }
+
+    /* New game dialog */
+    #newgame { position: absolute; inset: 0; background: rgba(10,8,4,0.7); z-index: 40; display: flex; align-items: center; justify-content: center; }
+    #newgame[hidden] { display: none; }
+    .newgame-box { width: 480px; text-align: left; }
+    .newgame-box .victory-title { text-align: center; }
+    .ng-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin: 10px 0; flex-wrap: wrap; }
+    .ng-row > span { font-weight: bold; font-size: 13px; }
+    .ng-opts { display: flex; gap: 4px; }
+    .ng-opts button { padding: 6px 10px; background: #e8dcbc; border: 2px solid #8a6a3a; border-radius: 5px; color: #3a2616; cursor: pointer; font-size: 12px; }
+    .ng-opts button small { color: #7a6448; font-size: 10px; }
+    .ng-opts button.active { background: #c9a24e; border-color: #7a4a10; color: #2a1a0a; font-weight: bold; }
+    .ng-hint { font-size: 11px; color: #7a6448; margin: 4px 0 10px; min-height: 14px; }
+    .ng-check { display: flex; gap: 8px; align-items: center; font-size: 13px; margin: 6px 0; cursor: pointer; }
+    .ng-buttons { display: flex; justify-content: flex-end; gap: 8px; margin-top: 16px; }
+    .ng-buttons button { padding: 8px 18px; background: #4a6fa5; border: none; border-radius: 5px; color: #fff; font-size: 14px; cursor: pointer; }
+    .ng-buttons button.ng-alt { background: #8a7a5a; }
+    .ng-buttons button[hidden] { display: none; }
+
+    /* Minimap, bottom right above the view controls */
+    #minimap {
+      position: absolute;
+      right: 10px; bottom: 118px; /* z-index below the build menu, which may cover it on narrow screens */
+      width: 220px; height: 120px;
+      background: rgba(10,20,32,0.88);
+      border: 2px solid #c9a24e;
+      border-radius: 6px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.5);
+      z-index: 9;
+      cursor: pointer;
+    }
+    #minimap[hidden] { display: none; }
+
+    #hud .stat.bankrupt { animation: pulse 1s infinite; border-color: #f07a5a; }
+    @keyframes pulse { 50% { background: rgba(160,40,20,0.55); } }
+    #info-body .seg { display: flex; gap: 2px; }
+    #info-body .seg button { padding: 4px 9px !important; }
     #game-menu small { color: #b8a680; }
     #game-menu #saved-at { color: #b8a680; font-size: 10px; padding: 2px 4px 0; }
 
@@ -378,6 +415,10 @@
       </div>
       <div class="menu-title">Indstillinger</div>
       <label class="menu-check"><input type="checkbox" id="opt-events"> Begivenheder (brand, storm, pirater)</label>
+      <label class="menu-check"><input type="checkbox" id="opt-sound"> 🔊 Lydeffekter</label>
+      <label class="menu-check"><input type="checkbox" id="opt-music"> 🎵 Musik og havlyde</label>
+      <label class="menu-check">Lydstyrke <input type="range" id="opt-volume" min="0" max="100" style="flex:1"></label>
+      <label class="menu-check"><input type="checkbox" id="opt-minimap"> 🗺️ Minikort <small>M</small></label>
       <button id="btn-new">🆕 Nyt spil</button>
     </div>
   </div>
@@ -391,7 +432,15 @@
       <button id="victory-close">Spil videre</button>
     </div>
   </div>
+  <div id="newgame" hidden>
+    <div class="victory-box newgame-box">
+      <div class="victory-title">⚓ Nyt spil</div>
+      <div class="ng-body"></div>
+      <div class="ng-buttons"><button id="ng-cancel" class="ng-alt">Annullér</button><button id="ng-start">Start spillet</button></div>
+    </div>
+  </div>
   <div id="messages"></div>
+  <canvas id="minimap" title="Minikort – klik for at flytte kameraet (M skjuler)"></canvas>
 
   <div id="toast"></div>
 
@@ -414,7 +463,7 @@
     <button data-view="out" title="Zoom ud (-)">−</button>
     <button data-view="in" title="Zoom ind (+)">+</button>
     <button data-view="home" title="Centrér på lager (H)">⌂</button>
-    <div class="hint">Træk: flyt kort · Scroll: zoom<br>WASD / piletaster: flyt · H: hjem</div>
+    <div class="hint">Træk: flyt kort · Scroll: zoom<br>WASD / piletaster: flyt · H: hjem<br>Q: kopiér bygning · M: minikort</div>
   </div>
 
   <div id="debug" hidden>DEBUG</div>
@@ -446,7 +495,29 @@
     }
 
     // ===== GAME STATE =====
-    const MAP_SIZE = 96;
+    // Chosen when a new game starts (see MAP_SIZES); a loaded save sets it from the save
+    let MAP_SIZE = 128;
+
+    // New-game options
+    const MAP_SIZES = {
+      small:  { name: 'Lille',  size: 96 },
+      medium: { name: 'Mellem', size: 128 },
+      large:  { name: 'Stor',   size: 160 }
+    };
+    const ISLAND_AMOUNTS = {
+      few:    { name: 'Få',     f: 0.7 },
+      normal: { name: 'Normal', f: 1 },
+      many:   { name: 'Mange',  f: 1.4 }
+    };
+    // coins: start coins · events: fire/storm chance · pirates: raid frequency · rivalEvery: ticks between
+    // the rival's new colonies · rivalMax: most islands the rival will own
+    const DIFFICULTIES = {
+      easy:   { name: 'Let',    coins: 2000, events: 0.5, pirates: 0.6, rivalEvery: 480, rivalMax: 3 },
+      normal: { name: 'Normal', coins: 1000, events: 1,   pirates: 1,   rivalEvery: 320, rivalMax: 5 },
+      hard:   { name: 'Svær',   coins: 600,  events: 1.6, pirates: 1.5, rivalEvery: 200, rivalMax: 8 }
+    };
+    const DEFAULT_SETTINGS = { size: 'medium', islands: 'normal', difficulty: 'normal', rival: true, events: true };
+    const diff = () => DIFFICULTIES[GAME.settings.difficulty] || DIFFICULTIES.normal;
 
     const GAME = {
       grid: [],
@@ -467,6 +538,13 @@
       storm: 0,                // ticks left of a storm
       history: [],             // snapshots of total stock and coins for the economy graphs
       won: false,
+      settings: { ...DEFAULT_SETTINGS },
+      seen: new Uint8Array(0),   // fog of war: 1 = explored tile
+      pirates: null,           // pirate fort and raider ship (null = no pirates on this map)
+      rival: null,             // rival trading house: its islands, buildings and ship
+      bankrupt: false,         // coins below zero: most production stops
+      moving: null,            // id of the building being relocated
+      shipOrder: null,         // { id } while the player picks a destination for a ship
       coins: 0,
       tierReached: 1,          // highest house level reached so far (unlocks buildings and ships)
       questIndex: 0,
@@ -493,7 +571,11 @@
       bricks: { name: 'Mursten',    icon: '🧱' },
       coal:   { name: 'Kul',        icon: '⚫' },
       ore:    { name: 'Jernmalm',   icon: '⛏️' },
-      tools:  { name: 'Værktøj',    icon: '🛠️' }
+      tools:  { name: 'Værktøj',    icon: '🛠️' },
+      grapes: { name: 'Vindruer',   icon: '🍇' },
+      wine:   { name: 'Vin',        icon: '🍷' },
+      gold:   { name: 'Guld',       icon: '🥇' },
+      jewelry:{ name: 'Smykker',    icon: '💍' }
     };
     const RES_KEYS = Object.keys(RESOURCES);
     const FOOD_KEYS = RES_KEYS.filter(k => RESOURCES[k].food);
@@ -506,7 +588,8 @@
     const FERTILITY = {
       grain: { name: 'Korn',  icon: '🌾' },
       sheep: { name: 'Får',   icon: '🐑' },
-      hops:  { name: 'Humle', icon: '🌿' }
+      hops:  { name: 'Humle', icon: '🌿' },
+      grapes:{ name: 'Vindruer', icon: '🍇' }
     };
 
     // ----- Balance -----
@@ -533,20 +616,23 @@
     const STUMP_SPROUT_CHANCE = 0.1;// chance a sampled clearing with stumps sprouts a sapling
     const FORESTER_RADIUS = 5;
     const ORE_PER_TILE = 60;        // iron ore in a rock tile on an ore island, never replenished
+    const GOLD_PER_TILE = 40;       // gold in a rock tile on the gold island, never replenished
+    const REGROW_BASE_AREA = 96 * 96; // regrowth samples scale with the map area
 
     // Public buildings serve houses within a radius (tiles from the building's edge)
     const SERVICES = {
       market: { name: 'Markedsplads', icon: '🏪' },
       chapel: { name: 'Kapel',        icon: '⛪' },
       tavern: { name: 'Kro',          icon: '🍻' },
-      fire:   { name: 'Brandstation', icon: '🚒' }
+      fire:   { name: 'Brandstation', icon: '🚒' },
+      theater:{ name: 'Teater',       icon: '🎭' }
     };
     const WAREHOUSE_MARKET_RADIUS = 6; // a warehouse doubles as a small market for nearby houses
     const UNSERVED_CAP = 2;            // pioneers living outside any market's reach
 
     // Trader: sails between port warehouses; players set per-island "sell above" / "buy up to" levels
     const PRICES = { wood: 2, planks: 4, stone: 5, fish: 3, grain: 2, pork: 6, beef: 7, wool: 4, cloth: 10, hops: 3,
-                     beer: 9, clay: 2, bricks: 8, coal: 4, ore: 5, tools: 14 };
+                     beer: 9, clay: 2, bricks: 8, coal: 4, ore: 5, tools: 14, grapes: 4, wine: 14, gold: 12, jewelry: 26 };
     const BUY_MARKUP = 1.6;            // buying from the trader costs more than he pays you
     const TRADE_PER_VISIT = 30;        // max units per good per visit
     const TRADER_WAIT = 4;             // seconds the trader stays at each port
@@ -556,18 +642,52 @@
     const FIRE_TICKS = 30;             // unattended fires destroy the building after this long
     const STORM_CHANCE = 1 / 900;      // per tick
     const STORM_TICKS = 60;
-    const PIRATE_MIN_LENGTH = 50;      // routes longer than this risk pirates
-    const PIRATE_CHANCE = 0.2;         // per long voyage
-    const MONUMENT_POP = 100;          // Købmænd needed before the monument can be built
+    const MONUMENT_POP = 50;           // Adelige needed before the monument can be built
+
+    // Pirates: a fort on a small island sends out a raider that hunts loaded ships.
+    // Warships escort routes and fight; watchtowers guard the coast; destroying the fort ends the threat.
+    const PIRATE_RAID_EVERY = 150;     // ticks between raids (scaled by difficulty)
+    const PIRATE_SPEED = 2.5;
+    const PIRATE_HP = 60;              // raider ship
+    const FORT_HP = 250;
+    const FORT_REWARD = 1500;
+    const PLUNDER_SHARE = 0.35;        // part of the cargo the raider takes
+    const WARSHIP_HP = 100;
+    const WARSHIP_DAMAGE = 6;          // per tick against the raider or the fort
+    const WARSHIP_GUARD = 5;           // tiles within which a warship protects other ships
+    const FORT_DAMAGE = 2;             // per tick against each attacking warship
+    const TOWER_DAMAGE = 5;            // per tick against a raider within a watchtower's reach
+    const REPAIR_RATE = 3;             // hp per tick for a damaged ship lying near its own warehouse
+
+    // Rival trading house: settles free islands over time and trades with you
+    const RIVAL_NAME = 'Rødflag-kompagniet';
+    const RIVAL_COLOR = '#b8322a';
+    const RIVAL_STOCK_MAX = 80;        // goods the rival keeps for sale per island
+    const RIVAL_BUY_MAX = 60;          // most of one good the rival will buy per island
+    const RIVAL_PRODUCE = 0.25;        // units per tick of each good a rival island makes
+    const RIVAL_BUYOUT_BASE = 2500;    // price to buy a rival colony (plus per building)
+
+    // Taxes and happiness (per island)
+    const TAX_LEVELS = {
+      low:    { name: 'Lav',    mult: 0.6, mood: 15 },
+      normal: { name: 'Normal', mult: 1,   mood: 0 },
+      high:   { name: 'Høj',    mult: 1.5, mood: -20 }
+    };
+    const MOOD_START = 60;
 
     // What each resident consumes per second, by need
-    const NEED_RATES = { food: 0.02, meat: 0.008, cloth: 0.006, beer: 0.008 };
+    const NEED_RATES = { food: 0.02, meat: 0.008, cloth: 0.006, beer: 0.008, wine: 0.006, jewelry: 0.004 };
     const NEED_INFO = {
-      food:  { name: 'Mad',  icon: '🍽️', keys: FOOD_KEYS },
-      meat:  { name: 'Kød',  icon: '🥩', keys: MEAT_KEYS },
-      cloth: { name: 'Tøj',  icon: '👕', keys: ['cloth'] },
-      beer:  { name: 'Øl',   icon: '🍺', keys: ['beer'] }
+      food:    { name: 'Mad',     icon: '🍽️', keys: FOOD_KEYS },
+      meat:    { name: 'Kød',     icon: '🥩', keys: MEAT_KEYS },
+      cloth:   { name: 'Tøj',     icon: '👕', keys: ['cloth'] },
+      beer:    { name: 'Øl',      icon: '🍺', keys: ['beer'] },
+      wine:    { name: 'Vin',     icon: '🍷', keys: ['wine'] },
+      jewelry: { name: 'Smykker', icon: '💍', keys: ['jewelry'] }
     };
+    // The level from which residents start wanting each need
+    const NEED_FROM = { food: 1, meat: 2, cloth: 2, beer: 3, wine: 4, jewelry: 4 };
+    const NEED_ORDER = ['meat', 'cloth', 'beer', 'wine', 'jewelry', 'food']; // meat is eaten as a need before general food
 
     // House levels. A house upgrades when its needs are met, the next level's goods are in stock
     // and the island can pay the upgrade materials. Unmet needs drop capacity to the level below.
@@ -578,13 +698,28 @@
         upgrade: { coins: 30, planks: 10, stone: 4 } },
       { name: 'Borgere',  cap: 12, tax: 0.05, needs: ['food', 'meat', 'cloth'], services: ['market', 'chapel'],
         upgrade: { coins: 120, planks: 15, bricks: 10, tools: 5 } },
-      { name: 'Købmænd',  cap: 20, tax: 0.10, needs: ['food', 'meat', 'cloth', 'beer'], services: ['market', 'chapel', 'tavern'] }
+      { name: 'Købmænd',  cap: 20, tax: 0.10, needs: ['food', 'meat', 'cloth', 'beer'], services: ['market', 'chapel', 'tavern'],
+        upgrade: { coins: 300, planks: 20, bricks: 25, tools: 15 } },
+      { name: 'Adelige',  cap: 30, tax: 0.18, needs: ['food', 'meat', 'cloth', 'beer', 'wine', 'jewelry'], services: ['market', 'chapel', 'tavern', 'theater'] }
     ];
+    const MAX_LEVEL = HOUSE_LEVELS.length - 1;
+
+    // Production buildings can be upgraded in place: more output (and input), one more worker, higher upkeep
+    const PROD_LEVELS = [
+      null,
+      { mult: 1,   upkeep: 1 },
+      { mult: 1.5, upkeep: 1.4, tier: 2, cost: (d) => ({ coins: Math.round((d.cost.coins || 0) * 1.2) + 50, planks: 15, stone: 15 }) },
+      { mult: 2,   upkeep: 1.8, tier: 3, cost: (d) => ({ coins: Math.round((d.cost.coins || 0) * 2) + 100, bricks: 15, tools: 8 }) }
+    ];
+    const PROD_MAX_LEVEL = PROD_LEVELS.length - 1;
+    const prodLevel = (b) => (DEFS[b.type].produces && b.level) || 1;
+    const workersOf = (b) => (DEFS[b.type].workers || 0) + (DEFS[b.type].produces ? prodLevel(b) - 1 : 0);
+    const upkeepOf = (b) => (DEFS[b.type].upkeep || 0) * PROD_LEVELS[prodLevel(b)].upkeep;
 
     // workers: residents needed to run it · upkeep: coins/s · tier: house level needed to unlock
     const DEFS = {
       house: { id: 'house', name: 'Bolig', w: 2, h: 2, cost: { coins: 20, planks: 8 }, house: true,
-        desc: 'Bolig for 6 pionerer. De første 4 beboere på en ø klarer sig uden mad; resten skal have fisk eller kød. Opgraderes til Borgere (12) og Købmænd (20).' },
+        desc: 'Bolig for 6 pionerer. De første 4 beboere på en ø klarer sig uden mad; resten skal have fisk eller kød. Opgraderes til Borgere (12), Købmænd (20) og Adelige (30).' },
       woodcutter: { id: 'woodcutter', name: 'Skovhugger', w: 2, h: 2, cost: { coins: 30, planks: 10 }, workers: 2, upkeep: 0.04,
         produces: 'wood', rate: 0.8, near: { terrain: 'forest', label: 'skov' },
         harvest: { terrain: 'forest', key: 'wood', radius: 4, label: 'træer' },
@@ -650,8 +785,27 @@
       firestation: { id: 'firestation', name: 'Brandstation', w: 2, h: 2, cost: { coins: 80, planks: 15, stone: 10 }, workers: 2, upkeep: 0.06,
         service: 'fire', radius: 9,
         desc: 'Slukker brande inden for rækkevidde, før de når at ødelægge bygninger.' },
-      monument: { id: 'monument', name: 'Monument', w: 4, h: 4, cost: { coins: 5000, planks: 100, stone: 150, bricks: 150, tools: 80 }, tier: 3,
-        desc: `Rigets store monument – spillets endemål. Kræver ${MONUMENT_POP} Købmænd i alt.` },
+      theater: { id: 'theater', name: 'Teater', w: 3, h: 3, cost: { coins: 400, planks: 40, stone: 40, bricks: 30 }, workers: 3, upkeep: 0.2, tier: 3,
+        service: 'theater', radius: 12,
+        desc: 'Adelige skal bo inden for rækkevidde af et teater.' },
+      vineyard: { id: 'vineyard', name: 'Vingård', w: 3, h: 3, cost: { coins: 150, planks: 30, stone: 10 }, workers: 3, upkeep: 0.08, tier: 3,
+        produces: 'grapes', rate: 0.5, fertility: 'grapes',
+        desc: 'Dyrker vindruer. Kræver en ø med vindruer 🍇 – findes kun på nogle fjerne øer.' },
+      winery: { id: 'winery', name: 'Vinpresse', w: 2, h: 2, cost: { coins: 200, planks: 30, stone: 20, bricks: 15 }, workers: 3, upkeep: 0.12, tier: 3,
+        consumes: { grapes: 0.5 }, produces: 'wine', rate: 0.5,
+        desc: 'Presser vindruer til vin, som Adelige skal have.' },
+      goldmine: { id: 'goldmine', name: 'Guldmine', w: 2, h: 2, cost: { coins: 250, planks: 30, stone: 30, tools: 10 }, workers: 4, upkeep: 0.15, tier: 3,
+        produces: 'gold', rate: 0.3, near: { key: 'gold', label: 'guldårer', min: 1, radius: 3 },
+        harvest: { terrain: 'rock', key: 'gold', radius: 3, label: 'guld' },
+        desc: 'Bryder guld i klipper med guldårer (kun på én fjern ø). Guldet slipper op.' },
+      goldsmith: { id: 'goldsmith', name: 'Guldsmed', w: 2, h: 2, cost: { coins: 300, planks: 20, stone: 30, bricks: 20 }, workers: 3, upkeep: 0.15, tier: 3,
+        consumes: { gold: 0.3, coal: 0.3 }, produces: 'jewelry', rate: 0.3,
+        desc: 'Smeder smykker af guld og kul. Adelige skal have smykker.' },
+      watchtower: { id: 'watchtower', name: 'Vagttårn', w: 1, h: 1, cost: { coins: 150, planks: 15, stone: 30 }, workers: 2, upkeep: 0.08,
+        coastal: true, guard: 8,
+        desc: 'Skyder på pirater inden for 8 felter og beskytter skibe i nærheden. Skal stå ved vandet.' },
+      monument: { id: 'monument', name: 'Monument', w: 4, h: 4, cost: { coins: 6000, planks: 100, stone: 150, bricks: 150, tools: 80, jewelry: 40 }, tier: 4,
+        desc: `Rigets store monument – spillets endemål. Kræver ${MONUMENT_POP} Adelige i alt.` },
       shipyard: { id: 'shipyard', name: 'Skibsbygger', w: 3, h: 3, cost: { coins: 150, planks: 40, stone: 20 }, workers: 5, upkeep: 0.1,
         coastal: true, needsRoad: true,
         desc: 'Bygger skibe. Skal ligge ved havet og have vej til et lager. Klik på den for at bygge skibe.' },
@@ -667,8 +821,11 @@
     const SHIP_TYPES = {
       jolle:   { id: 'jolle',   name: 'Jolle',   cost: { coins: 60, planks: 15 },              cargo: 20,  range: 35,  speed: 2.2, buildTime: 15, tier: 1, upkeep: 0.05, size: 0.8 },
       kogge:   { id: 'kogge',   name: 'Kogge',   cost: { coins: 200, planks: 50, stone: 15 },  cargo: 60,  range: 80,  speed: 2.0, buildTime: 30, tier: 2, upkeep: 0.15, size: 1.1 },
-      karavel: { id: 'karavel', name: 'Karavel', cost: { coins: 500, planks: 100, stone: 40, tools: 20 }, cargo: 150, range: 200, speed: 2.6, buildTime: 45, tier: 3, upkeep: 0.3,  size: 1.4 }
+      karavel: { id: 'karavel', name: 'Karavel', cost: { coins: 500, planks: 100, stone: 40, tools: 20 }, cargo: 150, range: 200, speed: 2.6, buildTime: 45, tier: 3, upkeep: 0.3,  size: 1.4 },
+      fregat:  { id: 'fregat',  name: 'Fregat',  cost: { coins: 400, planks: 60, stone: 20, tools: 10 }, cargo: 0, range: 250, speed: 2.9, buildTime: 35, tier: 2, upkeep: 0.25, size: 1.25,
+                 warship: true, hp: WARSHIP_HP }
     };
+    const isWarship = (s) => !!SHIP_TYPES[s.type]?.warship;
     const tierName = (t) => HOUSE_LEVELS[t].name;
 
     // Tools that aren't buildings
@@ -681,11 +838,11 @@
     const CATEGORIES = [
       { id: 'terrain', name: 'Terræn', icon: '🛤️', items: ['road', 'canal', 'demolish'] },
       { id: 'housing', name: 'Boliger', icon: '🏠', items: ['house'] },
-      { id: 'public', name: 'Offentligt', icon: '🏪', items: ['marketplace', 'chapel', 'tavern', 'firestation', 'monument'] },
+      { id: 'public', name: 'Offentligt', icon: '🏪', items: ['marketplace', 'chapel', 'tavern', 'firestation', 'theater', 'monument'] },
       { id: 'production', name: 'Produktion', icon: '🪵', items: ['woodcutter', 'forester', 'sawmill', 'stonecutter', 'sheepfarm', 'weaver'] },
-      { id: 'industry', name: 'Industri', icon: '⚒️', items: ['claypit', 'brickworks', 'charcoal', 'mine', 'smithy'] },
-      { id: 'food', name: 'Mad & drikke', icon: '🌾', items: ['fisher', 'grainfarm', 'pigfarm', 'cattlefarm', 'hopfarm', 'brewery'] },
-      { id: 'harbor', name: 'Lager & havn', icon: '⚓', items: ['warehouse', 'shipyard'] }
+      { id: 'industry', name: 'Industri', icon: '⚒️', items: ['claypit', 'brickworks', 'charcoal', 'mine', 'smithy', 'goldmine', 'goldsmith'] },
+      { id: 'food', name: 'Mad & drikke', icon: '🌾', items: ['fisher', 'grainfarm', 'pigfarm', 'cattlefarm', 'hopfarm', 'brewery', 'vineyard', 'winery'] },
+      { id: 'harbor', name: 'Lager & havn', icon: '⚓', items: ['warehouse', 'shipyard', 'watchtower'] }
     ];
 
     // Buildings that only work when connected to a warehouse by road
@@ -709,33 +866,45 @@
     // ===== TERRAIN GENERATION: ARCHIPELAGO =====
     // One large home island in the middle, several smaller islands around it, open sea in between.
     // Forests, rock outcrops and small lakes are then scattered over the land.
-    function generateTerrain(w, h) {
+    // amount scales the number of islands (ISLAND_AMOUNTS). Returns { grid, pirate: {x, y} | null } where
+    // pirate is the centre of a small islet reserved for the pirate fort.
+    function generateTerrain(w, h, amount = 1) {
       const grid = [];
       for (let y = 0; y < h; y++) {
         for (let x = 0; x < w; x++) grid.push({ x, y, type: 'water' });
       }
       const at = (x, y) => (x >= 0 && y >= 0 && x < w && y < h) ? grid[y * w + x] : null;
 
-      // Island blobs
-      const islands = [{ cx: w / 2, cy: h / 2, r: w * 0.17 }];
-      const target = 6 + Math.floor(Math.random() * 3);
-      for (let tries = 0; islands.length < target && tries < 800; tries++) {
-        const r = 4.5 + Math.random() * w * 0.08;
-        const cx = r + 4 + Math.random() * (w - 2 * r - 8);
-        const cy = r + 4 + Math.random() * (h - 2 * r - 8);
-        if (islands.every(o => Math.hypot(o.cx - cx, o.cy - cy) > o.r + r + 5)) islands.push({ cx, cy, r });
+      // Island blobs: a big home island in the middle, then islands spread over the sea with wide sea lanes
+      const islands = [{ cx: w / 2, cy: h / 2, r: 16 + w * 0.03 }];
+      const target = Math.round((w * h / 1300) * amount) + Math.floor(Math.random() * 3);
+      for (let tries = 0; islands.length < target && tries < 3000; tries++) {
+        const r = 6.5 + Math.random() * (3 + w * 0.06);
+        const cx = r + 5 + Math.random() * (w - 2 * r - 10);
+        const cy = r + 5 + Math.random() * (h - 2 * r - 10);
+        if (islands.every(o => Math.hypot(o.cx - cx, o.cy - cy) > o.r + r + 7)) islands.push({ cx, cy, r });
+      }
+      // A small pirate islet well away from home
+      let pirate = null;
+      for (let tries = 0; !pirate && tries < 3000; tries++) {
+        const r = 3.2, cx = 8 + Math.random() * (w - 16), cy = 8 + Math.random() * (h - 16);
+        const farEnough = Math.hypot(cx - w / 2, cy - h / 2) > w * 0.3 - tries / 300;
+        if (farEnough && islands.every(o => Math.hypot(o.cx - cx, o.cy - cy) > o.r + r + 6)) {
+          pirate = { cx, cy, r, pirate: true };
+          islands.push(pirate);
+        }
       }
       const off = Math.random() * 1000;
       for (const t of grid) {
         for (const isl of islands) {
-          // Noise-wobbled radius gives natural, irregular coastlines
-          const wobble = 0.7 + 0.6 * valueNoise((t.x + off) / 5, (t.y + off) / 5);
-          if (Math.hypot(t.x - isl.cx, t.y - isl.cy) / isl.r < wobble) { t.type = 'grass'; break; }
+          // Noise-wobbled radius gives natural, irregular coastlines (the pirate islet stays round and solid)
+          const wobble = isl.pirate ? 1 : 0.72 + 0.6 * valueNoise((t.x + off) / 6, (t.y + off) / 6);
+          if (Math.hypot(t.x - isl.cx, t.y - isl.cy) / isl.r < wobble) { t.type = 'grass'; if (isl.pirate) t.pirateIslet = true; break; }
         }
       }
 
       // Clusters on land only. Centres are picked on land tiles; the home island is guaranteed forest and rock.
-      const land = grid.filter(t => t.type === 'grass');
+      const land = grid.filter(t => t.type === 'grass' && !t.pirateIslet);
       const home = islands[0];
       const homeLand = land.filter(t => Math.hypot(t.x - home.cx, t.y - home.cy) < home.r * 0.8);
       const pick = (arr) => arr[Math.floor(Math.random() * arr.length)];
@@ -746,8 +915,8 @@
           clusters.push({ cx: c.x, cy: c.y, radius: rMin + Math.random() * (rMax - rMin), type });
         }
       };
-      addClusters(homeLand, 3, 'forest', 3, 5.5);
-      addClusters(homeLand, 2, 'rock', 1.5, 3);
+      addClusters(homeLand, 4, 'forest', 3, 5.5);
+      addClusters(homeLand, 3, 'rock', 1.5, 3);
       addClusters(land, Math.round(land.length / 140), 'forest', 2.5, 5);
       addClusters(land, Math.round(land.length / 450), 'rock', 1.5, 3.5);
       addClusters(land, Math.round(land.length / 700), 'lake', 1.5, 3);
@@ -772,13 +941,15 @@
         }
         if (water > 0 && Math.random() < 0.5) t.type = 'beach';
       }
-      return grid;
+      return { grid, pirate: pirate ? { x: Math.round(pirate.cx), y: Math.round(pirate.cy) } : null };
     }
 
     // ===== ISLANDS =====
     // Every connected landmass is an island with its own storage (shared by all warehouses on it).
     const ISLAND_NAMES = ['Mågeø', 'Ravneø', 'Falkeø', 'Tangø', 'Sælø', 'Lyngø', 'Egeø', 'Klippeø', 'Sandø',
-                          'Ørneø', 'Tågeø', 'Stormø', 'Vindø', 'Rævø', 'Hjorteø', 'Birkeø', 'Svaneø', 'Kragø'];
+                          'Ørneø', 'Tågeø', 'Stormø', 'Vindø', 'Rævø', 'Hjorteø', 'Birkeø', 'Svaneø', 'Kragø',
+                          'Ulveø', 'Bjørneø', 'Odderø', 'Hvaleø', 'Perleø', 'Solø', 'Måneø', 'Stjerneø', 'Rosenø', 'Lindeø',
+                          'Askeø', 'Tjørneø', 'Havreø', 'Humleø', 'Skarveø', 'Terneø', 'Lærkeø', 'Uglø', 'Glimtø', 'Tordenø'];
     const tileAt = (x, y) => (x >= 0 && y >= 0 && x < MAP_SIZE && y < MAP_SIZE) ? GAME.grid[y * MAP_SIZE + x] : null;
     // A bridge (road on a canal tile) joins the land on both sides into one island; ships still pass beneath
     const isBridge = (t) => !!t && t.canal && GAME.roads.has(`${t.x},${t.y}`);
@@ -814,6 +985,24 @@
       }
     }
 
+    // Gold: the rock on the farthest rocky island without iron holds gold veins (for the Adelige's jewellery)
+    function assignGold(startId) {
+      const start = GAME.islands.get(startId);
+      const sx = start.anchor[0], sy = start.anchor[1];
+      const cands = [...GAME.islands.values()].filter(i => i.id !== startId && !i.ore && !i.pirate && i.size >= 12 &&
+        GAME.grid.some(t => t.island === i.id && t.type === 'rock'));
+      if (!cands.length) {
+        // No free rocky island: share the farthest ore island
+        const ore = [...GAME.islands.values()].filter(i => i.ore);
+        if (ore.length) cands.push(ore[ore.length - 1]);
+      }
+      cands.sort((a, b) => Math.hypot(b.anchor[0] - sx, b.anchor[1] - sy) - Math.hypot(a.anchor[0] - sx, a.anchor[1] - sy));
+      const isl = cands[0];
+      if (!isl) return;
+      isl.gold = true;
+      for (const t of GAME.grid) if (t.island === isl.id && t.type === 'rock') t.gold = GOLD_PER_TILE;
+    }
+
     // Labels connected land components (4-neighbour). Sets tile.island; returns the components.
     function labelIslands() {
       markOcean();
@@ -842,8 +1031,10 @@
       const used = new Set([...GAME.islands.values()].map(i => i.name));
       let n = Math.floor(hash2(comp.anchor[0], comp.anchor[1]) * ISLAND_NAMES.length);
       for (let k = 0; k < ISLAND_NAMES.length && used.has(ISLAND_NAMES[n]); k++) n = (n + 1) % ISLAND_NAMES.length;
-      return { id: comp.id, size: comp.size, anchor: comp.anchor, name: ISLAND_NAMES[n], home: false,
-               resources: emptyStock(), pop: 0, hunger: 0, fertility: [], needsMet: {} };
+      let name = ISLAND_NAMES[n];
+      for (let k = 2; used.has(name); k++) name = `${ISLAND_NAMES[n]} ${k}`; // more islands than names
+      return { id: comp.id, size: comp.size, anchor: comp.anchor, name, home: false,
+               resources: emptyStock(), pop: 0, hunger: 0, fertility: [], needsMet: {}, mood: MOOD_START, tax: 'normal' };
     }
 
     // Gives each island its farming fertility. The home island only has grain, so wool (cloth) and hops (beer)
@@ -856,10 +1047,11 @@
       const home = GAME.islands.get(homeId);
       const [hx, hy] = centre(homeId);
       home.fertility = ['grain'];
-      const others = [...GAME.islands.values()].filter(i => i.id !== homeId && i.size >= 12)
+      const others = [...GAME.islands.values()].filter(i => i.id !== homeId && i.size >= 12 && !i.pirate)
         .map(i => { const [x, y] = centre(i.id); return { i, d: Math.hypot(x - hx, y - hy) }; })
         .sort((a, b) => a.d - b.d).map(o => o.i);
-      const keys = Object.keys(FERTILITY);
+      // Vines only grow on islands in the far half, so wine needs long voyages
+      const keys = Object.keys(FERTILITY).filter(k => k !== 'grapes');
       others.forEach((isl, n) => {
         const f = new Set();
         if (n === 0) f.add('sheep');
@@ -867,8 +1059,17 @@
         const r = hash2(isl.anchor[0] + 77, isl.anchor[1] + 13);
         f.add(keys[Math.floor(r * keys.length)]);
         if (r > 0.55) f.add(keys[Math.floor(hash2(isl.anchor[1], isl.anchor[0]) * keys.length)]);
+        if (n >= Math.max(2, others.length / 2) && hash2(isl.anchor[0] + 5, isl.anchor[1] + 9) < 0.4) f.add('grapes');
         isl.fertility = [...f];
       });
+      ensureGrapes(others);
+    }
+
+    // At least one (far) island must be able to grow grapes
+    function ensureGrapes(others = [...GAME.islands.values()].filter(i => !i.home && !i.start && !i.pirate && i.size >= 12)) {
+      if (!others.length || others.some(i => i.fertility.includes('grapes'))) return;
+      const isl = others[Math.max(0, others.length - 2)];
+      isl.fertility = [...isl.fertility, 'grapes'];
     }
 
     // Re-label islands after the terrain changed (e.g. a canal split a landmass), keeping each island's
@@ -929,7 +1130,9 @@
     }
 
     // A service building works when it isn't paused, has its workers and isn't on fire
-    const serviceActive = (b) => !b.paused && b.staffed !== false && !b.fire;
+    // When you're bankrupt only markets keep going
+    const serviceActive = (b) => !b.paused && b.staffed !== false && !b.fire &&
+      !(GAME.bankrupt && DEFS[b.type].service && DEFS[b.type].service !== 'market');
 
     // Which services reach building b (market/chapel/tavern/fire); warehouses count as small markets
     function coverageOf(b, isl) {
@@ -961,7 +1164,7 @@
         isl.warehouses = 0;
         isl.popCap = 0;
         isl.cap = 0;
-        isl.levelCap = [0, 0, 0, 0];
+        isl.levelCap = new Array(HOUSE_LEVELS.length).fill(0);
         isl.houses = 0;
       }
       for (const b of GAME.buildings) {
@@ -983,9 +1186,77 @@
     const popByLevel = (isl) => isl.levelCap.map(c => isl.popCap ? isl.pop * c / isl.popCap : 0);
 
     const totalMerchants = () => [...GAME.islands.values()].reduce((s, i) => s + popByLevel(i)[3], 0);
+    const totalNobles = () => [...GAME.islands.values()].reduce((s, i) => s + popByLevel(i)[4], 0);
     const totalPopulation = () => [...GAME.islands.values()].reduce((s, i) => s + i.pop, 0);
     const totalPopCap = () => [...GAME.islands.values()].reduce((s, i) => s + i.popCap, 0);
     const homeIsland = () => [...GAME.islands.values()].find(i => i.home);
+
+    // ----- Fog of war -----
+    // Unexplored tiles are hidden under clouds. Ships and buildings reveal the map around them.
+    const SHIP_SIGHT = 7, BUILDING_SIGHT = 6, WAREHOUSE_SIGHT = 9;
+    let minimapDirty = true;
+    const isSeen = (x, y) => x >= 0 && y >= 0 && x < MAP_SIZE && y < MAP_SIZE && GAME.seen[y * MAP_SIZE + x] === 1;
+
+    // Reveals a circle; announces islands seen for the first time (quiet during setup/loading)
+    function reveal(cx, cy, r, quiet = false) {
+      const found = new Set();
+      const x0 = Math.max(0, Math.floor(cx - r)), x1 = Math.min(MAP_SIZE - 1, Math.ceil(cx + r));
+      const y0 = Math.max(0, Math.floor(cy - r)), y1 = Math.min(MAP_SIZE - 1, Math.ceil(cy + r));
+      for (let y = y0; y <= y1; y++) {
+        for (let x = x0; x <= x1; x++) {
+          const i = y * MAP_SIZE + x;
+          if (GAME.seen[i] || (x - cx) ** 2 + (y - cy) ** 2 > r * r) continue;
+          GAME.seen[i] = 1;
+          minimapDirty = true;
+          fogLayer.dirty = true;
+          groundLayer.dirty = true;
+          const isl = GAME.islands.get(GAME.grid[i].island);
+          if (isl && !isl.discovered) { isl.discovered = true; found.add(isl); }
+        }
+      }
+      if (quiet || GAME.phase !== 'play') return;
+      for (const isl of found) {
+        if (isl.size < 12 && !isl.pirate) continue;
+        const extras = [...isl.fertility.map(f => FERTILITY[f].icon), isl.ore ? '⛏️' : '', isl.gold ? '🥇' : ''].join('');
+        notify(isl.pirate ? `🏴‍☠️ Du har fundet piraternes ø!` :
+               isl.owner === 'rival' ? `🧭 ${isl.name} er opdaget – den tilhører ${RIVAL_NAME}` :
+               `🧭 Ny ø opdaget: ${isl.name} ${extras}`, false);
+        sfx('discover');
+      }
+    }
+
+    function revealAroundBuilding(b, quiet = false) {
+      const def = DEFS[b.type];
+      reveal(b.x + (def.w - 1) / 2, b.y + (def.h - 1) / 2, b.type === 'warehouse' ? WAREHOUSE_SIGHT : BUILDING_SIGHT, quiet);
+    }
+
+    // New game: only the start island (and a rim of sea around it) is known
+    function initFog() {
+      GAME.seen = new Uint8Array(MAP_SIZE * MAP_SIZE);
+      const start = [...GAME.islands.values()].find(i => i.start);
+      const tiles = GAME.grid.filter(t => t.island === start.id);
+      const cx = tiles.reduce((s, t) => s + t.x, 0) / tiles.length, cy = tiles.reduce((s, t) => s + t.y, 0) / tiles.length;
+      const r = Math.max(...tiles.map(t => Math.hypot(t.x - cx, t.y - cy))) + 4;
+      reveal(cx, cy, r, true);
+    }
+
+    // Fog is saved run-length encoded: alternating counts of hidden and seen tiles, starting with hidden
+    function encodeSeen() {
+      const runs = [];
+      let cur = 0, n = 0;
+      for (const v of GAME.seen) {
+        if (v === cur) n++;
+        else { runs.push(n); cur = v; n = 1; }
+      }
+      runs.push(n);
+      return runs;
+    }
+    function decodeSeen(runs) {
+      const seen = new Uint8Array(MAP_SIZE * MAP_SIZE);
+      let i = 0, v = 0;
+      for (const n of runs) { if (v) seen.fill(1, i, i + n); i += n; v ^= 1; }
+      return seen;
+    }
 
     // ===== RENDERING =====
     const canvas = document.getElementById('canvas');
@@ -1004,6 +1275,39 @@
     const SEA_COLOR = '#1b5487'; // background outside the map
     const DETAIL_ZOOM = 0.7;     // below this zoom, tiny ground details are skipped
     const WAVE_ZOOM = 0.6;       // below this zoom, animated wave crests are skipped
+    const GROUND_LOD_ZOOM = 0.55; // below this zoom, the ground is one pre-rendered image and rock textures are skipped
+
+    // Low-zoom ground: one pixel per tile in its colour, drawn as crisp diamonds with a single transformed drawImage.
+    // Rebuilt when the terrain look or the fog changes.
+    const groundLayer = { canvas: null, dirty: true };
+    function drawGroundLayer() {
+      const N = MAP_SIZE;
+      if (!groundLayer.canvas || groundLayer.canvas.width !== N) {
+        groundLayer.canvas = document.createElement('canvas');
+        groundLayer.canvas.width = groundLayer.canvas.height = N;
+        groundLayer.dirty = true;
+      }
+      if (groundLayer.dirty) {
+        const g = groundLayer.canvas.getContext('2d'), img = g.createImageData(N, N), d = img.data;
+        const sea = hexArr(SEA_COLOR);
+        for (let i = 0; i < N * N; i++) {
+          const t = GAME.grid[i];
+          let c = sea;
+          if (GAME.seen[i]) {
+            const m = /(\d+),\s*(\d+),\s*(\d+)/.exec(t.color || '');
+            c = m ? [+m[1], +m[2], +m[3]] : hexArr(TERRAIN_COLORS[t.type] || '#6aa444');
+          }
+          d[i * 4] = c[0]; d[i * 4 + 1] = c[1]; d[i * 4 + 2] = c[2]; d[i * 4 + 3] = 255;
+        }
+        g.putImageData(img, 0, 0);
+        groundLayer.dirty = false;
+      }
+      ctx.save();
+      ctx.transform(32, 16, -32, 16, 0, -16);
+      ctx.imageSmoothingEnabled = false;
+      ctx.drawImage(groundLayer.canvas, 0, 0);
+      ctx.restore();
+    }
 
     function resizeCanvas() {
       canvas.width = window.innerWidth;
@@ -1090,12 +1394,14 @@
 
       for (const t of grid) decorateTile(t);
       groupRocks(grid, at);
+      groundLayer.dirty = true;
     }
 
     // Per-tile colour, decoration and trees. Deterministic per position, so it can be re-run for a single
     // tile (e.g. when a forester plants trees) without changing anything else.
     const TREE_SLOTS = [[-0.22, -0.2], [0.2, -0.16], [-0.14, 0.2], [0.22, 0.2]];
     function decorateTile(t) {
+      groundLayer.dirty = true;
       const n = fbm(t.x / 6, t.y / 6);
       const rnd = seeded(t.x * 7919 + t.y * 104729 + NOISE_SEED);
       t.decor = null;
@@ -1346,11 +1652,14 @@
     function drawMountainTile(tile) {
       // Stroke each facet in its own colour: hides hairline seams without drawing visible edges.
       // Bands are drawn right after their facet so later (front) facets still cover them correctly.
+      // (far out the seams are invisible, so the strokes are skipped)
+      const seam = GAME.camera.zoom >= GROUND_LOD_ZOOM;
       for (const tri of tile.mountain) {
-        poly(tri.col, tri.pts, tri.col);
-        for (const b of tri.bands) poly(b.col, b.pts, b.col);
+        poly(tri.col, tri.pts, seam ? tri.col : null);
+        for (const b of tri.bands) poly(b.col, b.pts, seam ? b.col : null);
       }
-      rockTexture(tile.mountain.map(tri => tri.pts), 0.6);
+      const lod = GAME.camera.zoom < GROUND_LOD_ZOOM;
+      if (!lod) rockTexture(tile.mountain.map(tri => tri.pts), 0.6);
       if (tile.ore > 0) {
         // Iron ore veins show as rusty streaks on the facets
         const rnd = seeded(tile.x * 131 + tile.y * 977);
@@ -1361,8 +1670,19 @@
           line(q, { x: q.x + 3, y: q.y + 1.5 }, '#b0582a', 2);
         }
       }
+      if (tile.gold > 0) {
+        // Gold veins glint on the facets
+        const rnd = seeded(tile.x * 577 + tile.y * 211);
+        for (let i = 0; i < 4; i++) {
+          const tri = tile.mountain[Math.floor(rnd() * tile.mountain.length)];
+          const [a, bb, c] = tri.pts, w1 = rnd() * 0.5, w2 = rnd() * (1 - w1);
+          const q = { x: a.x + (bb.x - a.x) * w1 + (c.x - a.x) * w2, y: a.y + (bb.y - a.y) * w1 + (c.y - a.y) * w2 };
+          line(q, { x: q.x + 3, y: q.y - 1 }, '#e8c040', 2);
+          dot({ x: q.x + 1, y: q.y - 1 }, 0.9, '#fff6c0');
+        }
+      }
       // 'overlay' leaves near-white untouched, so snow gets a faint multiplied texture instead
-      const snowPolys = tile.mountain.flatMap(tri => tri.bands.filter(b => b.snow).map(b => b.pts));
+      const snowPolys = lod ? [] : tile.mountain.flatMap(tri => tri.bands.filter(b => b.snow).map(b => b.pts));
       if (snowPolys.length) rockTexture(snowPolys, 0.22, 'multiply');
 
       if (GAME.camera.zoom >= DETAIL_ZOOM && tile.slopeTufts.length) {
@@ -1576,7 +1896,9 @@
     // a regrowing tree starts as a small sapling and grows to full size
     function drawForest(x, y, tile) {
       const wood = tile.wood ?? tile.woodMax;
+      const far = GAME.camera.zoom < GROUND_LOD_ZOOM; // far out, two trees per tile read the same
       tile.trees.forEach((tr, i) => {
+        if (far && i >= 2) return;
         const frac = Math.min(1, (wood - i * WOOD_PER_TREE) / WOOD_PER_TREE);
         if (frac <= 0.05) return;
         drawTreeAt(x + tr.u, y + tr.v, frac >= 1 ? tr : { ...tr, s: tr.s * (0.3 + 0.7 * frac) });
@@ -2139,7 +2461,7 @@
       }
       poly('#8a867c', body, 'rgba(55,50,42,0.45)');
       poly('#aca89e', topFace, null);
-      rockTexture([body], 0.8);
+      if (GAME.camera.zoom >= GROUND_LOD_ZOOM) rockTexture([body], 0.8);
     }
 
     // Rock terrain tile: one or two boulders, stable per tile
@@ -2152,6 +2474,11 @@
         const c = P(x, y, 6);
         line({ x: c.x - 4, y: c.y }, { x: c.x + 2, y: c.y + 2 }, '#b0582a', 2);
         line({ x: c.x + 3, y: c.y - 4 }, { x: c.x + 6, y: c.y - 2 }, '#b0582a', 2);
+      }
+      if (tile.gold > 0) {
+        const c = P(x, y, 8);
+        line({ x: c.x - 3, y: c.y - 2 }, { x: c.x + 3, y: c.y }, '#e8c040', 2);
+        dot({ x: c.x, y: c.y - 1 }, 1, '#fff6c0');
       }
     }
 
@@ -2485,7 +2812,8 @@
       const level = b?.level || 1;
       if (level === 1) drawPioneerPlot(U, V, rnd, vr);
       else if (level === 2) drawHouseMedium(U, V, rnd, vr);
-      else drawMerchantHouse(U, V, rnd, vr);
+      else if (level === 3) drawMerchantHouse(U, V, rnd, vr);
+      else drawNobleHouse(U, V, rnd, vr);
     }
 
     // Sheep farm: shepherd's shed and a fenced pasture
@@ -2855,7 +3183,202 @@
       flag(U + 3.7, V + 3.6, 0, 30, '#b02a2a');
     }
 
+    // Level 4: nobleman's villa - pale ashlar with a columned portico, blue slate roof and a small garden
+    function drawNobleHouse(U, V, rnd, vr) {
+      ground(U, V, 2, 2, '#8aa458', rnd, '#6a8a3a');
+      // Gravel path and hedges
+      poly('#d8ccb0', uvRect(U + 0.75, V + 1.35, U + 1.05, V + 1.95), null);
+      for (const [u, v] of [[U + 0.25, V + 1.7], [U + 1.75, V + 1.7], [U + 1.8, V + 0.35]]) bush(u, v, 0.2, '#2e6a28');
+      const roof = ['#3e5a7e', '#4a4a6e', '#3a5a6a'][vr % 3];
+      const u0 = U + 0.15, u1 = U + 1.55, v0 = V + 0.12, v1 = V + 1.2;
+      ao(u0, v0, u1, v1 + 0.2);
+      const g = walls(u0, v0, u1, v1, 0, 18, '#efe8d8');
+      stones(g.L); stones(g.R);
+      for (const s of [0.25, 1.15]) win(g.L, s, 5, 0.15, 9, { shutter: '#3a5a7a' });
+      for (const s of [0.3, 0.75]) win(g.R, s, 5, 0.14, 9, { shutter: '#3a5a7a' });
+      const f1 = walls(u0, v0, u1, v1, 18, 32, '#f4eee0');
+      for (const s of [0.25, 0.7, 1.15]) win(f1.L, s, 3, 0.14, 8, { flowers: true });
+      for (const s of [0.3, 0.75]) win(f1.R, s, 3, 0.14, 8);
+      line(g.L.at(0, 18), g.L.at(g.L.len, 18), '#c8bca0', 1.6);
+      line(g.R.at(0, 18), g.R.at(g.R.len, 18), '#c8bca0', 1.6);
+      // Hipped roof
+      const z = 32, rh = 20, o = 0.08, um = (u0 + u1) / 2, vm = (v0 + v1) / 2;
+      const A = P(u0 - o, v1 + o, z), B = P(u1 + o, v1 + o, z), C = P(u1 + o, v0 - o, z);
+      const R1 = P(um - 0.3, vm, z + rh), R2 = P(um + 0.3, vm, z + rh);
+      poly(shade(roof, 0.9), [A, B, R2, R1]);
+      poly(roof, [B, C, R2]);
+      roofTexture([A, B, R2, R1], roof, 'tile');
+      line(R1, R2, shade(roof, 0.5), 2);
+      chimney(um - 0.25, vm, z + rh * 0.55, z + rh + 8, vr * 0.13);
+      // Portico with four columns and a pediment in front of the left facade
+      const pu0 = u0 + 0.4, pu1 = u0 + 1.0, pv = v1 + 0.28;
+      poly('#d8d0bc', [P(pu0, v1, 2), P(pu1, v1, 2), P(pu1, pv, 2), P(pu0, pv, 2)], 'rgba(0,0,0,0.25)');
+      for (let i = 0; i < 4; i++) {
+        const u = pu0 + 0.04 + i * (pu1 - pu0 - 0.08) / 3;
+        cylinder(u, pv - 0.04, 2, 0.035, 20, '#f4eee0', '#e0d8c4');
+      }
+      const pz = 22;
+      poly('#e8e0cc', [P(pu0 - 0.04, pv + 0.02, pz), P(pu1 + 0.04, pv + 0.02, pz), P(pu1 + 0.04, pv + 0.02, pz + 3), P(pu0 - 0.04, pv + 0.02, pz + 3)]);
+      poly('#f4eee0', [P(pu0 - 0.04, pv + 0.02, pz + 3), P(pu1 + 0.04, pv + 0.02, pz + 3), P((pu0 + pu1) / 2, pv + 0.02, pz + 12)]);
+      door(g.L, (pu0 + pu1) / 2 - u0, 0.16, 11, '#3a2a4a');
+      flag(u1 - 0.1, v0 + 0.2, z + rh - 4, 14, '#6a3a8a');
+    }
+
+    // Theatre: round-fronted hall with columns, red banners and a dome
+    function drawTheater(U, V, rnd) {
+      ground(U, V, 3, 3, '#b0a890', rnd, '#8a8272');
+      for (let i = 1; i < 6; i++) line(P(U + 0.1, V + i * 0.5), P(U + 2.9, V + i * 0.5), 'rgba(80,70,60,0.2)', 0.6);
+      const u0 = U + 0.3, u1 = U + 2.5, v0 = V + 0.3, v1 = V + 2.0;
+      ao(u0, v0, u1, v1);
+      const w = walls(u0, v0, u1, v1, 0, 26, '#e8dcc0');
+      stones(w.L); stones(w.R);
+      for (let s = 0.25; s < w.L.len - 0.1; s += 0.38) {
+        poly('#2a1a14', rectOn(w.L, s - 0.07, 6, s + 0.07, 18), null);
+        dot(w.L.at(s, 18), 3.2, '#2a1a14');
+      }
+      for (let s = 0.3; s < w.R.len - 0.1; s += 0.42) win(w.R, s, 10, 0.12, 9, { lit: true });
+      roofU(u0, v0, u1, v1, 26, 16, '#8a3a3a', '#e8dcc0', { style: 'tile', vent: 0.14 });
+      // Dome over the stage end
+      const d = P(u0 + 0.5, (v0 + v1) / 2, 46);
+      dot(d, 16, '#5a7a8a');
+      dot({ x: d.x - 5, y: d.y - 5 }, 8, '#7a9aaa');
+      poly('#e8dcc0', [{ x: d.x - 16, y: d.y }, { x: d.x + 16, y: d.y }, { x: d.x + 16, y: d.y + 7 }, { x: d.x - 16, y: d.y + 7 }]);
+      line({ x: d.x, y: d.y - 16 }, { x: d.x, y: d.y - 24 }, '#e8c040', 1.6);
+      // Colonnade along the front with a red curtain entrance
+      const cv = v1 + 0.3;
+      poly('#d8ccb0', [P(u0, v1, 2), P(u1, v1, 2), P(u1, cv, 2), P(u0, cv, 2)], 'rgba(0,0,0,0.2)');
+      for (let i = 0; i < 6; i++) cylinder(u0 + 0.12 + i * (u1 - u0 - 0.24) / 5, cv - 0.05, 2, 0.04, 24, '#f4ecda', '#e0d4bc');
+      poly('#e8dcc0', [P(u0 - 0.05, cv + 0.02, 26), P(u1 + 0.05, cv + 0.02, 26), P(u1 + 0.05, cv + 0.02, 30), P(u0 - 0.05, cv + 0.02, 30)]);
+      poly('#b02a2a', rectOn(w.L, 0.95, 0, 1.25, 16), 'rgba(40,10,10,0.5)');
+      for (const u of [u0 + 0.3, u1 - 0.3]) flag(u, cv + 0.25, 0, 26, '#b02a2a');
+    }
+
+    // Vineyard: rows of vines on trellises and a small press house
+    function drawVineyard(U, V, rnd) {
+      ground(U, V, 3, 3, '#8a7a4a', rnd, '#6a5a32');
+      for (let r = 0; r < 5; r++) {
+        const v = V + 0.4 + r * 0.45;
+        line(P(U + 1.0, v, 8), P(U + 2.85, v, 8), '#6a4a2a', 1);
+        for (let u = U + 1.05; u < U + 2.85; u += 0.3) {
+          line(P(u, v, 0), P(u, v, 9), '#5a3a1e', 1.2);
+          dot(P(u + 0.12, v, 8), 3.2, '#3e7a2e');
+          dot(P(u + 0.1, v, 5.5), 1.8, rnd() < 0.5 ? '#6a2a6a' : '#7a3a7a');
+        }
+      }
+      const u0 = U + 0.12, u1 = U + 0.85, v0 = V + 0.2, v1 = V + 1.1;
+      ao(u0, v0, u1, v1);
+      const w = walls(u0, v0, u1, v1, 0, 12, '#e8dcc0');
+      stones(w.L); stones(w.R);
+      door(w.L, 0.4, 0.16, 8);
+      roofV(u0, v0, u1, v1, 12, 11, '#b05a3a', '#e8dcc0', { style: 'tile' });
+      barrel(U + 0.4, V + 1.5);
+      barrel(U + 0.6, V + 1.6);
+      for (let i = 0; i < 3; i++) dot(P(U + 0.35 + i * 0.12, V + 2.3, 3), 3, '#8a4a2a');
+    }
+
+    // Wine press: stone cellar house with a big vat and stacked barrels
+    function drawWinery(U, V, rnd) {
+      ground(U, V, 2, 2, '#9a8a6a', rnd, '#7a6a50');
+      const u0 = U + 0.14, u1 = U + 1.2, v0 = V + 0.14, v1 = V + 1.0;
+      ao(u0, v0, u1, v1);
+      const w = walls(u0, v0, u1, v1, 0, 16, '#d8ccb0');
+      stones(w.L); stones(w.R);
+      barnDoor(wallL(u0, u1, v1, 0, 16), 0.5, 0.3, 8);
+      win(w.R, 0.42, 7, 0.14, 6, { shutter: '#6a2a4a' });
+      roofV(u0, v0, u1, v1, 16, 13, '#9a4a3a', '#d8ccb0', { style: 'tile', vent: 0.12 });
+      // Grape vat
+      const vat = cylinder(U + 1.55, V + 0.5, 0, 0.2, 9, '#7a5030', '#5a2a4a');
+      dot({ x: vat.t.x - 3, y: vat.t.y }, 2, '#7a3a7a');
+      dot({ x: vat.t.x + 4, y: vat.t.y + 1 }, 2, '#8a4a8a');
+      for (const [u, v, z] of [[U + 1.4, V + 1.35, 0], [U + 1.62, V + 1.3, 0], [U + 1.51, V + 1.33, 11], [U + 0.45, V + 1.45, 0]]) barrel(u, v, z);
+    }
+
+    // Gold mine: tunnel into a rock with glittering nuggets and a sluice
+    function drawGoldmine(U, V, rnd) {
+      ground(U, V, 2, 2, '#8a8474', rnd, '#6a665c');
+      boulder(U + 0.8, V + 0.6, 0.55, rnd);
+      const m = P(U + 0.95, V + 1.05, 0);
+      poly('#1a1410', [{ x: m.x - 8, y: m.y }, { x: m.x + 8, y: m.y }, { x: m.x + 8, y: m.y - 13 }, { x: m.x, y: m.y - 17 }, { x: m.x - 8, y: m.y - 13 }], null);
+      line({ x: m.x - 9, y: m.y }, { x: m.x - 9, y: m.y - 14 }, '#6a4422', 2.4);
+      line({ x: m.x + 9, y: m.y }, { x: m.x + 9, y: m.y - 14 }, '#6a4422', 2.4);
+      line({ x: m.x - 11, y: m.y - 14 }, { x: m.x + 11, y: m.y - 14 }, '#6a4422', 2.6);
+      // Wooden sluice with water
+      walls(U + 1.3, V + 1.2, U + 1.9, V + 1.35, 3, 6, '#7a5030', '#4a8ab0');
+      const cart = walls(U + 0.85, V + 1.45, U + 1.05, V + 1.7, 1, 6, '#5a5a60', '#7a7a80');
+      for (let i = 0; i < 3; i++) dot(P(U + 0.92 + i * 0.05, V + 1.57, 7), 1.6, '#f0c83a');
+      const pile = P(U + 1.55, V + 1.65, 0);
+      ctx.fillStyle = '#8a7a5a';
+      ctx.beginPath(); ctx.ellipse(pile.x, pile.y - 2, 9, 5, 0, Math.PI, 0); ctx.fill();
+      for (let i = 0; i < 5; i++) {
+        const q = { x: pile.x - 6 + i * 3, y: pile.y - 3 - (i % 2) * 2 };
+        dot(q, 1.4, '#f0c83a');
+        if ((animTime / 400 + i) % 5 < 0.6) dot(q, 2.5, 'rgba(255,250,200,0.8)');
+      }
+    }
+
+    // Goldsmith: elegant brick shop with a gilded sign and a small furnace
+    function drawGoldsmith(U, V, rnd) {
+      ground(U, V, 2, 2, '#9a9282', rnd, '#7a7266');
+      const u0 = U + 0.14, u1 = U + 1.2, v0 = V + 0.14, v1 = V + 1.0;
+      ao(u0, v0, u1, v1);
+      const g = walls(u0, v0, u1, v1, 0, 14, '#a8543a');
+      stones(g.L); stones(g.R);
+      const f1 = walls(u0, v0, u1 + 0.03, v1 + 0.03, 14, 25, '#efe4ca');
+      timber(f1.L, '#4a2a1a'); timber(f1.R, '#4a2a1a');
+      door(g.L, 0.3, 0.16, 10, '#2a3a5a');
+      win(g.L, 0.72, 4, 0.22, 7, { lit: true });
+      for (const s of [0.3, 0.72]) win(f1.L, s, 3, 0.13, 6, { shutter: '#2a3a5a' });
+      win(g.R, 0.42, 4, 0.14, 7, { lit: true });
+      const surf = roofU(u0, v0, u1 + 0.03, v1 + 0.03, 25, 14, '#4a5a6e', '#efe4ca', { style: 'tile', timber: '#4a2a1a' });
+      const vm = (v0 + v1) / 2;
+      chimney(u0 + 0.3, vm + 0.15, surf(vm + 0.21) - 2, surf(vm + 0.15) + 12, 0.35);
+      // Gilded ring sign
+      const sp = P(u0 + 0.08, v1 + 0.03, 16);
+      line(sp, { x: sp.x - 8, y: sp.y + 4 }, '#3a2616', 1.2);
+      ctx.strokeStyle = '#e8c040';
+      ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.arc(sp.x - 9, sp.y + 9, 4, 0, Math.PI * 2); ctx.stroke();
+      dot({ x: sp.x - 9, y: sp.y + 4.5 }, 1.8, '#8ad0ff');
+      crate(U + 1.55, V + 0.5, 0.09);
+      barrel(U + 1.55, V + 1.35);
+    }
+
+    // Watchtower: round stone tower with a crenellated top and a burning brazier
+    function drawWatchtower(U, V, rnd) {
+      ground(U, V, 1, 1, '#9a9282', rnd, '#7a7266');
+      const c = cylinder(U + 0.5, V + 0.5, 0, 0.26, 34, '#a09a8a', '#8a8474');
+      // Stone courses
+      ctx.strokeStyle = 'rgba(0,0,0,0.2)';
+      ctx.lineWidth = 0.6;
+      for (let z = 5; z < 34; z += 5) {
+        const p = P(U + 0.5, V + 0.5, z);
+        ctx.beginPath(); ctx.ellipse(p.x, p.y, c.rx, c.ry, 0, 0, Math.PI); ctx.stroke();
+      }
+      poly('#2a1a10', rectOn(wallL(U + 0.36, U + 0.64, V + 0.76, 0, 34), 0.08, 0, 0.2, 9), null);
+      poly('#2a1a10', rectOn(wallR(U + 0.76, V + 0.36, V + 0.64, 0, 34), 0.1, 20, 0.18, 26), null);
+      // Battlements
+      const top = cylinder(U + 0.5, V + 0.5, 34, 0.3, 4, '#aca698', '#7a7466');
+      for (let i = 0; i < 6; i++) {
+        const a = Math.PI * (0.1 + i * 0.16);
+        const p = P(U + 0.5 + Math.cos(a) * 0.28, V + 0.5 + Math.sin(a) * 0.28, 38);
+        ctx.fillStyle = '#aca698';
+        ctx.fillRect(p.x - 2.5, p.y - 4, 5, 4);
+      }
+      // Brazier fire
+      const f = P(U + 0.5, V + 0.5, 40), fl = Math.sin(animTime / 110) * 1.5;
+      dot({ x: f.x, y: f.y - 3 }, 5 + fl, 'rgba(230,90,20,0.85)');
+      dot({ x: f.x, y: f.y - 6 }, 3 + fl * 0.5, 'rgba(255,210,70,0.95)');
+      smoke({ x: f.x, y: f.y - 8 }, 0.3);
+      flag(U + 0.7, V + 0.3, 38, 12, '#2a5aa8');
+    }
+
     const BUILDING_RENDERERS = {
+      theater: drawTheater,
+      vineyard: drawVineyard,
+      winery: drawWinery,
+      goldmine: drawGoldmine,
+      goldsmith: drawGoldsmith,
+      watchtower: drawWatchtower,
       claypit: drawClayPit,
       brickworks: drawBrickworks,
       charcoal: drawCharcoal,
@@ -2960,16 +3483,16 @@
     function drawServiceOverlay() {
       const tool = GAME.selectedBuilding && DEFS[GAME.selectedBuilding];
       const h = GAME.hoveredTile;
-      if (tool?.service && h) {
-        drawRadiusArea(h.tx, h.ty, tool.w, tool.h, tool.radius, 'rgba(120,200,120,0.14)');
+      if ((tool?.service || tool?.guard) && h) {
+        drawRadiusArea(h.tx, h.ty, tool.w, tool.h, tool.radius || tool.guard, tool.guard ? 'rgba(220,120,90,0.14)' : 'rgba(120,200,120,0.14)');
         return;
       }
       const sel = GAME.selectedInfo;
       const b = sel?.kind === 'building' && buildingById(sel.id);
       if (!b) return;
       const def = DEFS[b.type];
-      const r = def.service ? def.radius : b.type === 'warehouse' ? WAREHOUSE_MARKET_RADIUS : 0;
-      if (r) drawRadiusArea(b.x, b.y, def.w, def.h, r, 'rgba(120,200,120,0.12)');
+      const r = def.service ? def.radius : def.guard ? def.guard : b.type === 'warehouse' ? WAREHOUSE_MARKET_RADIUS : 0;
+      if (r) drawRadiusArea(b.x, b.y, def.w, def.h, r, def.guard ? 'rgba(220,120,90,0.12)' : 'rgba(120,200,120,0.12)');
     }
 
     function drawStatusBubble(b, icon, color) {
@@ -3078,8 +3601,69 @@
         return;
       }
       const b = GAME.buildings.find(bb => bb.id === occ);
+      if (!b) return; // rival building
       const def = DEFS[b.type];
       poly('rgba(220,60,60,0.35)', uvRect(b.x - 0.5, b.y - 0.5, b.x + def.w - 0.5, b.y + def.h - 0.5), '#e05050');
+    }
+
+    // ----- Relocating buildings -----
+    // Anno-style "move": pick up a building and put it down elsewhere on the same island, free of charge
+    function startMove(b) {
+      selectTool(null);
+      GAME.moving = b.id;
+      closeInfo();
+      const el = document.getElementById('banner');
+      el.hidden = false;
+      el.innerHTML = `↔ Flyt ${esc(DEFS[b.type].name.toLowerCase())}<small>Klik, hvor bygningen skal stå (samme ø) · Esc eller højreklik afbryder</small>`;
+    }
+
+    function cancelMove() {
+      GAME.moving = null;
+      document.getElementById('banner').hidden = true;
+    }
+
+    function finishMove(tx, ty) {
+      const b = buildingById(GAME.moving);
+      if (!b) { cancelMove(); return; }
+      const r = checkPlacement(tx, ty, b.type, { move: b });
+      if (!r.ok) { showToast(`❌ ${r.reason}`); return; }
+      const def = DEFS[b.type];
+      for (let dy = 0; dy < def.h; dy++) for (let dx = 0; dx < def.w; dx++) GAME.occupancy.delete(`${b.x + dx},${b.y + dy}`);
+      b.x = tx;
+      b.y = ty;
+      for (let dy = 0; dy < def.h; dy++) for (let dx = 0; dx < def.w; dx++) GAME.occupancy.set(`${tx + dx},${ty + dy}`, b.id);
+      b.harvestAt = null;
+      cancelMove();
+      if (b.type === 'warehouse') invalidateRoutes();
+      updateIslandStats();
+      recomputeConnectivity();
+      revealAroundBuilding(b);
+      sfx('build');
+      log(`✓ ${def.name} flyttet`, 'ok');
+      saveGame();
+      openInfo('building', b.id);
+    }
+
+    function drawMoveGhost(b, tx, ty) {
+      const def = DEFS[b.type];
+      const ok = checkPlacement(tx, ty, b.type, { move: b }).ok;
+      poly(ok ? 'rgba(100,200,100,0.3)' : 'rgba(200,100,100,0.3)', uvRect(tx - 0.5, ty - 0.5, tx + def.w - 0.5, ty + def.h - 0.5), ok ? '#64c864' : '#c86464');
+      // Faint outline where it stands now
+      poly('rgba(255,255,255,0.12)', uvRect(b.x - 0.5, b.y - 0.5, b.x + def.w - 0.5, b.y + def.h - 0.5), 'rgba(255,255,255,0.6)');
+      ctx.globalAlpha = ok ? 0.7 : 0.4;
+      drawBuilding({ ...b, x: tx, y: ty });
+      ctx.globalAlpha = 1;
+    }
+
+    // Pipette: take the type of the building under the cursor as the build tool
+    function pipette() {
+      const h = GAME.hoveredTile;
+      const occ = h && GAME.occupancy.get(`${h.tx},${h.ty}`);
+      const b = occ && occ !== 'road' && GAME.buildings.find(x => x.id === occ);
+      if (!b || b.type === 'monument') return;
+      if (b.type === 'warehouse' && GAME.phase !== 'play') return;
+      selectTool(b.type);
+      showToast(`📋 ${DEFS[b.type].name} valgt`);
     }
 
     function drawGhostBuilding(tx, ty, def) {
@@ -3152,8 +3736,8 @@
         return { cost: FOUNDING_COST, payer, kind: 'found', block: null };
       }
       if (def.tier && GAME.tierReached < def.tier) return { cost: def.cost, payer: isl, block: `Låses op, når du har ${tierName(def.tier)}` };
-      if (type === 'monument' && totalMerchants() < MONUMENT_POP) {
-        return { cost: def.cost, payer: isl, block: `Kræver ${MONUMENT_POP} Købmænd i alt (har ${Math.floor(totalMerchants())})` };
+      if (type === 'monument' && totalNobles() < MONUMENT_POP) {
+        return { cost: def.cost, payer: isl, block: `Kræver ${MONUMENT_POP} Adelige i alt (har ${Math.floor(totalNobles())})` };
       }
       if (!isl) return { cost: def.cost, payer: null, block: 'Skal bygges på land' };
       if (isl.warehouses === 0) return { cost: def.cost, payer: isl, block: `Byg først et lager på ${isl.name}` };
@@ -3164,15 +3748,19 @@
     }
 
     // Full placement check. Returns { ok, reason, cost, payer, kind }.
-    function checkPlacement(tx, ty, type) {
+    // opts.move: an existing building being relocated (its own tiles count as free, nothing is paid)
+    function checkPlacement(tx, ty, type, opts = {}) {
       const def = DEFS[type];
+      const mv = opts.move;
       const no = (reason) => ({ ok: false, reason });
       if (tx < 0 || ty < 0 || tx + def.w > MAP_SIZE || ty + def.h > MAP_SIZE) return no('Uden for kortet');
 
       for (let dy = 0; dy < def.h; dy++) {
         for (let dx = 0; dx < def.w; dx++) {
           const key = `${tx + dx},${ty + dy}`;
-          if (GAME.occupancy.has(key)) return no('Feltet er optaget');
+          if (!isSeen(tx + dx, ty + dy)) return no('Området er ikke udforsket endnu – send et skib på opdagelse');
+          const occ = GAME.occupancy.get(key);
+          if (occ && !(mv && occ === mv.id)) return no('Feltet er optaget');
           const tt = tileAt(tx + dx, ty + dy), ttype = tt?.type;
           // Roads may cut through forest (the trees are felled) and cross canals as bridges;
           // everything else needs open ground
@@ -3184,12 +3772,19 @@
       let islTile = tileAt(tx, ty);
       if (!isLand(islTile)) islTile = DIRS.map(([dx, dy]) => tileAt(tx + dx, ty + dy)).find(t => isLand(t) && GAME.islands.get(t.island)?.warehouses) || islTile;
       const isl = GAME.islands.get(islTile.island);
-      const pc = placementCost(type, isl);
+      if (isl?.owner === 'rival') return no(`${isl.name} tilhører ${RIVAL_NAME}`);
+      if (isl?.pirate && GAME.pirates?.fortHp > 0) return no('Piraternes ø – ødelæg først deres fort med et krigsskib');
+      let pc;
+      if (mv) {
+        if (isl !== islandOfBuilding(mv)) return no('En bygning kan kun flyttes rundt på sin egen ø');
+        pc = { cost: {}, payer: null, block: null, kind: 'move' };
+      } else pc = placementCost(type, isl);
 
       // Ports (shipyard and every island's first warehouse) must face the open sea so ships can reach them;
-      // other coastal buildings (fisher) just need water
+      // other coastal buildings (fisher) just need water. A warehouse that ships use must stay a port when moved.
       const around = footprintNeighbors({ type, x: tx, y: ty }).map(([x, y]) => tileAt(x, y));
-      const isPort = type === 'shipyard' || pc.kind === 'start' || pc.kind === 'found';
+      const isPort = type === 'shipyard' || pc.kind === 'start' || pc.kind === 'found' ||
+        (mv && type === 'warehouse' && dockTiles(mv).length > 0);
       if (isPort && !around.some(t => t?.ocean)) return no(`${def.name} skal ligge ud til havet (ikke en sø)`);
       if (def.coastal && !around.some(t => t?.type === 'water')) return no(`${def.name} skal ligge ud til vandet`);
 
@@ -3256,6 +3851,8 @@
         Object.assign(isl.resources, START_STOCK);
       }
       updateIslandStats();
+      revealAroundBuilding(b);
+      sfx(type === 'monument' ? 'fanfare' : 'build');
 
       if (r.kind === 'found') {
         const got = deliverSupplies(r.payer, isl);
@@ -3301,6 +3898,7 @@
     function canalCheck(x, y, water = new Set(), spent = new Map()) {
       const t = tileAt(x, y);
       if (!t || !isLandType(t.type)) return { ok: false, reason: 'Kanaler kan kun graves i græs eller sand' };
+      if (!isSeen(x, y)) return { ok: false, reason: 'Området er ikke udforsket endnu' };
       if (GAME.occupancy.has(`${x},${y}`)) return { ok: false, reason: 'Feltet er optaget' };
       if (!DIRS.some(([dx, dy]) => tileAt(x + dx, y + dy)?.type === 'water' || water.has(`${x + dx},${y + dy}`))) {
         return { ok: false, reason: 'En kanal skal forbindes til vand' };
@@ -3379,6 +3977,10 @@
       }
 
       const b = GAME.buildings.find(bb => bb.id === occ);
+      if (!b) {
+        showToast(`❌ Du kan ikke rive ${RIVAL_NAME}s bygninger ned`);
+        return;
+      }
       const def = DEFS[b.type];
       const isl = islandOfBuilding(b);
       if (b.type === 'warehouse' && isl.warehouses === 1) {
@@ -3407,6 +4009,7 @@
       }
 
       log(`✓ ${def.name} revet ned`, 'ok');
+      sfx('demolish');
       if (GAME.selectedInfo?.id === b.id) closeInfo();
       recomputeConnectivity();
       saveGame();
@@ -3459,11 +4062,14 @@
       GAME.phase = 'play';
       document.getElementById('banner').hidden = true;
       openBuildCategory('food');
+      if (GAME.settings.rival && !GAME.rival) initRival();
       log('Lageret er placeret. Byg en fisker, så beboerne har mad, og forbind den med vej.', 'ok');
     }
 
     function selectTool(type) {
       if (type && GAME.routeDraw) cancelRouteDraw();
+      if (type && GAME.moving) cancelMove();
+      if (type && GAME.shipOrder) cancelShipOrder();
       GAME.selectedBuilding = type;
       GAME.roadDrag = null;
       refreshMenuState();
@@ -3565,7 +4171,8 @@
                         canal: 10, fisher: 46, grainfarm: 40, pigfarm: 44, cattlefarm: 50, shipyard: 70,
                         sheepfarm: 40, weaver: 60, hopfarm: 60, brewery: 62, forester: 44,
                         claypit: 36, brickworks: 70, charcoal: 50, mine: 44, smithy: 64, marketplace: 36, chapel: 80,
-                        tavern: 70, firestation: 60, monument: 110 };
+                        tavern: 70, firestation: 60, monument: 110, theater: 70, vineyard: 36, winery: 56, goldmine: 44,
+                        goldsmith: 60, watchtower: 70 };
 
     function drawPreview(cv, id) {
       const dpr = window.devicePixelRatio || 1, cw = 96, ch = 72;
@@ -3645,18 +4252,38 @@
       const inView = (p, side = 40, top = 24, bottom = 40) =>
         p.x > cam.x - hw - side && p.x < cam.x + hw + side &&
         p.y > cam.y - hh - top && p.y < cam.y + hh + bottom;
+      const seenAt = (x, y) => isSeen(Math.round(x), Math.round(y));
 
-      // Flat ground first (terrain + roads), then upright objects (trees + buildings) sorted by depth
-      for (const tile of GAME.grid) {
-        if (inView(ISO.tileToScreen(tile.x, tile.y))) drawTile(tile.x, tile.y, tile);
+      // Only the tiles in the bounding box (in tile space) of the visible screen area are looked at
+      let x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity;
+      for (const [sx, sy] of [[cam.x - hw, cam.y - hh], [cam.x + hw, cam.y - hh], [cam.x + hw, cam.y + hh], [cam.x - hw, cam.y + hh]]) {
+        const tx = (sx / 32 + sy / 16) / 2, ty = (sy / 16 - sx / 32) / 2;
+        x0 = Math.min(x0, tx); x1 = Math.max(x1, tx); y0 = Math.min(y0, ty); y1 = Math.max(y1, ty);
+      }
+      const M = 4; // tall objects below the screen can reach up into view
+      x0 = Math.max(0, Math.floor(x0) - 2); y0 = Math.max(0, Math.floor(y0) - 2);
+      x1 = Math.min(MAP_SIZE - 1, Math.ceil(x1) + M); y1 = Math.min(MAP_SIZE - 1, Math.ceil(y1) + M);
+      const visibleTiles = [];
+      for (let y = y0; y <= y1; y++) for (let x = x0; x <= x1; x++) visibleTiles.push(GAME.grid[y * MAP_SIZE + x]);
+
+      // Flat ground first (terrain + roads), then upright objects (trees + buildings) sorted by depth.
+      // Unexplored tiles are covered by one pre-rendered fog layer.
+      let fogged = false;
+      const lowDetail = cam.zoom < GROUND_LOD_ZOOM;
+      if (lowDetail) drawGroundLayer();
+      for (const tile of visibleTiles) {
+        if (!GAME.seen[tile.y * MAP_SIZE + tile.x]) { fogged = true; continue; }
+        if (!lowDetail && inView(ISO.tileToScreen(tile.x, tile.y))) drawTile(tile.x, tile.y, tile);
       }
       for (const key of GAME.roads) {
         const [x, y] = key.split(',').map(Number);
         if (inView(ISO.tileToScreen(x, y))) drawRoad(x, y);
       }
+      if (fogged) drawFogLayer();
 
       const items = [];
-      for (const tile of GAME.grid) {
+      for (const tile of visibleTiles) {
+        if (!GAME.seen[tile.y * MAP_SIZE + tile.x]) continue;
         if (tile.type === 'forest' && inView(ISO.tileToScreen(tile.x, tile.y), 40, 24, 60)) {
           items.push({ depth: tile.x + tile.y, draw: () => drawForest(tile.x, tile.y, tile) });
         } else if (tile.object && !GAME.occupancy.has(`${tile.x},${tile.y}`) && inView(ISO.tileToScreen(tile.x, tile.y), 40, 24, 60)) {
@@ -3688,10 +4315,31 @@
           // Gold outline around the inspected building's footprint (flat, so drawn before objects)
           poly('rgba(255,215,0,0.18)', uvRect(b.x - 0.5, b.y - 0.5, b.x + def.w - 0.5, b.y + def.h - 0.5), '#ffd700');
         }
-        items.push({ depth: d, draw: () => drawBuilding(b) });
+        if (GAME.moving === b.id) continue; // drawn at the cursor instead
+        items.push({ depth: d, draw: () => { drawBuilding(b); if (prodLevel(b) > 1) drawLevelStars(b); } });
+      }
+      // Rival colonies (red pennants)
+      for (const b of GAME.rival?.buildings || []) {
+        const def = DEFS[b.type];
+        if (!seenAt(b.x, b.y) || !inView(ISO.tileToScreen(b.x + (def.w - 1) / 2, b.y + (def.h - 1) / 2), 120, 80, 140)) continue;
+        if (sel?.kind === 'rival' && sel.id === b.id) {
+          poly('rgba(255,120,100,0.18)', uvRect(b.x - 0.5, b.y - 0.5, b.x + def.w - 0.5, b.y + def.h - 0.5), RIVAL_COLOR);
+        }
+        items.push({ depth: (b.x + def.w - 1) + (b.y + def.h - 1), draw: () => drawRivalBuilding(b) });
+      }
+      // Pirate fort
+      const PF = GAME.pirates;
+      if (PF?.fort && PF.fortHp > 0 && seenAt(PF.fort.x, PF.fort.y) && inView(P(PF.fort.x, PF.fort.y), 120, 80, 140)) {
+        items.push({ depth: PF.fort.x + PF.fort.y + 2, draw: () => drawPirateFort(PF) });
       }
       const T = GAME.trader;
-      if (T && inView(P(T.x, T.y), 60, 30, 60)) items.push({ depth: T.x + T.y, draw: () => drawShip(T, false) });
+      if (T && seenAt(T.x, T.y) && inView(P(T.x, T.y), 60, 30, 60)) items.push({ depth: T.x + T.y, draw: () => drawShip(T, false) });
+      const RS = GAME.rival?.ship;
+      if (RS && seenAt(RS.x, RS.y) && inView(P(RS.x, RS.y), 60, 30, 60)) items.push({ depth: RS.x + RS.y, draw: () => drawShip(RS, false) });
+      const raider = PF?.ship;
+      if (raider && seenAt(raider.x, raider.y) && inView(P(raider.x, raider.y), 60, 30, 60)) {
+        items.push({ depth: raider.x + raider.y, draw: () => drawShip(raider, false) });
+      }
       for (const s of GAME.ships) {
         if (inView(P(s.x, s.y), 60, 30, 60)) {
           items.push({ depth: s.x + s.y, draw: () => drawShip(s, sel?.kind === 'ship' && sel.id === s.id) });
@@ -3708,21 +4356,109 @@
 
       drawRouteOverlay();
       drawServiceOverlay();
+      drawCombat();
       for (const b of visibleBuildings) {
         if (b.fire) drawFire(b);
         else if (b.paused) drawStatusBubble(b, '⏸', '#6a6a6a');
+        else if (b.status === 'nocoins') drawStatusBubble(b, '💸', '#8a3a2a');
       }
 
       // Placement / tool preview
-      if (GAME.selectedBuilding && GAME.hoveredTile) {
+      if (GAME.moving && GAME.hoveredTile) {
+        const b = buildingById(GAME.moving);
+        if (b) drawMoveGhost(b, GAME.hoveredTile.tx, GAME.hoveredTile.ty);
+      } else if (GAME.selectedBuilding && GAME.hoveredTile) {
         if (GAME.selectedBuilding === 'road') drawRoadGhost();
         else if (GAME.selectedBuilding === 'canal') drawCanalGhost();
         else if (GAME.selectedBuilding === 'demolish') drawDemolishGhost();
         else drawGhostBuilding(GAME.hoveredTile.tx, GAME.hoveredTile.ty, DEFS[GAME.selectedBuilding]);
       }
+      if (GAME.shipOrder && GAME.hoveredTile) {
+        const { tx, ty } = GAME.hoveredTile, ok = isWater(tx, ty);
+        drawTileHighlight(tx, ty, ok ? 'rgba(120,200,255,0.4)' : 'rgba(220,80,80,0.35)', ok ? '#bfe6ff' : '#e05050');
+      }
 
       ctx.restore();
       if (GAME.storm > 0) drawStorm();
+    }
+
+    // Unexplored area: a cloud texture masked by the fog, pre-rendered at FOG_RES px per tile and drawn with one
+    // transformed drawImage per frame. The mask is rebuilt only when new tiles are revealed; the bilinear scaling
+    // of the tiny mask gives the soft edge.
+    const FOG_RES = 4;
+    const fogLayer = { canvas: null, clouds: null, mask: null, dirty: true, size: 0 };
+    function rebuildFogLayer() {
+      const N = MAP_SIZE, S = N * FOG_RES;
+      if (fogLayer.size !== N) {
+        fogLayer.size = N;
+        fogLayer.canvas = document.createElement('canvas');
+        fogLayer.canvas.width = fogLayer.canvas.height = S;
+        fogLayer.mask = document.createElement('canvas');
+        fogLayer.mask.width = fogLayer.mask.height = N;
+        // Static cloud texture: dark blue-grey with soft lighter billows
+        fogLayer.clouds = document.createElement('canvas');
+        fogLayer.clouds.width = fogLayer.clouds.height = S;
+        const g = fogLayer.clouds.getContext('2d'), img = g.createImageData(S, S), d = img.data;
+        for (let py = 0; py < S; py++) {
+          for (let px = 0; px < S; px++) {
+            const n = fbm(px / 9 + 300, py / 9 + 700), m = valueNoise(px / 3.5 + 50, py / 3.5 + 90);
+            const k = Math.max(0, n - 0.45) * 1.6 + m * 0.08;
+            const i = (py * S + px) * 4;
+            d[i] = 28 + k * 110; d[i + 1] = 42 + k * 115; d[i + 2] = 58 + k * 120; d[i + 3] = 255;
+          }
+        }
+        g.putImageData(img, 0, 0);
+      }
+      // Mask: unexplored tiles opaque, explored tiles on the border half-covered for a soft edge
+      const mg = fogLayer.mask.getContext('2d'), mi = mg.createImageData(N, N), md = mi.data;
+      for (let y = 0; y < N; y++) {
+        for (let x = 0; x < N; x++) {
+          let a = 0;
+          if (!GAME.seen[y * N + x]) a = 255;
+          else {
+            for (let dy = -1; dy <= 1 && !a; dy++) for (let dx = -1; dx <= 1 && !a; dx++) {
+              const nx = x + dx, ny = y + dy;
+              if (nx >= 0 && ny >= 0 && nx < N && ny < N && !GAME.seen[ny * N + nx]) a = 110;
+            }
+          }
+          md[(y * N + x) * 4 + 3] = a;
+        }
+      }
+      mg.putImageData(mi, 0, 0);
+      const fg = fogLayer.canvas.getContext('2d');
+      fg.globalCompositeOperation = 'copy';
+      fg.imageSmoothingEnabled = true;
+      fg.drawImage(fogLayer.mask, 0, 0, S, S);
+      fg.globalCompositeOperation = 'source-in';
+      fg.drawImage(fogLayer.clouds, 0, 0);
+      fg.globalCompositeOperation = 'source-over';
+      fogLayer.dirty = false;
+    }
+
+    function drawFogLayer() {
+      if (fogLayer.dirty || fogLayer.size !== MAP_SIZE) rebuildFogLayer();
+      const k = FOG_RES;
+      ctx.save();
+      // Pixel (px, py) of the layer covers tile (px / k - 0.5, py / k - 0.5)
+      ctx.transform(32 / k, 16 / k, -32 / k, 16 / k, 0, -16);
+      ctx.imageSmoothingEnabled = true;
+      ctx.drawImage(fogLayer.canvas, 0, 0);
+      ctx.restore();
+    }
+
+    // Gold stars over an upgraded production building
+    function drawLevelStars(b) {
+      const def = DEFS[b.type], n = prodLevel(b) - 1;
+      const p = P(b.x - 0.5 + def.w, b.y - 0.5, 40);
+      for (let i = 0; i < n; i++) {
+        const x = p.x - 6 + i * 12, y = p.y;
+        const pts = [];
+        for (let k = 0; k < 10; k++) {
+          const a = -Math.PI / 2 + k * Math.PI / 5, r = k % 2 ? 2.8 : 6.5;
+          pts.push({ x: x + Math.cos(a) * r, y: y + Math.sin(a) * r });
+        }
+        poly('#f0c83a', pts, '#7a5a10');
+      }
     }
 
     // ===== CAMERA =====
@@ -3790,6 +4526,8 @@
 
     function useToolAtHover() {
       if (GAME.routeDraw) { if (GAME.hoveredTile) handleRouteClick(GAME.hoveredTile.tx, GAME.hoveredTile.ty); return; }
+      if (GAME.moving) { if (GAME.hoveredTile) finishMove(GAME.hoveredTile.tx, GAME.hoveredTile.ty); return; }
+      if (GAME.shipOrder) { if (GAME.hoveredTile) handleShipOrderClick(GAME.hoveredTile.tx, GAME.hoveredTile.ty); return; }
       const tool = GAME.selectedBuilding;
       if (!tool) { selectAtHover(); return; } // no tool: clicking inspects buildings and ships
       if (!GAME.hoveredTile) return;
@@ -3853,6 +4591,8 @@
       canvas.style.cursor = '';
       if (wasClick && e.button === 0 && e.target === canvas) useToolAtHover();
       if (wasClick && e.button === 2 && GAME.routeDraw) undoRoutePoint();
+      if (wasClick && e.button === 2 && GAME.moving) cancelMove();
+      if (wasClick && e.button === 2 && GAME.shipOrder) cancelShipOrder();
     });
 
     canvas.addEventListener('contextmenu', (e) => e.preventDefault());
@@ -3879,6 +4619,8 @@
         // Esc closes the game menu, then drops the tool, then closes the info panel, then the build panel
         const gm = document.getElementById('game-menu');
         if (GAME.routeDraw) cancelRouteDraw();
+        else if (GAME.moving) cancelMove();
+        else if (GAME.shipOrder) cancelShipOrder();
         else if (!gm.hidden) gm.hidden = true;
         else if (GAME.selectedBuilding) selectTool(null);
         else if (GAME.selectedInfo) closeInfo();
@@ -3894,6 +4636,8 @@
       if (k === '+' || k === '=') zoomAt(1.2);
       if (k === '-') zoomAt(1 / 1.2);
       if (k === 'h') centerHome();
+      if (k === 'q' && GAME.phase === 'play' && e.target === document.body) pipette();
+      if (k === 'm' && e.target === document.body) toggleMinimap();
       if (k === 'backspace' && GAME.routeDraw) { e.preventDefault(); undoRoutePoint(); }
       // Developer log, hidden by default
       if (e.key === '`' || e.key === '§' || e.key === '½') {
@@ -3933,7 +4677,9 @@
     // ===== SHIPS =====
     const DIRS8 = [[1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [1, -1], [-1, 1], [-1, -1]];
     const isWater = (x, y) => tileAt(x, y)?.type === 'water';
-    const buildingById = (id) => GAME.buildings.find(b => b.id === id);
+    // Also finds the rival's buildings (their warehouses can be the end point of a trade route)
+    const buildingById = (id) => GAME.buildings.find(b => b.id === id) || GAME.rival?.buildings.find(b => b.id === id);
+    const isRivalId = (id) => !!GAME.rival?.buildings.some(b => b.id === id);
     const cargoTotal = (s) => RES_KEYS.reduce((sum, k) => sum + s.cargo[k], 0);
 
     // Tiny binary min-heap of [priority, value] pairs for Dijkstra
@@ -4012,8 +4758,10 @@
       const n = GAME.ships.filter(s => s.type === typeId).length + 1;
       const ship = { id: `s_${GAME.shipCounter}`, type: typeId, name: `${type.name} ${n}`, x: dx, y: dy, dir: [1, 0],
                      path: [], state: 'idle', cargo: emptyStock(), route: null, timer: 0, trips: 0 };
+      if (type.warship) ship.hp = type.hp;
       GAME.ships.push(ship);
       notify(`⛵ ${ship.name} er søsat!`);
+      sfx('horn');
       return ship;
     }
 
@@ -4102,6 +4850,9 @@
     }
 
     function arriveShip(ship) {
+      if (ship.state === 'autoExplore') { autoExplore(ship); return; }
+      if (ship.state === 'attacking') return; // fights the fort from here (see pirateTick)
+      if (ship.state === 'exploring' || ship.state === 'moving') { ship.state = 'idle'; return; }
       if (!shipRoute(ship)) { ship.state = 'idle'; return; }
       if (ship.state === 'toFrom') { ship.state = 'loading'; ship.timer = 2; }
       else if (ship.state === 'toTo') { ship.state = 'unloading'; ship.timer = 2; }
@@ -4109,6 +4860,7 @@
 
     // Unload everything the island has room for, then load the goods for the next leg
     function unloadShip(ship, isl) {
+      if (isl.owner === 'rival') { sellToRival(ship, isl); return; }
       for (const k of RES_KEYS) {
         const put = Math.min(ship.cargo[k], Math.max(0, isl.cap - isl.resources[k]));
         isl.resources[k] += put;
@@ -4118,6 +4870,7 @@
 
     // keep: minimum stock per good that must stay on the island
     function loadShip(ship, isl, goods, keep = {}) {
+      if (isl.owner === 'rival') { buyFromRival(ship, isl, goods); return; }
       let free = SHIP_TYPES[ship.type].cargo - cargoTotal(ship);
       const spare = (k) => isl.resources[k] - (keep[k] || 0);
       // Share the hold between the chosen goods; a second pass tops up with whatever is left
@@ -4140,13 +4893,11 @@
       if (!from || !to) { stopRoute(ship); return; }
       if (ship.state === 'loading') {
         const isl = islandOfBuilding(from);
-        pirateCheck(ship, r);
         unloadShip(ship, isl);          // return cargo from the last trip
         loadShip(ship, isl, r.res, r.keepRes);
         sailTo(ship, to, 'toTo', r.waypoints);
       } else if (ship.state === 'unloading') {
         const isl = islandOfBuilding(to);
-        pirateCheck(ship, r);
         unloadShip(ship, isl);
         loadShip(ship, isl, r.back, r.keepBack);
         ship.trips++;
@@ -4188,8 +4939,74 @@
 
     const SHIP_STATE_TEXT = {
       idle: 'Ligger stille', toFrom: 'Sejler til afhentning', loading: 'Laster varer',
-      toTo: 'Sejler med last', unloading: 'Losser varer'
+      toTo: 'Sejler med last', unloading: 'Losser varer', exploring: 'Sejler på opdagelse',
+      autoExplore: 'Udforsker havet', moving: 'Sejler', attacking: 'Angriber piratfortet'
     };
+
+    // ----- Exploring and direct orders -----
+    // Sends a ship (off its route) to a water tile
+    function sendShipTo(ship, tx, ty, state = 'moving') {
+      const res = waterPath([[Math.round(ship.x), Math.round(ship.y)]], [[tx, ty]]);
+      if (!res) return `${ship.name} kan ikke sejle derhen`;
+      ship.routeId = null;
+      ship.timer = 0;
+      ship.path = res.path;
+      ship.state = state;
+      if (!ship.path.length) arriveShip(ship);
+      return null;
+    }
+
+    // Sails to the nearest unexplored water (breadth-first over the sea); stops when the whole sea is known
+    function autoExplore(ship) {
+      const sx = Math.round(ship.x), sy = Math.round(ship.y), N = MAP_SIZE * MAP_SIZE;
+      const visited = new Uint8Array(N), q = [sy * MAP_SIZE + sx];
+      visited[q[0]] = 1;
+      let target = null;
+      for (let i = 0; i < q.length && !target; i++) {
+        const x = q[i] % MAP_SIZE, y = Math.floor(q[i] / MAP_SIZE);
+        if (!GAME.seen[q[i]] && Math.hypot(x - sx, y - sy) > 3) { target = [x, y]; break; }
+        for (const [dx, dy] of DIRS4) {
+          const nx = x + dx, ny = y + dy, j = ny * MAP_SIZE + nx;
+          if (nx < 0 || ny < 0 || nx >= MAP_SIZE || ny >= MAP_SIZE || visited[j] || !isWater(nx, ny)) continue;
+          visited[j] = 1;
+          q.push(j);
+        }
+      }
+      if (!target) {
+        ship.state = 'idle';
+        ship.path = [];
+        notify(`🧭 ${ship.name}: der er ikke mere hav at udforske herfra`);
+        return;
+      }
+      // Sail a bit past the fog edge so each leg reveals a good chunk
+      const err = sendShipTo(ship, target[0], target[1], 'autoExplore');
+      if (err) { ship.state = 'idle'; notify(`⚠ ${err}`); }
+    }
+
+    function startShipOrder(ship, kind = 'move') {
+      selectTool(null);
+      GAME.shipOrder = { id: ship.id, kind };
+      const el = document.getElementById('banner');
+      el.hidden = false;
+      el.innerHTML = `⛵ ${esc(ship.name)}<small>Klik i vandet, hvor skibet skal sejle hen – også ud i det ukendte · Esc eller højreklik afbryder</small>`;
+    }
+
+    function cancelShipOrder() {
+      GAME.shipOrder = null;
+      document.getElementById('banner').hidden = true;
+    }
+
+    function handleShipOrderClick(tx, ty) {
+      const ship = GAME.ships.find(s => s.id === GAME.shipOrder.id);
+      if (!ship) { cancelShipOrder(); return; }
+      if (!isWater(tx, ty)) { showToast('Klik i vandet'); return; }
+      const err = sendShipTo(ship, tx, ty, isSeen(tx, ty) ? 'moving' : 'exploring');
+      if (err) { showToast(`❌ ${err}`); return; }
+      cancelShipOrder();
+      sfx('click');
+      saveGame();
+      openInfo('ship', ship.id);
+    }
 
     // Screen-space convex hull (monotone chain), used for ship hulls
     function convexHull(pts) {
@@ -4214,6 +5031,9 @@
         ctx.lineWidth = 2;
         ctx.beginPath(); ctx.ellipse(c.x, c.y, 26 * k, 13 * k, 0, 0, Math.PI * 2); ctx.stroke();
       }
+      // Sail and flag colours: trader red/gold, pirates black, rival white with a red flag, warships navy
+      const sailCol = s.trader ? '#c84a3a' : s.pirate ? '#2a2622' : s.rival ? '#efe6d0' : T.warship ? '#e6e0d0' : '#f4ecda';
+      const flagCol = s.trader ? '#e8c040' : s.pirate ? '#111' : s.rival ? RIVAL_COLOR : T.warship ? '#1a3a7a' : '#2a5aa8';
       // Wake while sailing
       if (s.path.length) {
         ctx.strokeStyle = 'rgba(240,250,255,0.5)';
@@ -4225,8 +5045,12 @@
       }
       const water = [pt(L, 0, 0), pt(L * 0.4, W, 0), pt(-L, W * 0.9, 0), pt(-L, -W * 0.9, 0), pt(L * 0.4, -W, 0)];
       const deck = [pt(L * 1.08, 0, deckZ + 1), pt(L * 0.4, W * 1.1, deckZ), pt(-L, W, deckZ + 1.5), pt(-L, -W, deckZ + 1.5), pt(L * 0.4, -W * 1.1, deckZ)];
-      poly('#5a3a1e', convexHull([...water, ...deck]));
+      poly(s.pirate ? '#3a2a1e' : T.warship ? '#3e3024' : '#5a3a1e', convexHull([...water, ...deck]));
       poly('#a87c4c', deck);
+      if (T.warship || s.pirate) {
+        // Gun ports along the visible side
+        for (let i = -2; i <= 2; i++) dot(pt(i * L * 0.3, W * 1.02, deckZ * 0.55), 1.3 * k, '#1a1410');
+      }
       // Cargo on deck
       if (cargoTotal(s) > 0) {
         const c = pt(-L * 0.35, 0, deckZ + 1);
@@ -4238,14 +5062,34 @@
         const a = m * L * 2;
         line(pt(a, 0, deckZ), pt(a, 0, deckZ + mastH), '#4a3018', 1.4 * k);
         const sw = W * 2.3, s0 = deckZ + mastH * 0.35, s1 = deckZ + mastH * 0.92, belly = 0.07 * k;
-        poly(s.trader ? '#c84a3a' : '#f4ecda', [pt(a, -sw, s1), pt(a, sw, s1), pt(a + belly, sw * 0.95, s0), pt(a + belly, -sw * 0.95, s0)], 'rgba(60,50,40,0.5)');
+        poly(sailCol, [pt(a, -sw, s1), pt(a, sw, s1), pt(a + belly, sw * 0.95, s0), pt(a + belly, -sw * 0.95, s0)], 'rgba(60,50,40,0.5)');
         if (s.trader) line(pt(a + belly * 0.5, 0, s0), pt(a, 0, s1), '#f4ecda', 2);
+        if (s.rival) {
+          const c = pt(a + belly * 0.5, 0, (s0 + s1) / 2);
+          line({ x: c.x - 4 * k, y: c.y }, { x: c.x + 4 * k, y: c.y }, RIVAL_COLOR, 2);
+          line({ x: c.x, y: c.y - 5 * k }, { x: c.x, y: c.y + 5 * k }, RIVAL_COLOR, 2);
+        }
+        if (s.pirate) {
+          const c = pt(a + belly * 0.5, 0, (s0 + s1) / 2);
+          dot(c, 2.6 * k, '#e8e0d0');
+          line({ x: c.x - 3 * k, y: c.y + 3 * k }, { x: c.x + 3 * k, y: c.y + 5 * k }, '#e8e0d0', 1.2);
+          line({ x: c.x + 3 * k, y: c.y + 3 * k }, { x: c.x - 3 * k, y: c.y + 5 * k }, '#e8e0d0', 1.2);
+        }
         if (i === 0) {
           const top = pt(a, 0, deckZ + mastH);
           const wave = Math.sin(animTime / 240 + s.x) * 1.5;
-          poly(s.trader ? '#e8c040' : '#2a5aa8', [top, { x: top.x + 8 * k, y: top.y + 1 + wave }, { x: top.x + 8 * k, y: top.y + 5 + wave }, { x: top.x, y: top.y + 5 }]);
+          poly(flagCol, [top, { x: top.x + 8 * k, y: top.y + 1 + wave }, { x: top.x + 8 * k, y: top.y + 5 + wave }, { x: top.x, y: top.y + 5 }]);
         }
       });
+      // Health bar for damaged warships and raiders
+      const maxHp = s.pirate ? PIRATE_HP : T.hp;
+      if (maxHp && s.hp < maxHp) {
+        const c = P(s.x, s.y, deckZ + mastH + 12);
+        ctx.fillStyle = 'rgba(0,0,0,0.6)';
+        ctx.fillRect(c.x - 15, c.y, 30, 4);
+        ctx.fillStyle = s.hp / maxHp > 0.5 ? '#6ac04a' : s.hp / maxHp > 0.25 ? '#e0b030' : '#e04a3a';
+        ctx.fillRect(c.x - 15, c.y, 30 * Math.max(0, s.hp) / maxHp, 4);
+      }
     }
 
     function shipAtScreen(px, py) {
@@ -4367,6 +5211,527 @@
       }
     }
 
+    // ===== PIRATES =====
+    // A fort on a small island sends out a raider that hunts your loaded ships. Warships on a route escort it
+    // (and fight the raider), watchtowers shoot at it near the coast, and a warship can attack the fort itself.
+    const combatFx = []; // short-lived cannon shots for drawing: { a, b, at }
+
+    // Water tile next to the pirate island, nearest the fort (where the raider docks)
+    function fortDock(PF) {
+      let best = null, bestD = Infinity;
+      for (let y = PF.fort.y - 8; y <= PF.fort.y + 8; y++) {
+        for (let x = PF.fort.x - 8; x <= PF.fort.x + 8; x++) {
+          const t = tileAt(x, y);
+          if (!t?.ocean) continue;
+          const d = Math.hypot(x - PF.fort.x, y - PF.fort.y);
+          if (d < bestD) { best = [x, y]; bestD = d; }
+        }
+      }
+      return best;
+    }
+
+    // Sets up the fort: on the generated islet, or (old saves, maps without one) on the smallest far island
+    function initPirates(spot) {
+      const start = [...GAME.islands.values()].find(i => i.start) || homeIsland();
+      let isl = spot && GAME.islands.get(tileAt(spot.x, spot.y)?.island);
+      if (!isl) {
+        const sx = start?.anchor[0] ?? MAP_SIZE / 2, sy = start?.anchor[1] ?? MAP_SIZE / 2;
+        isl = [...GAME.islands.values()]
+          .filter(i => i !== start && !i.warehouses && i.owner !== 'rival' && i.size >= 6 && i.size <= 200)
+          .sort((a, b) => (a.size - b.size) - (Math.hypot(b.anchor[0] - sx, b.anchor[1] - sy) - Math.hypot(a.anchor[0] - sx, a.anchor[1] - sy)) * 2)[0];
+      }
+      if (!isl) { GAME.pirates = null; return; }
+      const tiles = GAME.grid.filter(t => t.island === isl.id);
+      const cx = tiles.reduce((s, t) => s + t.x, 0) / tiles.length, cy = tiles.reduce((s, t) => s + t.y, 0) / tiles.length;
+      const c = tiles.sort((a, b) => Math.hypot(a.x - cx, a.y - cy) - Math.hypot(b.x - cx, b.y - cy))[0];
+      isl.pirate = true;
+      isl.name = 'Pirateøen';
+      GAME.pirates = { fort: { x: c.x, y: c.y }, fortHp: FORT_HP, ship: null, nextRaid: Math.round(PIRATE_RAID_EVERY * 1.5 / diff().pirates) };
+    }
+
+    const pirateActive = () => !!GAME.pirates && GAME.pirates.fortHp > 0 && GAME.events;
+    const shipDist = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
+    const activeTowers = () => GAME.buildings.filter(b => b.type === 'watchtower' && serviceActiveTower(b));
+    const serviceActiveTower = (b) => !b.paused && b.staffed !== false && !b.fire && !GAME.bankrupt;
+    const inTowerReach = (x, y) => activeTowers().some(t => Math.hypot(t.x - x, t.y - y) <= DEFS.watchtower.guard);
+
+    // A ship is safe from plunder next to a warship or inside a watchtower's reach
+    const isProtected = (s) => GAME.ships.some(w => isWarship(w) && w !== s && shipDist(w, s) <= WARSHIP_GUARD) || inTowerReach(s.x, s.y);
+
+    function shoot(a, b) {
+      combatFx.push({ a: { x: a.x, y: a.y }, b: { x: b.x, y: b.y }, at: animTime });
+      if (combatFx.length > 40) combatFx.shift();
+    }
+
+    function sinkShip(s, why) {
+      GAME.ships.splice(GAME.ships.indexOf(s), 1);
+      if (GAME.selectedInfo?.kind === 'ship' && GAME.selectedInfo.id === s.id) closeInfo();
+      notify(`💥 ${s.name} er sænket${why ? ` ${why}` : ''}!`);
+      sfx('cannon');
+    }
+
+    function pirateTick() {
+      const PF = GAME.pirates;
+      if (!PF || PF.fortHp <= 0) return;
+
+      // Warships attacking the fort trade fire with it
+      const attackers = GAME.ships.filter(s => isWarship(s) && s.state === 'attacking' && !s.path.length && shipDist(s, PF.fort) <= 8);
+      for (const w of attackers) {
+        PF.fortHp -= WARSHIP_DAMAGE;
+        w.hp -= FORT_DAMAGE;
+        shoot(w, PF.fort);
+        shoot(PF.fort, w);
+        if (Math.random() < 0.3) sfx('cannon');
+      }
+      for (const w of attackers) if (w.hp <= 0) sinkShip(w, 'af piratfortets kanoner');
+      if (PF.fortHp <= 0) {
+        PF.fortHp = 0;
+        PF.ship = null;
+        GAME.coins += FORT_REWARD;
+        const isl = GAME.islands.get(tileAt(PF.fort.x, PF.fort.y)?.island);
+        if (isl) { isl.pirate = false; isl.name = 'Frihavnen'; }
+        for (const w of GAME.ships.filter(s => s.state === 'attacking')) w.state = 'idle';
+        notify(`🏆 Piratfortet er ødelagt! Havene er sikre (+${FORT_REWARD} 🪙). Øen kan nu bebygges.`);
+        sfx('fanfare');
+        minimapDirty = true;
+        return;
+      }
+
+      if (!GAME.events) { PF.ship = null; return; }
+      const R = PF.ship;
+      if (!R) {
+        const prey = GAME.ships.filter(s => !isWarship(s) && s.routeId);
+        if (!prey.length || --PF.nextRaid > 0) return;
+        const dock = fortDock(PF);
+        if (!dock) return;
+        PF.ship = { pirate: true, type: 'kogge', name: 'Piratskibet', x: dock[0], y: dock[1], dir: [1, 0], path: [],
+                    hp: PIRATE_HP, state: 'hunting', target: null, retarget: 0, idle: 0 };
+        notify('🏴‍☠️ Et piratskib har forladt fortet og jager dine skibe!');
+        sfx('alarm');
+        return;
+      }
+
+      // Warships near the raider and watchtowers in reach shoot at it; it fires back at warships
+      for (const w of GAME.ships.filter(s => isWarship(s) && shipDist(s, R) <= WARSHIP_GUARD + 1)) {
+        R.hp -= WARSHIP_DAMAGE;
+        w.hp -= 3;
+        shoot(w, R);
+        shoot(R, w);
+        if (Math.random() < 0.4) sfx('cannon');
+        if (w.hp <= 0) sinkShip(w, 'af piraterne');
+      }
+      for (const t of activeTowers()) {
+        if (Math.hypot(t.x - R.x, t.y - R.y) <= DEFS.watchtower.guard) {
+          R.hp -= TOWER_DAMAGE;
+          shoot({ x: t.x, y: t.y }, R);
+        }
+      }
+      if (R.hp <= 0) {
+        PF.ship = null;
+        PF.nextRaid = Math.round(PIRATE_RAID_EVERY * 1.5 / diff().pirates);
+        GAME.coins += 200;
+        notify('⚔ Piratskibet er sænket! (+200 🪙)');
+        sfx('cannon');
+        return;
+      }
+      if (R.state === 'hunting' && R.hp < PIRATE_HP * 0.4) {
+        R.state = 'returning';
+        notify('🏴‍☠️ Piratskibet flygter tilbage til fortet', false);
+      }
+
+      if (R.state === 'hunting') {
+        let target = GAME.ships.find(s => s.id === R.target);
+        if (!target || cargoTotal(target) < 1 || --R.retarget <= 0) {
+          // Nearest loaded, unprotected cargo ship
+          const cands = GAME.ships.filter(s => !isWarship(s) && cargoTotal(s) >= 1 && !isProtected(s));
+          target = cands.sort((a, b) => shipDist(a, R) - shipDist(b, R))[0] || null;
+          R.target = target?.id || null;
+          R.retarget = 3;
+          if (target) {
+            const res = waterPath([[Math.round(R.x), Math.round(R.y)]], [[Math.round(target.x), Math.round(target.y)]]);
+            R.path = res ? res.path : [];
+          }
+        }
+        if (!target) {
+          if (++R.idle > 40) R.state = 'returning';
+          return;
+        }
+        R.idle = 0;
+        if (shipDist(target, R) <= 1.5) {
+          if (isProtected(target)) { R.target = null; return; }
+          let lost = 0;
+          for (const k of RES_KEYS) {
+            const t = Math.floor(target.cargo[k] * PLUNDER_SHARE);
+            target.cargo[k] -= t;
+            lost += t;
+          }
+          notify(`🏴‍☠️ Pirater plyndrede ${target.name} for ${lost} varer! Sæt en fregat på ruten eller byg vagttårne.`);
+          sfx('alarm');
+          R.state = 'returning';
+          R.path = [];
+        }
+      }
+      if (R.state === 'returning' && !R.path.length) {
+        const dock = fortDock(PF);
+        if (dock && Math.hypot(R.x - dock[0], R.y - dock[1]) < 1.5) {
+          PF.ship = null;
+          PF.nextRaid = Math.round(PIRATE_RAID_EVERY / diff().pirates);
+          return;
+        }
+        const res = dock && waterPath([[Math.round(R.x), Math.round(R.y)]], [dock]);
+        R.path = res ? res.path : [];
+        if (!res) PF.ship = null;
+      }
+    }
+
+    function updatePirates(dt) {
+      const R = GAME.pirates?.ship;
+      if (!R) return;
+      let move = PIRATE_SPEED * dt / 1000 * (GAME.storm > 0 ? 0.5 : 1);
+      while (move > 0 && R.path.length) {
+        const [tx, ty] = R.path[0], dx = tx - R.x, dy = ty - R.y, d = Math.hypot(dx, dy);
+        if (d > 0.001) R.dir = [dx / d, dy / d];
+        if (d <= move) { R.x = tx; R.y = ty; R.path.shift(); move -= d; }
+        else { R.x += dx / d * move; R.y += dy / d * move; move = 0; }
+      }
+    }
+
+    // Warships repair slowly while lying still near one of your warehouses
+    function repairShips() {
+      const ports = portWarehouses();
+      for (const s of GAME.ships) {
+        const max = SHIP_TYPES[s.type].hp;
+        if (!max || s.hp >= max || s.path.length) continue;
+        if (ports.some(b => Math.hypot(b.x + 0.5 - s.x, b.y + 0.5 - s.y) <= 4)) s.hp = Math.min(max, s.hp + REPAIR_RATE);
+      }
+    }
+
+    function attackFort(ship) {
+      const PF = GAME.pirates;
+      if (!PF || PF.fortHp <= 0) return 'Der er intet piratfort';
+      const dock = fortDock(PF);
+      const res = dock && waterPath([[Math.round(ship.x), Math.round(ship.y)]], [dock]);
+      if (!res) return `${ship.name} kan ikke sejle hen til fortet`;
+      ship.routeId = null;
+      ship.timer = 0;
+      ship.path = res.path;
+      ship.state = 'attacking';
+      notify(`⚔ ${ship.name} sejler ud for at angribe piratfortet`);
+      return null;
+    }
+
+    // Cannon shots: a bright line and a puff at the target, fading out
+    function drawCombat() {
+      for (let i = combatFx.length - 1; i >= 0; i--) {
+        const f = combatFx[i], age = (animTime - f.at) / 700;
+        if (age > 1 || age < 0) { combatFx.splice(i, 1); continue; }
+        const a = P(f.a.x, f.a.y, 10), b = P(f.b.x, f.b.y, 10);
+        const m = lerp(a, b, Math.min(1, age * 3));
+        line(a, m, `rgba(255,230,160,${(0.8 * (1 - age)).toFixed(2)})`, 1.5);
+        dot(b, 4 + age * 10, `rgba(90,85,80,${(0.5 * (1 - age)).toFixed(2)})`);
+        if (age < 0.25) dot(a, 3, 'rgba(255,200,80,0.9)');
+      }
+    }
+
+    // Wooden palisade fort with a watchtower, cannons and the black flag
+    function drawPirateFort(PF) {
+      const U = PF.fort.x - 1, V = PF.fort.y - 1;
+      const rnd = seeded(PF.fort.x * 31 + PF.fort.y * 17);
+      ground(U + 0.1, V + 0.1, 2.3, 2.3, '#8a7a55', rnd);
+      // Palisade
+      const stakes = (u0, v0, u1, v1) => {
+        const n = Math.round(Math.hypot(u1 - u0, v1 - v0) / 0.12);
+        for (let i = 0; i <= n; i++) {
+          const u = u0 + (u1 - u0) * i / n, v = v0 + (v1 - v0) * i / n;
+          const b = P(u, v, 0), t = P(u, v, 13);
+          line(b, t, '#5a3a1e', 3);
+          poly('#7a5230', [{ x: t.x - 1.5, y: t.y }, { x: t.x + 1.5, y: t.y }, { x: t.x, y: t.y - 3 }], null);
+        }
+      };
+      stakes(U + 0.2, V + 0.2, U + 2.3, V + 0.2);
+      stakes(U + 0.2, V + 0.2, U + 0.2, V + 2.3);
+      // Hut and tower
+      const w = walls(U + 0.6, V + 0.6, U + 1.4, V + 1.3, 0, 12, '#6a4a2a');
+      boards(w.L, 0.08); boards(w.R, 0.08);
+      roofV(U + 0.6, V + 0.6, U + 1.4, V + 1.3, 12, 10, '#4a3a2a', '#6a4a2a', { style: 'thatch' });
+      const t = walls(U + 1.55, V + 1.55, U + 1.95, V + 1.95, 0, 30, '#5a3a1e', '#7a5230');
+      boards(t.L, 0.08); boards(t.R, 0.08);
+      flag(U + 1.75, V + 1.75, 30, 18, '#111');
+      const fl = P(U + 1.75, V + 1.75, 48);
+      dot({ x: fl.x + 7, y: fl.y + 5.5 }, 2.2, '#e8e0d0');
+      stakes(U + 2.3, V + 0.2, U + 2.3, V + 2.3);
+      stakes(U + 0.2, V + 2.3, U + 2.3, V + 2.3);
+      // Cannons at the front
+      for (const [u, v] of [[U + 2.45, V + 1.0], [U + 1.0, V + 2.45]]) {
+        cylinder(u, v, 2, 0.07, 4, '#2a2622', '#3a3632');
+      }
+      // Fort health
+      const c = P(PF.fort.x, PF.fort.y, 70);
+      ctx.fillStyle = 'rgba(0,0,0,0.6)';
+      ctx.fillRect(c.x - 22, c.y, 44, 5);
+      ctx.fillStyle = '#e04a3a';
+      ctx.fillRect(c.x - 22, c.y, 44 * PF.fortHp / FORT_HP, 5);
+    }
+
+    // ===== RIVAL TRADING HOUSE =====
+    // Settles free islands over time (claiming them before you can), and trades: it buys the goods it lacks
+    // and sells its own island's produce. Its colonies can be bought out at a high price.
+    function rivalGoods(isl) {
+      const out = new Set(['fish']);
+      const byFert = { grain: ['grain', 'pork'], sheep: ['wool', 'cloth'], hops: ['hops', 'beer'], grapes: ['wine'] };
+      for (const f of isl.fertility) for (const k of byFert[f] || []) out.add(k);
+      if (isl.ore) out.add('tools');
+      if (isl.gold) out.add('jewelry');
+      return [...out];
+    }
+    const rivalIslands = () => [...GAME.islands.values()].filter(i => i.owner === 'rival');
+    const rivalSellPrice = (k) => Math.ceil(PRICES[k] * BUY_MARKUP * 0.9);
+    const rivalBuyPrice = (k) => Math.round(PRICES[k] * 1.15);
+
+    // Top-left tile of a free w×h spot on the island, satisfying `ok(x, y)`, nearest (cx, cy)
+    function findSpot(isl, w, h, cx, cy, ok = () => true, maxD = 99) {
+      const tiles = GAME.grid.filter(t => t.island === isl.id && Math.hypot(t.x - cx, t.y - cy) <= maxD)
+        .sort((a, b) => Math.hypot(a.x - cx, a.y - cy) - Math.hypot(b.x - cx, b.y - cy));
+      for (const t of tiles) {
+        let free = true;
+        for (let dy = 0; dy < h && free; dy++) {
+          for (let dx = 0; dx < w && free; dx++) {
+            const q = tileAt(t.x + dx, t.y + dy);
+            free = !!q && isLandType(q.type) && q.island === isl.id && !GAME.occupancy.has(`${q.x},${q.y}`);
+          }
+        }
+        if (free && ok(t.x, t.y)) return [t.x, t.y];
+      }
+      return null;
+    }
+
+    function addRivalBuilding(type, x, y) {
+      const R = GAME.rival, def = DEFS[type];
+      const b = { id: `rv_${++R.counter}`, type, x, y, level: def.house ? 1 + Math.floor(Math.random() * 2) : undefined };
+      R.buildings.push(b);
+      for (let dy = 0; dy < def.h; dy++) for (let dx = 0; dx < def.w; dx++) GAME.occupancy.set(`${x + dx},${y + dy}`, b.id);
+      return b;
+    }
+
+    // What the rival builds next on an island: mostly houses, plus farms that match the fertility
+    function rivalNextType(isl) {
+      const own = GAME.rival.buildings.filter(b => islandOfBuilding(b) === isl);
+      const has = (t) => own.some(b => b.type === t);
+      const wants = ['fisher'];
+      if (isl.fertility.includes('grain')) wants.push('grainfarm');
+      if (isl.fertility.includes('sheep')) wants.push('sheepfarm');
+      if (isl.fertility.includes('hops')) wants.push('hopfarm');
+      if (isl.fertility.includes('grapes')) wants.push('vineyard');
+      const missing = wants.find(t => !has(t));
+      if (missing && Math.random() < 0.6) return missing;
+      return Math.random() < 0.3 ? 'marketplace' : 'house';
+    }
+
+    function rivalGrow(isl, n = 1) {
+      const wh = GAME.rival.buildings.find(b => b.type === 'warehouse' && islandOfBuilding(b) === isl);
+      if (!wh) return;
+      for (let i = 0; i < n; i++) {
+        const type = rivalNextType(isl), def = DEFS[type];
+        const spot = findSpot(isl, def.w, def.h, wh.x, wh.y, (x, y) =>
+          !def.coastal || footprintNeighbors({ type, x, y }).some(([ax, ay]) => isWater(ax, ay)), 10);
+        if (spot) addRivalBuilding(type, spot[0], spot[1]);
+      }
+    }
+
+    // Founds a rival colony on the island. Returns false if there's no room for a harbour.
+    function rivalSettle(isl, size = 4) {
+      const tiles = GAME.grid.filter(t => t.island === isl.id);
+      const cx = tiles.reduce((s, t) => s + t.x, 0) / tiles.length, cy = tiles.reduce((s, t) => s + t.y, 0) / tiles.length;
+      const spot = findSpot(isl, 2, 2, cx, cy, (x, y) => footprintNeighbors({ type: 'warehouse', x, y }).some(([ax, ay]) => tileAt(ax, ay)?.ocean));
+      if (!spot) return false;
+      addRivalBuilding('warehouse', spot[0], spot[1]);
+      isl.owner = 'rival';
+      isl.resources = emptyStock();
+      for (const k of rivalGoods(isl)) isl.resources[k] = 20;
+      rivalGrow(isl, size);
+      minimapDirty = true;
+      return true;
+    }
+
+    // The rival's home: a big island far from yours
+    function initRival() {
+      GAME.rival = { buildings: [], counter: 0, next: diff().rivalEvery, growIn: 60, ship: null };
+      const start = [...GAME.islands.values()].find(i => i.start) || homeIsland();
+      const sx = start.anchor[0], sy = start.anchor[1];
+      const cands = [...GAME.islands.values()].filter(i => i !== start && !i.pirate && !i.warehouses && i.size >= 40)
+        .sort((a, b) => Math.hypot(b.anchor[0] - sx, b.anchor[1] - sy) - Math.hypot(a.anchor[0] - sx, a.anchor[1] - sy));
+      for (const isl of cands) {
+        if (rivalSettle(isl, 7)) { isl.name = 'Rødhavn'; break; }
+      }
+    }
+
+    function rivalTick() {
+      const R = GAME.rival;
+      if (!R) return;
+      const mine = rivalIslands();
+      // Production and slow consumption of goods bought from you
+      for (const isl of mine) {
+        const goods = rivalGoods(isl);
+        for (const k of RES_KEYS) {
+          if (goods.includes(k)) isl.resources[k] = Math.min(RIVAL_STOCK_MAX, isl.resources[k] + RIVAL_PRODUCE);
+          else isl.resources[k] = Math.max(0, isl.resources[k] - 0.15);
+        }
+      }
+      if (--R.growIn <= 0 && mine.length) {
+        R.growIn = 60;
+        const isl = mine[Math.floor(Math.random() * mine.length)];
+        if (R.buildings.filter(b => islandOfBuilding(b) === isl).length < 14) rivalGrow(isl, 1);
+      }
+      if (GAME.settings.rival && --R.next <= 0) {
+        R.next = diff().rivalEvery;
+        if (mine.length < diff().rivalMax) rivalExpand(mine);
+      }
+      rivalShipTick();
+    }
+
+    // Claims the free island nearest to the rival's existing colonies
+    // (never one of the two islands nearest your start island, which the early quests rely on)
+    function rivalExpand(mine) {
+      const start = [...GAME.islands.values()].find(i => i.start) || homeIsland();
+      const fromStart = (i) => Math.hypot(i.anchor[0] - start.anchor[0], i.anchor[1] - start.anchor[1]);
+      const reserved = new Set([...GAME.islands.values()].filter(i => !i.start && !i.pirate && i.size >= 12)
+        .sort((a, b) => fromStart(a) - fromStart(b)).slice(0, 2));
+      const free = [...GAME.islands.values()].filter(i => !i.owner && !i.pirate && !i.start && !i.home && !i.warehouses && i.size >= 20 && !reserved.has(i));
+      if (!free.length) return;
+      const d = (i) => mine.length ? Math.min(...mine.map(m => Math.hypot(m.anchor[0] - i.anchor[0], m.anchor[1] - i.anchor[1]))) : -fromStart(i);
+      free.sort((a, b) => d(a) - d(b));
+      for (const isl of free.slice(0, 3)) {
+        if (!rivalSettle(isl)) continue;
+        notify(isl.discovered ? `⚑ ${RIVAL_NAME} har grundlagt en koloni på ${isl.name}!` : `⚑ ${RIVAL_NAME} har grundlagt en ny koloni et sted på kortet`);
+        sfx('alarm');
+        return;
+      }
+    }
+
+    // Cosmetic merchant ship sailing between the rival's harbours
+    function rivalShipTick() {
+      const R = GAME.rival;
+      const ports = R.buildings.filter(b => b.type === 'warehouse' && dockTiles(b).length);
+      if (!ports.length) { R.ship = null; return; }
+      if (!R.ship) {
+        const d = dockTiles(ports[0])[0];
+        R.ship = { rival: true, type: 'kogge', name: RIVAL_NAME, x: d[0], y: d[1], dir: [1, 0], path: [], wait: 5, at: ports[0].id };
+      }
+      const S = R.ship;
+      if (S.path.length) return;
+      if (--S.wait > 0) return;
+      const others = ports.filter(p => p.id !== S.at);
+      const target = others.length ? others[Math.floor(Math.random() * others.length)] : null;
+      let res = null;
+      if (target) {
+        res = waterPath([[Math.round(S.x), Math.round(S.y)]], dockTiles(target));
+        S.at = target.id;
+      } else {
+        // Only one harbour: sail out to sea and back
+        const e = edgeTileNear(S.x, S.y);
+        const home = dockTiles(ports[0]);
+        const out = Math.hypot(S.x - home[0][0], S.y - home[0][1]) < 2;
+        res = out && e ? waterPath([[Math.round(S.x), Math.round(S.y)]], [[e.x, e.y]]) : waterPath([[Math.round(S.x), Math.round(S.y)]], home);
+      }
+      S.path = res ? res.path : [];
+      S.wait = 6;
+    }
+
+    function updateRivalShip(dt) {
+      const S = GAME.rival?.ship;
+      if (!S) return;
+      let move = 2.1 * dt / 1000 * (GAME.storm > 0 ? 0.5 : 1);
+      while (move > 0 && S.path.length) {
+        const [tx, ty] = S.path[0], dx = tx - S.x, dy = ty - S.y, d = Math.hypot(dx, dy);
+        if (d > 0.001) S.dir = [dx / d, dy / d];
+        if (d <= move) { S.x = tx; S.y = ty; S.path.shift(); move -= d; }
+        else { S.x += dx / d * move; S.y += dy / d * move; move = 0; }
+      }
+    }
+
+    // Your ship arrives at a rival harbour: the rival buys what it doesn't make itself
+    function sellToRival(ship, isl) {
+      const own = rivalGoods(isl);
+      let income = 0;
+      for (const k of RES_KEYS) {
+        if (own.includes(k) || ship.cargo[k] < 1) continue;
+        const q = Math.floor(Math.min(ship.cargo[k], Math.max(0, RIVAL_BUY_MAX - isl.resources[k])));
+        if (q <= 0) continue;
+        ship.cargo[k] -= q;
+        isl.resources[k] += q;
+        income += q * rivalBuyPrice(k);
+      }
+      if (income) {
+        GAME.coins += income;
+        notify(`⚑ ${RIVAL_NAME} købte varer af ${ship.name} for ${income} 🪙`, false);
+      }
+    }
+
+    // ... and you buy the chosen return goods from its stock
+    function buyFromRival(ship, isl, goods) {
+      let free = SHIP_TYPES[ship.type].cargo - cargoTotal(ship), spent = 0;
+      const wanted = goods.filter(k => rivalGoods(isl).includes(k) && isl.resources[k] >= 1);
+      for (const k of wanted) {
+        const share = Math.floor(free / wanted.length);
+        const q = Math.floor(Math.min(share, isl.resources[k], Math.max(0, GAME.coins - spent) / rivalSellPrice(k)));
+        if (q <= 0) continue;
+        isl.resources[k] -= q;
+        ship.cargo[k] += q;
+        spent += q * rivalSellPrice(k);
+      }
+      if (spent) {
+        GAME.coins -= spent;
+        notify(`⚑ ${ship.name} købte varer hos ${RIVAL_NAME} for ${spent} 🪙`, false);
+      }
+    }
+
+    const buyoutPrice = (isl) => RIVAL_BUYOUT_BASE + 300 * GAME.rival.buildings.filter(b => islandOfBuilding(b) === isl).length;
+
+    // Buying a rival colony: its buildings go, its harbour becomes your warehouse with its stock
+    function buyRivalIsland(isl) {
+      const price = buyoutPrice(isl);
+      if (GAME.coins < price) return `Kræver ${price} 🪙`;
+      GAME.coins -= price;
+      const R = GAME.rival;
+      const stock = isl.resources;
+      let keep = null;
+      for (const b of R.buildings.filter(b => islandOfBuilding(b) === isl)) {
+        const def = DEFS[b.type];
+        R.buildings.splice(R.buildings.indexOf(b), 1);
+        for (let dy = 0; dy < def.h; dy++) for (let dx = 0; dx < def.w; dx++) GAME.occupancy.delete(`${b.x + dx},${b.y + dy}`);
+        if (b.type === 'warehouse' && !keep) keep = b;
+      }
+      isl.owner = null;
+      isl.resources = emptyStock();
+      if (keep) {
+        // Same id, so trade routes to this harbour keep working
+        const wh = { id: keep.id, type: 'warehouse', x: keep.x, y: keep.y };
+        GAME.buildings.push(wh);
+        for (let dy = 0; dy < 2; dy++) for (let dx = 0; dx < 2; dx++) GAME.occupancy.set(`${wh.x + dx},${wh.y + dy}`, wh.id);
+        updateIslandStats();
+        for (const k of RES_KEYS) isl.resources[k] = Math.min(isl.cap, Math.floor(stock[k] || 0));
+        isl.supplied = true;
+        isl.discovered = true;
+        revealAroundBuilding(wh, true);
+      }
+      if (R.ship && R.ship.at === keep?.id) R.ship.at = null;
+      updateIslandStats();
+      recomputeConnectivity();
+      minimapDirty = true;
+      notify(`🤝 Du har købt ${isl.name} af ${RIVAL_NAME}!`);
+      sfx('coins');
+      saveGame();
+      return null;
+    }
+
+    // Rival buildings look like yours, with a red pennant on top
+    function drawRivalBuilding(b) {
+      drawBuilding(b);
+      const def = DEFS[b.type];
+      const h = b.type === 'warehouse' ? 52 : def.house ? 38 : 30;
+      flag(b.x - 0.5 + def.w * 0.3, b.y - 0.5 + def.h * 0.3, h, 12, RIVAL_COLOR);
+    }
+
     // ===== ROUTE DRAWING =====
     // Click a port warehouse to start, click water to add waypoints, click a warehouse on another island to finish.
     // Right-click or Backspace removes the last point, Esc cancels. Segments between points follow the water.
@@ -4387,8 +5752,8 @@
     function updateRouteBanner() {
       const d = GAME.routeDraw, el = document.getElementById('banner');
       el.hidden = false;
-      const step = !d.from ? '1. Klik på et lager ved havet, hvor ruten starter'
-        : `2. Klik i vandet for at sætte punkter (${d.points.length} sat) – klik på et lager på en anden ø for at afslutte`;
+      const step = !d.from ? '1. Klik på et af dine lagre ved havet, hvor ruten starter'
+        : `2. Klik i vandet for at sætte punkter (${d.points.length} sat) – klik på et lager på en anden ø (også ${RIVAL_NAME}s) for at afslutte`;
       el.innerHTML = `🗺️ Tegn handelsrute<small>${step}. Højreklik/Backspace fortryder · Esc afbryder</small>`;
     }
 
@@ -4403,7 +5768,7 @@
     function handleRouteClick(tx, ty) {
       const d = GAME.routeDraw, port = portAt(tx, ty);
       if (!d.from) {
-        if (!port) { showToast('Klik på et lager ved havet for at starte ruten'); return; }
+        if (!port || isRivalId(port.id)) { showToast('Klik på et af dine lagre ved havet for at starte ruten'); return; }
         d.from = port.id;
         updateRouteBanner();
         return;
@@ -4415,6 +5780,7 @@
         return;
       }
       if (!isWater(tx, ty)) { showToast('Klik i vandet for at sætte et punkt'); return; }
+      if (!isSeen(tx, ty)) { showToast('Farvandet er ikke udforsket endnu'); return; }
       const seg = waterPath(routeAnchor(d), [[tx, ty]]);
       if (!seg) { showToast('Det punkt kan ikke nås ad vandvejen'); return; }
       d.points.push([tx, ty]);
@@ -4575,29 +5941,40 @@
     // A short chain of goals that walks new players through the economy; each pays out coins.
     const countOf = (type) => GAME.buildings.filter(b => b.type === type).length;
     const linked = (type) => GAME.buildings.some(b => b.type === type && GAME.connected.has(b.id));
+    const foundIslands = () => [...GAME.islands.values()].filter(i => i.discovered && !i.start && !i.home && (i.size >= 12 || i.pirate)).length;
     const QUESTS = [
-      { text: 'Byg en fisker og forbind den med vej til lageret', done: () => linked('fisher'), reward: 100 },
-      { text: 'Byg 3 boliger tæt på lageret', progress: () => `${countOf('house')}/3`, done: () => countOf('house') >= 3, reward: 100 },
-      { text: 'Byg en skovhugger og et savværk med vej til lageret', done: () => linked('woodcutter') && linked('sawmill'), reward: 150 },
-      { text: 'Nå 20 indbyggere', progress: () => `${totalPopulation()}/20`, done: () => totalPopulation() >= 20, reward: 150 },
-      { text: 'Byg en markedsplads, så flere boliger får varer', done: () => countOf('marketplace') > 0, reward: 100 },
-      { text: 'Byg en stenhugger', done: () => linked('stonecutter'), reward: 100 },
-      { text: 'Skaf kød: byg en kornfarm og en svinefarm', done: () => linked('grainfarm') && linked('pigfarm'), reward: 150 },
-      { text: 'Byg en skibsbygger og søsæt en jolle', done: () => GAME.ships.length > 0, reward: 200 },
-      { text: 'Grundlæg et lager på en ø med får 🐑', done: () => [...GAME.islands.values()].some(i => !i.home && i.warehouses && i.fertility.includes('sheep')), reward: 200 },
-      { text: 'Tegn en handelsrute og sæt et skib på', done: () => GAME.ships.some(s => s.routeId), reward: 150 },
-      { text: 'Skaf tøj: byg en fårefarm og en væver', done: () => linked('sheepfarm') && linked('weaver'), reward: 200 },
-      { text: 'Byg et kapel til de kommende Borgere', done: () => countOf('chapel') > 0, reward: 150 },
-      { text: 'Opgrader en bolig til Borgere', done: () => GAME.tierReached >= 2, reward: 300 },
-      { text: 'Sæt handelsmanden i gang: vælg noget at sælge eller købe på et lager', done: () => [...GAME.islands.values()].some(hasTradeSettings), reward: 150 },
-      { text: 'Nå 80 indbyggere', progress: () => `${totalPopulation()}/80`, done: () => totalPopulation() >= 80, reward: 300 },
-      { text: 'Byg et bryggeri og en kro', done: () => linked('brewery') && countOf('tavern') > 0, reward: 300 },
-      { text: 'Lav mursten: byg en lergrav og et teglværk', done: () => linked('claypit') && linked('brickworks'), reward: 300 },
-      { text: 'Lav værktøj: jernmine, kulmile og smedje', done: () => linked('mine') && linked('charcoal') && linked('smithy'), reward: 400 },
-      { text: 'Opgrader en bolig til Købmænd', done: () => GAME.tierReached >= 3, reward: 500 },
-      { text: `Nå ${MONUMENT_POP} Købmænd`, progress: () => `${Math.floor(totalMerchants())}/${MONUMENT_POP}`, done: () => totalMerchants() >= MONUMENT_POP, reward: 1000 },
-      { text: 'Byg monumentet og vind spillet', done: () => countOf('monument') > 0, reward: 0 }
+      { id: 'fisher', text: 'Byg en fisker og forbind den med vej til lageret', done: () => linked('fisher'), reward: 100 },
+      { id: 'houses', text: 'Byg 3 boliger tæt på lageret', progress: () => `${countOf('house')}/3`, done: () => countOf('house') >= 3, reward: 100 },
+      { id: 'wood', text: 'Byg en skovhugger og et savværk med vej til lageret', done: () => linked('woodcutter') && linked('sawmill'), reward: 150 },
+      { id: 'pop20', text: 'Nå 20 indbyggere', progress: () => `${totalPopulation()}/20`, done: () => totalPopulation() >= 20, reward: 150 },
+      { id: 'market', text: 'Byg en markedsplads, så flere boliger får varer', done: () => countOf('marketplace') > 0, reward: 100 },
+      { id: 'stone', text: 'Byg en stenhugger', done: () => linked('stonecutter'), reward: 100 },
+      { id: 'meat', text: 'Skaf kød: byg en kornfarm og en svinefarm', done: () => linked('grainfarm') && linked('pigfarm'), reward: 150 },
+      { id: 'ship', text: 'Byg en skibsbygger og søsæt en jolle', done: () => GAME.ships.length > 0, reward: 200 },
+      { id: 'explore', text: 'Send skibet på opdagelse (🧭 på skibet) og find 3 nye øer', progress: () => `${Math.min(3, foundIslands())}/3`, done: () => foundIslands() >= 3, reward: 200 },
+      { id: 'sheep', text: 'Grundlæg et lager på en ø med får 🐑', done: () => [...GAME.islands.values()].some(i => !i.home && i.warehouses && i.fertility.includes('sheep')), reward: 200 },
+      { id: 'route', text: 'Tegn en handelsrute og sæt et skib på', done: () => GAME.ships.some(s => s.routeId), reward: 150 },
+      { id: 'cloth', text: 'Skaf tøj: byg en fårefarm og en væver', done: () => linked('sheepfarm') && linked('weaver'), reward: 200 },
+      { id: 'chapel', text: 'Byg et kapel til de kommende Borgere', done: () => countOf('chapel') > 0, reward: 150 },
+      { id: 'citizens', text: 'Opgrader en bolig til Borgere', done: () => GAME.tierReached >= 2, reward: 300 },
+      { id: 'trader', text: 'Sæt handelsmanden i gang: vælg noget at sælge eller købe på et lager', done: () => [...GAME.islands.values()].some(hasTradeSettings), reward: 150 },
+      { id: 'defence', text: 'Forsvar dig mod piraterne: byg en fregat eller et vagttårn', done: () => GAME.ships.some(isWarship) || countOf('watchtower') > 0, reward: 250 },
+      { id: 'pop80', text: 'Nå 80 indbyggere', progress: () => `${totalPopulation()}/80`, done: () => totalPopulation() >= 80, reward: 300 },
+      { id: 'brew', text: 'Byg et bryggeri og en kro', done: () => linked('brewery') && countOf('tavern') > 0, reward: 300 },
+      { id: 'bricks', text: 'Lav mursten: byg en lergrav og et teglværk', done: () => linked('claypit') && linked('brickworks'), reward: 300 },
+      { id: 'tools', text: 'Lav værktøj: jernmine, kulmile og smedje', done: () => linked('mine') && linked('charcoal') && linked('smithy'), reward: 400 },
+      { id: 'merchants', text: 'Opgrader en bolig til Købmænd', done: () => GAME.tierReached >= 3, reward: 500 },
+      { id: 'fort', text: 'Ødelæg piratfortet med fregatter', done: () => !GAME.pirates || GAME.pirates.fortHp <= 0, reward: 300 },
+      { id: 'theater', text: 'Byg et teater til de kommende Adelige', done: () => countOf('theater') > 0, reward: 400 },
+      { id: 'luxury', text: 'Lav vin og smykker: vinpresse og guldsmed', done: () => linked('winery') && linked('goldsmith'), reward: 600 },
+      { id: 'nobles', text: 'Opgrader en bolig til Adelige', done: () => GAME.tierReached >= 4, reward: 800 },
+      { id: 'nobles50', text: `Nå ${MONUMENT_POP} Adelige`, progress: () => `${Math.floor(totalNobles())}/${MONUMENT_POP}`, done: () => totalNobles() >= MONUMENT_POP, reward: 1500 },
+      { id: 'monument', text: 'Byg monumentet og vind spillet', done: () => countOf('monument') > 0, reward: 0 }
     ];
+    // Quest order in saves from before quest ids (version 3); ids that no longer exist map to the next one
+    const OLD_QUEST_IDS = ['fisher', 'houses', 'wood', 'pop20', 'market', 'stone', 'meat', 'ship', 'sheep', 'route', 'cloth',
+                           'chapel', 'citizens', 'trader', 'pop80', 'brew', 'bricks', 'tools', 'merchants', 'theater', 'monument'];
+    const questIndexOf = (id) => Math.max(0, QUESTS.findIndex(q => q.id === id));
 
     function checkQuests() {
       while (GAME.phase === 'play' && GAME.questIndex < QUESTS.length && QUESTS[GAME.questIndex].done()) {
@@ -4605,6 +5982,7 @@
         GAME.coins += q.reward;
         GAME.questIndex++;
         notify(`✅ Opgave fuldført: ${q.text} (+${q.reward} 🪙)`);
+        if (q.reward) sfx('coins');
       }
     }
 
@@ -4626,7 +6004,7 @@
       ok: '✅ Producerer', noroad: '⚠ Mangler vej til et lager', noinput: '⚠ Mangler råvarer',
       full: '⚠ Lageret er fuldt', idle: 'Ledig', building: '🔨 Bygger skib', noworkers: '⚠ Mangler arbejdere',
       planting: '🌱 Planter og plejer træer', noresource: '⚠ Intet tilbage at høste i nærheden',
-      paused: '⏸ På pause', fire: '🔥 Brænder!'
+      paused: '⏸ På pause', fire: '🔥 Brænder!', nocoins: '💸 Står stille – du er gået fallit'
     };
     const esc = (s) => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 
@@ -4646,7 +6024,9 @@
       if (s) { openInfo('ship', s.id); return; }
       const h = GAME.hoveredTile;
       const occ = h && GAME.occupancy.get(`${h.tx},${h.ty}`);
-      if (occ && occ !== 'road') openInfo('building', occ);
+      if (occ && occ !== 'road') openInfo(isRivalId(occ) ? 'rival' : 'building', occ);
+      else if (h && GAME.pirates?.fortHp > 0 && GAME.pirates.fort && isSeen(h.tx, h.ty) &&
+               Math.abs(h.tx - GAME.pirates.fort.x) <= 1 && Math.abs(h.ty - GAME.pirates.fort.y) <= 1) openInfo('pirates');
       else closeInfo();
     }
 
@@ -4670,6 +6050,8 @@
 
       if (sel.kind === 'routes') { renderRoutes(title, body); return; }
       if (sel.kind === 'islands') { renderIslands(title, body); return; }
+      if (sel.kind === 'rival') { renderRival(title, body, sel); return; }
+      if (sel.kind === 'pirates') { renderPirates(title, body); return; }
       if (sel.kind === 'route') { renderRoute(title, body, sel); return; }
 
       if (sel.kind === 'ship') {
@@ -4678,10 +6060,13 @@
         const T = SHIP_TYPES[s.type], r = shipRoute(s);
         const cargo = RES_KEYS.filter(k => s.cargo[k] > 0).map(k => `${RES_ICONS[k]} ${s.cargo[k]}`).join(' ') || 'Tom';
         const pick = sel.pickRoute ?? r?.id ?? GAME.routes[0]?.id ?? '';
-        title.textContent = `⛵ ${s.name}`;
+        const fortKnown = GAME.pirates?.fortHp > 0 && isSeen(GAME.pirates.fort.x, GAME.pirates.fort.y);
+        title.textContent = `${T.warship ? '⚔' : '⛵'} ${s.name}`;
         body.innerHTML = `
-          <div class="row"><span>Status</span><b>${SHIP_STATE_TEXT[s.state]}</b></div>
-          <div class="row"><span>Last</span><b>${cargo} <small>/ ${T.cargo}</small></b></div>
+          <div class="row"><span>Status</span><b>${SHIP_STATE_TEXT[s.state] || s.state}</b></div>
+          ${T.warship ? `<div class="row"><span>❤ Skrog</span><b>${Math.max(0, Math.round(s.hp))} / ${T.hp}</b></div>${bar(s.hp, T.hp)}
+            <p class="muted">Krigsskib: på en rute beskytter det skibene inden for ${WARSHIP_GUARD} felter mod pirater og skyder på piratskibet. Repareres, når det ligger stille ved et af dine lagre.</p>`
+            : `<div class="row"><span>Last</span><b>${cargo} <small>/ ${T.cargo}</small></b></div>`}
           <div class="row"><span>Rækkevidde</span><b>${T.range} felter</b></div>
           <div class="row"><span>Drift</span><b>−${rate(T.upkeep)} 🪙/s</b></div>
           <div class="row"><span>Ture</span><b>${s.trips}</b></div>
@@ -4694,7 +6079,23 @@
             ${r ? '<button data-act="stop" class="alt">■ Stop</button>' : ''}
           </div>
           <div class="btns"><button data-act="draw">✏️ Tegn ny rute til skibet</button></div>
+          <h4>Ordrer</h4>
+          <div class="btns"><button data-act="explore">🧭 Udforsk automatisk</button><button data-act="goto" class="alt">📍 Sejl til…</button></div>
+          ${T.warship && fortKnown ? '<div class="btns"><button data-act="attack" class="alt">⚔ Angrib piratfortet</button></div>' : ''}
           ${sel.error ? `<p class="err">${esc(sel.error)}</p>` : ''}`;
+        body.querySelector('[data-act="explore"]').addEventListener('click', () => {
+          stopRoute(s);
+          s.state = 'autoExplore';
+          autoExplore(s);
+          saveGame();
+          renderInfo();
+        });
+        body.querySelector('[data-act="goto"]').addEventListener('click', () => startShipOrder(s));
+        body.querySelector('[data-act="attack"]')?.addEventListener('click', () => {
+          sel.error = attackFort(s) || '';
+          saveGame();
+          renderInfo();
+        });
         body.querySelector('[data-f="route"]')?.addEventListener('change', (e) => { sel.pickRoute = e.target.value; e.target.blur(); });
         body.querySelector('[data-act="assign"]')?.addEventListener('click', () => {
           sel.error = assignShip(s, sel.pickRoute ?? pick) || '';
@@ -4715,7 +6116,9 @@
       if (b.type === 'warehouse') {
         const need = EXTRA_WAREHOUSE_POP * isl.warehouses;
         const shipsHere = GAME.ships.filter(s => { const r = shipRoute(s); return r && [r.from, r.to].some(id => islandOfBuilding(buildingById(id)) === isl); });
-        const needs = ['food', 'meat', 'cloth', 'beer'].filter(n => n === 'food' || byL[2] + byL[3] > 0 || (n === 'beer' && byL[3] > 0));
+        const needs = Object.keys(NEED_INFO).filter(n => byL.some((p, L) => L >= NEED_FROM[n] && p > 0.5) || n === 'food');
+        const mood = Math.round(isl.mood ?? MOOD_START);
+        const factors = moodFactors(isl, byL);
         const allow = isl.allowUpgrade !== false;
         const T = GAME.trader;
         const traderTxt = T && T.target === b.id && T.state === 'trading' ? 'er her nu'
@@ -4729,7 +6132,13 @@
             <div class="res"><span>${RES_ICONS[k]} ${RESOURCES[k].name}</span><b>${Math.floor(isl.resources[k])} / ${isl.cap}</b>${bar(isl.resources[k], isl.cap)}</div>`).join('')}
           </div>
           <div class="row"><span>👥 Beboere</span><b>${isl.pop} / ${isl.popCap}</b></div>
-          <div class="row"><span>Fordeling</span><b>${[1, 2, 3].filter(L => byL[L] > 0.5).map(L => `${tierName(L)} ${Math.round(byL[L])}`).join(' · ') || '–'}</b></div>
+          <div class="row"><span>Fordeling</span><b>${HOUSE_LEVELS.map((_, L) => L).filter(L => L && byL[L] > 0.5).map(L => `${tierName(L)} ${Math.round(byL[L])}`).join(' · ') || '–'}</b></div>
+          <div class="row"><span>${moodIcon(mood)} Tilfredshed</span><b class="${mood < 30 ? 'err' : ''}">${mood}%</b></div>
+          ${bar(mood, 100)}
+          <p class="muted">${factors.map(([k, v]) => `${esc(k)} ${v > 0 ? '+' : ''}${v}`).join(' · ')}</p>
+          <p class="muted">Under 45%: langsommere tilflytning og ingen opgraderinger (under 50%). Under 30%: beboerne flytter. Over 70%: bonus til skatten.</p>
+          <div class="btns"><span>🪙 Skat</span><span class="seg">${Object.entries(TAX_LEVELS).map(([k, t]) =>
+            `<button data-tax="${k}" class="${(isl.tax || 'normal') === k ? '' : 'alt'}" title="${Math.round(t.mult * 100)}% skat · tilfredshed ${t.mood >= 0 ? '+' : ''}${t.mood}">${t.name}</button>`).join('')}</span></div>
           <div class="row"><span>👷 Ledige arbejdere</span><b>${isl.workersFree ?? isl.pop}</b></div>
           <div class="row"><span>Behov</span><b>${needs.map(n => needIcon(isl, n)).join('<br>')}</b></div>
           ${isl.hunger ? '<p class="err">Beboerne sulter! Byg fiskere eller farme.</p>' : ''}
@@ -4745,12 +6154,20 @@
               <td><input type="number" min="0" data-trade="buy" data-res="${k}" value="${num(isl.trade?.[k]?.buy)}" placeholder="–"></td></tr>`).join('')}
             </table>
             ${isl.lastTrade ? `<p class="muted">Seneste handel: +${isl.lastTrade.income} / −${isl.lastTrade.spent} 🪙</p>` : ''}`
-          : '<p class="muted">Kun lagre ved vandet kan handle med handelsmanden.</p>'}`;
+          : '<p class="muted">Kun lagre ved vandet kan handle med handelsmanden.</p>'}
+          ${moveCopyButtons(b)}`;
         body.querySelector('[data-act="upgrade"]').addEventListener('click', () => {
           isl.allowUpgrade = !allow;
           saveGame();
           renderInfo();
         });
+        body.querySelectorAll('[data-tax]').forEach(el => el.addEventListener('click', () => {
+          isl.tax = el.dataset.tax;
+          sfx('click');
+          saveGame();
+          renderInfo();
+        }));
+        bindMoveCopy(body, b);
         body.querySelectorAll('input[data-trade]').forEach(el => el.addEventListener('change', () => {
           const k = el.dataset.res, v = el.value === '' ? null : Math.max(0, Math.floor(Number(el.value)));
           isl.trade = isl.trade || {};
@@ -4766,7 +6183,7 @@
         const status = b.paused ? STATUS_TEXT.paused : !GAME.connected.has(b.id) ? STATUS_TEXT.noroad : !b.staffed ? STATUS_TEXT.noworkers : q ? `Bygger ${SHIP_TYPES[q.type].name}` : 'Klar';
         body.innerHTML = `
           <div class="row"><span>Status</span><b>${status}</b></div>
-          <div class="row"><span>👷 Arbejdere</span><b>${def.workers} ${b.staffed ? '✅' : '❌'}</b></div>
+          <div class="row"><span>👷 Arbejdere</span><b>${workersOf(b)} ${b.staffed ? '✅' : '❌'}</b></div>
           ${q ? bar(q.progress, SHIP_TYPES[q.type].buildTime) : ''}
           ${pauseButton(b)}
           <h4>Byg skib</h4>
@@ -4774,14 +6191,16 @@
             const locked = GAME.tierReached < T.tier, afford = hasCost(isl.resources, T.cost);
             return `<div class="ship-card ${locked ? 'locked' : ''}">
               <div><b>${T.name}</b> <small>${locked ? `🔒 kræver ${tierName(T.tier)}` : `${T.buildTime} s`}</small></div>
-              <div class="muted">Last ${T.cargo} · rækkevidde ${T.range} felter · drift ${rate(T.upkeep)} 🪙/s</div>
+              <div class="muted">${T.warship ? `Krigsskib · ${T.hp} i skrog · kæmper mod pirater` : `Last ${T.cargo}`} · rækkevidde ${T.range} felter · drift ${rate(T.upkeep)} 🪙/s</div>
               <div class="btns"><span class="${afford ? '' : 'err'}">${fmtCost(T.cost)}</span>
               <button data-ship="${T.id}" ${locked || q || !afford ? 'disabled' : ''}>Byg</button></div></div>`;
           }).join('')}
           ${sel.error ? `<p class="err">${esc(sel.error)}</p>` : ''}
           <h4>Dine skibe</h4>
-          ${GAME.ships.length ? GAME.ships.map(s => `<div class="row"><span>${esc(s.name)}</span><button class="link" data-pick="${s.id}">${SHIP_STATE_TEXT[s.state]} ›</button></div>`).join('') : '<p class="muted">Ingen skibe endnu.</p>'}`;
+          ${GAME.ships.length ? GAME.ships.map(s => `<div class="row"><span>${esc(s.name)}</span><button class="link" data-pick="${s.id}">${SHIP_STATE_TEXT[s.state] || s.state} ›</button></div>`).join('') : '<p class="muted">Ingen skibe endnu.</p>'}
+          ${moveCopyButtons(b)}`;
         bindPause(body, b);
+        bindMoveCopy(body, b);
         body.querySelectorAll('[data-ship]').forEach(el => el.addEventListener('click', () => {
           sel.error = startShipBuild(b, el.dataset.ship) || '';
           renderInfo();
@@ -4814,27 +6233,33 @@
             <div class="row"><span>Materialer</span><b>${fmtCost(lvl.upgrade)}</b></div>
             <div class="btns"><span>${b.lockLevel ? '🔒 Niveauet er låst' : 'Må opgradere'}</span><button data-act="lock" class="${b.lockLevel ? 'alt' : ''}">${b.lockLevel ? 'Lås op' : '🔒 Lås niveau'}</button></div>`
             : '<p class="muted">Højeste niveau.</p>'}
-          ${isl.allowUpgrade === false ? '<p class="muted">Opgradering er slået fra for hele øen (se lageret).</p>' : ''}`;
+          ${isl.allowUpgrade === false ? '<p class="muted">Opgradering er slået fra for hele øen (se lageret).</p>' : ''}
+          ${(isl.mood ?? MOOD_START) < 50 && next ? '<p class="muted">😟 Beboerne er for utilfredse til at opgradere (under 50%).</p>' : ''}
+          ${moveCopyButtons(b)}`;
         body.querySelector('[data-act="lock"]')?.addEventListener('click', () => {
           b.lockLevel = !b.lockLevel;
           saveGame();
           renderInfo();
         });
+        bindMoveCopy(body, b);
         return;
       }
 
       // Generic production building
-      title.textContent = def.name;
+      const lvl = prodLevel(b);
+      title.textContent = `${def.name}${def.produces && lvl > 1 ? ` ${'★'.repeat(lvl - 1)}` : ''}`;
       let details = '';
       if (def.produces) {
-        const ins = def.consumes ? Object.entries(def.consumes).map(([r, n]) => `${rate(n)} ${RES_ICONS[r]}`).join(' + ') + ' → ' : '';
+        const m = PROD_LEVELS[lvl].mult;
+        const ins = def.consumes ? Object.entries(def.consumes).map(([r, n]) => `${rate(n * m)} ${RES_ICONS[r]}`).join(' + ') + ' → ' : '';
         details = `<div class="row"><span>Status</span><b>${STATUS_TEXT[b.status] || STATUS_TEXT.idle}</b></div>
-                   <div class="row"><span>Produktion</span><b>${ins}${rate(def.rate ?? 1)} ${RES_ICONS[def.produces]} /s</b></div>`;
+                   <div class="row"><span>Produktion</span><b>${ins}${rate((def.rate ?? 1) * m)} ${RES_ICONS[def.produces]} /s</b></div>
+                   <div class="row"><span>Niveau</span><b>${lvl} / ${PROD_MAX_LEVEL}</b></div>`;
       }
       if (def.harvest) {
         const left = harvestLeft(b);
         details += `<div class="row"><span>Tilbage i området</span><b class="${left ? '' : 'err'}">${left} ${RES_ICONS[def.harvest.key]}</b></div>`;
-        if (b.status === 'noresource') details += `<p class="err">Ingen ${def.harvest.label} tilbage inden for ${def.harvest.radius} felter.${def.harvest.key === 'wood' ? ' Byg en skovfoged i nærheden.' : ' Sten kommer ikke igen – find nye klipper.'}</p>`;
+        if (b.status === 'noresource') details += `<p class="err">Ingen ${def.harvest.label} tilbage inden for ${harvestRadius(b)} felter.${def.harvest.key === 'wood' ? ' Byg en skovfoged i nærheden.' : ' Det kommer ikke igen – find nye klipper, eller flyt bygningen.'}</p>`;
       }
       if (b.type === 'forester') details += `<div class="row"><span>Status</span><b>${STATUS_TEXT[b.status] || STATUS_TEXT.idle}</b></div>`;
       if (def.service) {
@@ -4842,12 +6267,94 @@
         details += `<div class="row"><span>Status</span><b>${b.paused ? STATUS_TEXT.paused : b.fire ? STATUS_TEXT.fire : serviceActive(b) ? '✅ I drift' : STATUS_TEXT.noworkers}</b></div>
                     <div class="row"><span>Rækkevidde</span><b>${def.radius} felter · ${served} boliger</b></div>`;
       }
+      if (def.guard) {
+        details += `<div class="row"><span>Status</span><b>${b.paused ? STATUS_TEXT.paused : serviceActiveTower(b) ? '✅ På vagt' : GAME.bankrupt ? STATUS_TEXT.nocoins : STATUS_TEXT.noworkers}</b></div>
+                    <div class="row"><span>Rækkevidde</span><b>${def.guard} felter</b></div>`;
+      }
       if (b.fire) details += '<p class="err">🔥 Bygningen brænder!</p>';
-      if (def.workers) details += `<div class="row"><span>👷 Arbejdere</span><b>${def.workers} ${b.staffed ? '✅' : '❌'}</b></div>`;
-      if (def.upkeep) details += `<div class="row"><span>🪙 Drift</span><b>−${rate(def.upkeep)}/s</b></div>`;
+      if (def.workers) details += `<div class="row"><span>👷 Arbejdere</span><b>${workersOf(b)} ${b.staffed ? '✅' : '❌'}</b></div>`;
+      if (def.upkeep) details += `<div class="row"><span>🪙 Drift</span><b>−${rate(upkeepOf(b))}/s</b></div>`;
+      // In-place upgrade for production buildings
+      let upgrade = '';
+      if (def.produces && lvl < PROD_MAX_LEVEL) {
+        const L = PROD_LEVELS[lvl + 1], cost = L.cost(def);
+        const locked = GAME.tierReached < L.tier;
+        upgrade = `<h4>Opgrader til niveau ${lvl + 1}</h4>
+          <p class="muted">${Math.round(L.mult * 100)}% produktion (og forbrug), +1 arbejder, ${Math.round(L.upkeep * 100)}% drift${def.harvest ? ', +1 felts rækkevidde' : ''}.</p>
+          <div class="btns"><span class="${hasCost(isl.resources, cost) ? '' : 'err'}">${locked ? `🔒 kræver ${tierName(L.tier)}` : fmtCost(cost)}</span>
+          <button data-act="produp" ${locked || !hasCost(isl.resources, cost) ? 'disabled' : ''}>⬆ Opgrader</button></div>`;
+      }
       const pausable = def.workers || def.produces || def.service;
-      body.innerHTML = `<p class="muted">${esc(isl.name)}</p>${details}${pausable ? pauseButton(b) : ''}<p>${esc(def.desc)}</p>`;
+      body.innerHTML = `<p class="muted">${esc(isl.name)}</p>${details}${pausable ? pauseButton(b) : ''}${upgrade}<p>${esc(def.desc)}</p>${moveCopyButtons(b)}`;
       bindPause(body, b);
+      bindMoveCopy(body, b);
+      body.querySelector('[data-act="produp"]')?.addEventListener('click', () => {
+        const L = PROD_LEVELS[lvl + 1], cost = L.cost(def);
+        if (GAME.tierReached < L.tier || !hasCost(isl.resources, cost)) return;
+        payCost(isl.resources, cost);
+        b.level = lvl + 1;
+        notify(`⬆ ${def.name} på ${isl.name} er opgraderet til niveau ${b.level}`, false);
+        sfx('build');
+        saveGame();
+        renderInfo();
+      });
+    }
+
+    // "Move" and "build another" buttons shared by the building panels
+    const moveCopyButtons = (b) => b.type === 'monument' ? '' :
+      `<div class="btns"><button data-act="move" class="alt" title="Flyt bygningen gratis til et andet sted på øen">↔ Flyt</button><button data-act="copy" title="Byg en magen til (Q over en bygning)">📋 Byg magen til</button></div>`;
+    function bindMoveCopy(body, b) {
+      body.querySelector('[data-act="move"]')?.addEventListener('click', () => startMove(b));
+      body.querySelector('[data-act="copy"]')?.addEventListener('click', () => { closeInfo(); selectTool(b.type); });
+    }
+
+    function renderRival(title, body, sel) {
+      const b = GAME.rival?.buildings.find(x => x.id === sel.id);
+      if (!b) { closeInfo(); return; }
+      const isl = islandOfBuilding(b);
+      const def = DEFS[b.type];
+      title.textContent = `⚑ ${def.name} – ${isl.name}`;
+      const goods = rivalGoods(isl);
+      const price = buyoutPrice(isl);
+      body.innerHTML = `
+        <p class="muted">Denne ø tilhører ${RIVAL_NAME}. Du kan ikke bygge her, men du kan handle: tegn en rute til deres lager.</p>
+        <h4>De sælger (returlast)</h4>
+        ${goods.map(k => `<div class="row"><span>${RES_ICONS[k]} ${RESOURCES[k].name}</span><b>${Math.floor(isl.resources[k])} stk · ${rivalSellPrice(k)} 🪙</b></div>`).join('')}
+        <h4>De køber (udlast)</h4>
+        <p class="muted">Alt, de ikke selv laver, op til ${RIVAL_BUY_MAX} af hver: ${RES_KEYS.filter(k => !goods.includes(k)).map(k => `${RES_ICONS[k]} ${rivalBuyPrice(k)}`).join(' · ')} 🪙</p>
+        <h4>Køb øen</h4>
+        <p class="muted">Køb kolonien ud. Deres bygninger forsvinder, og lageret med varerne bliver dit.</p>
+        <div class="btns"><span class="${GAME.coins >= price ? '' : 'err'}">${price} 🪙</span><button data-act="buyout" ${GAME.coins >= price ? '' : 'disabled'}>🤝 Køb øen</button></div>
+        ${sel.error ? `<p class="err">${esc(sel.error)}</p>` : ''}`;
+      body.querySelector('[data-act="buyout"]').addEventListener('click', () => {
+        if (!confirm(`Købe ${isl.name} af ${RIVAL_NAME} for ${price} mønter?`)) return;
+        sel.error = buyRivalIsland(isl) || '';
+        if (!sel.error) {
+          const wh = GAME.buildings.find(x => x.type === 'warehouse' && islandOfBuilding(x) === isl);
+          if (wh) openInfo('building', wh.id); else closeInfo();
+        } else renderInfo();
+      });
+    }
+
+    function renderPirates(title, body) {
+      const PF = GAME.pirates;
+      if (!PF || PF.fortHp <= 0) { closeInfo(); return; }
+      title.textContent = '🏴‍☠️ Piratfortet';
+      const warships = GAME.ships.filter(isWarship);
+      body.innerHTML = `
+        <div class="row"><span>❤ Fort</span><b>${Math.round(PF.fortHp)} / ${FORT_HP}</b></div>${bar(PF.fortHp, FORT_HP)}
+        <div class="row"><span>Piratskib</span><b>${PF.ship ? (PF.ship.state === 'hunting' ? 'På jagt' : 'På vej hjem') : 'I havn'}</b></div>
+        <p>Herfra sejler piraterne ud og plyndrer dine lastede skibe. Beskyt dig med fregatter på ruterne og vagttårne ved kysten – eller send fregatter for at ødelægge fortet (+${FORT_REWARD} 🪙).</p>
+        <p class="muted">Fortet skyder igen, så send gerne to fregatter. Hver fregat gør ${WARSHIP_DAMAGE} skade pr. sekund og tager ${FORT_DAMAGE}.</p>
+        ${warships.length ? warships.map(w => `<div class="btns"><span>${esc(w.name)} (❤ ${Math.round(w.hp)})</span><button data-attack="${w.id}" class="alt">⚔ Angrib</button></div>`).join('')
+          : '<p class="muted">Du har ingen fregatter. Byg en på skibsbyggeren (kræver Borgere).</p>'}`;
+      body.querySelectorAll('[data-attack]').forEach(el => el.addEventListener('click', () => {
+        const w = GAME.ships.find(s => s.id === el.dataset.attack);
+        const err = w && attackFort(w);
+        if (err) showToast(`❌ ${err}`);
+        saveGame();
+        renderInfo();
+      }));
     }
 
     // Pause / resume button for any building with workers, production or a service
@@ -4872,20 +6379,28 @@
 
     function renderIslands(title, body) {
       title.textContent = '📍 Øer';
-      const list = [...GAME.islands.values()].filter(i => i.size >= 12).sort((a, b) => (b.warehouses > 0) - (a.warehouses > 0) || b.size - a.size);
-      body.innerHTML = list.map(isl => {
-        const fert = [...isl.fertility.map(f => FERTILITY[f].icon), isl.ore ? '⛏️' : ''].join('');
+      const all = [...GAME.islands.values()].filter(i => i.size >= 12 || i.pirate);
+      const list = all.filter(i => i.discovered).sort((a, b) => (b.warehouses > 0) - (a.warehouses > 0) || b.size - a.size);
+      const unknown = all.length - list.length;
+      const rivalCount = rivalIslands().length;
+      body.innerHTML = `${GAME.rival ? `<p class="muted">⚑ ${RIVAL_NAME} ejer ${rivalCount} ø${rivalCount === 1 ? '' : 'er'}.</p>` : ''}` + list.map(isl => {
+        const fert = [...isl.fertility.map(f => FERTILITY[f].icon), isl.ore ? '⛏️' : '', isl.gold ? '🥇' : ''].join('');
+        if (isl.pirate) return `<div class="row"><span>🏴‍☠️ ${esc(isl.name)}</span><button class="link" data-go="${isl.id}">Piraternes fort ›</button></div>`;
+        if (isl.owner === 'rival') return `<div class="row"><span>⚑ ${esc(isl.name)} ${fert}</span><button class="link" data-go="${isl.id}">${RIVAL_NAME} ›</button></div>`;
         if (!isl.warehouses) return `<div class="row"><span>${esc(isl.name)} ${fert}</span><button class="link" data-go="${isl.id}">Ikke grundlagt ›</button></div>`;
         const full = RES_KEYS.filter(k => isl.resources[k] >= isl.cap).length;
         return `<div class="ship-card">
           <div><b>${esc(isl.name)}</b> ${fert} <small>${isl.home ? '· hjemø' : ''}</small></div>
-          <div class="muted">👥 ${isl.pop}/${isl.popCap} · 👷 ledige ${isl.workersFree ?? 0} · 🍽️ ${isl.hunger ? '❌ sult' : '✅'}${full ? ` · 📦 ${full} fulde varer` : ''}</div>
+          <div class="muted">👥 ${isl.pop}/${isl.popCap} · ${moodIcon(isl.mood ?? MOOD_START)} ${Math.round(isl.mood ?? MOOD_START)}% · 🪙 ${TAX_LEVELS[isl.tax || 'normal'].name.toLowerCase()} skat · 👷 ledige ${isl.workersFree ?? 0} · 🍽️ ${isl.hunger ? '❌ sult' : '✅'}${full ? ` · 📦 ${full} fulde varer` : ''}</div>
           <div class="btns"><span></span><button data-go="${isl.id}">Vis</button></div></div>`;
-      }).join('');
+      }).join('') + (unknown ? `<p class="muted">🌫️ ${unknown} ø${unknown === 1 ? '' : 'er'} er endnu ikke opdaget. Send et skib på opdagelse.</p>` : '');
       body.querySelectorAll('[data-go]').forEach(el => el.addEventListener('click', () => {
         const isl = GAME.islands.get(Number(el.dataset.go));
         const wh = GAME.buildings.find(b => b.type === 'warehouse' && islandOfBuilding(b) === isl);
+        const rv = GAME.rival?.buildings.find(b => b.type === 'warehouse' && islandOfBuilding(b) === isl);
         if (wh) { centerOn(wh.x + 0.5, wh.y + 0.5); openInfo('building', wh.id); }
+        else if (rv) { centerOn(rv.x + 0.5, rv.y + 0.5); openInfo('rival', rv.id); }
+        else if (isl.pirate && GAME.pirates) { centerOn(GAME.pirates.fort.x, GAME.pirates.fort.y); openInfo('pirates'); }
         else centerOn(isl.anchor[0], isl.anchor[1]);
       }));
     }
@@ -4986,6 +6501,8 @@
         <div class="row"><span>Skat</span><b>+${rate(GAME.lastTax || 0)}/s</b></div>
         <div class="row"><span>Drift</span><b>−${rate(GAME.lastUpkeep || 0)}/s</b></div>
         <div class="row"><span>Balance</span><b class="${net < 0 ? 'err' : ''}">${net >= 0 ? '+' : ''}${rate(net)}/s</b></div>
+        ${GAME.bankrupt ? '<p class="err">💸 Du er gået fallit! Kun madproduktion og markeder kører. Sæt skatten op, sæt bygninger på pause eller sælg varer til handelsmanden.</p>' : ''}
+        <p class="muted">Skatten sættes pr. ø på lageret. Høj skat giver flere mønter, men gør beboerne utilfredse.</p>
         ${GAME.history.length > 1 ? `<h4>Udvikling (sidste ${Math.round(GAME.history.length * 10 / 60)} min.)</h4>
           <div class="row"><span>🪙 Mønter</span>${sparkline(GAME.history.map(s => s.coins))}</div>
           ${RES_KEYS.filter(k => GAME.history.some(s => s.stock[k] > 0)).map(k =>
@@ -5002,11 +6519,292 @@
 
     document.getElementById('info-close').addEventListener('click', closeInfo);
 
+    // ===== MINIMAP =====
+    // An iso-projected overview in the corner: terrain (under fog where unexplored), your buildings in gold,
+    // the rival's in red, ships as dots and the camera's view as a frame. Click or drag to move the camera.
+    const MINIMAP_KEY = 'anno-online-minimap';
+    const minimap = { cv: null, g: null, base: null, W: 220, H: 120, dragging: false };
+
+    function initMinimap() {
+      const cv = document.getElementById('minimap'), dpr = window.devicePixelRatio || 1;
+      minimap.cv = cv;
+      cv.width = minimap.W * dpr;
+      cv.height = minimap.H * dpr;
+      minimap.g = cv.getContext('2d');
+      minimap.g.scale(dpr, dpr);
+      let show = true;
+      try { show = localStorage.getItem(MINIMAP_KEY) !== '0'; } catch { /* default: shown */ }
+      cv.hidden = !show;
+      const opt = document.getElementById('opt-minimap');
+      opt.checked = show;
+      opt.addEventListener('change', () => setMinimapShown(opt.checked));
+      const jump = (e) => {
+        const r = cv.getBoundingClientRect(), f = minimapFrame();
+        const u = (e.clientX - r.left - f.ox) / f.s, w = (e.clientY - r.top - f.oy) / (f.s / 2);
+        centerOn((u + w) / 2, (w - u) / 2);
+        updateHover();
+      };
+      cv.addEventListener('mousedown', (e) => { e.stopPropagation(); minimap.dragging = true; jump(e); });
+      window.addEventListener('mousemove', (e) => { if (minimap.dragging) jump(e); });
+      window.addEventListener('mouseup', () => { minimap.dragging = false; });
+    }
+
+    function setMinimapShown(show) {
+      minimap.cv.hidden = !show;
+      document.getElementById('opt-minimap').checked = show;
+      try { localStorage.setItem(MINIMAP_KEY, show ? '1' : '0'); } catch { /* not remembered */ }
+      minimapDirty = true;
+    }
+    const toggleMinimap = () => setMinimapShown(minimap.cv.hidden);
+
+    // Scale and offset that fit the map diamond into the minimap
+    function minimapFrame() {
+      const N = MAP_SIZE, s = Math.min((minimap.W - 8) / (2 * N), (minimap.H - 8) / N);
+      return { s, ox: minimap.W / 2, oy: (minimap.H - N * s) / 2 };
+    }
+
+    // One pixel per tile, redrawn when something changed
+    function rebuildMinimapBase() {
+      const N = MAP_SIZE;
+      if (!minimap.base || minimap.base.width !== N) {
+        minimap.base = document.createElement('canvas');
+        minimap.base.width = minimap.base.height = N;
+      }
+      const g = minimap.base.getContext('2d'), img = g.createImageData(N, N), d = img.data;
+      const COL = { grass: [106, 164, 68], forest: [58, 110, 42], beach: [224, 204, 146], rock: [150, 144, 128] };
+      const occ = GAME.occupancy;
+      for (let i = 0; i < N * N; i++) {
+        const t = GAME.grid[i];
+        let c;
+        if (!GAME.seen[i]) c = [26, 40, 54];
+        else if (t.type === 'water') { const k = Math.min(t.depth || 4, 4); c = [70 - k * 10, 150 - k * 14, 200 - k * 8]; }
+        else c = COL[t.type] || COL.grass;
+        if (GAME.seen[i]) {
+          const o = occ.get(`${t.x},${t.y}`);
+          if (o === 'road') c = [200, 178, 122];
+          else if (o) c = isRivalId(o) ? [200, 60, 50] : [250, 214, 90];
+        }
+        d.set([c[0], c[1], c[2], 255], i * 4);
+      }
+      const PF = GAME.pirates;
+      if (PF?.fortHp > 0 && isSeen(PF.fort.x, PF.fort.y)) {
+        for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
+          const i = (PF.fort.y + dy) * N + PF.fort.x + dx;
+          if (i >= 0 && i < N * N) d.set([20, 16, 14, 255], i * 4);
+        }
+      }
+      g.putImageData(img, 0, 0);
+    }
+
+    function renderMinimap() {
+      if (!minimap.cv || minimap.cv.hidden || !GAME.grid.length) return;
+      if (minimapDirty) { rebuildMinimapBase(); minimapDirty = false; }
+      const g = minimap.g, f = minimapFrame();
+      g.clearRect(0, 0, minimap.W, minimap.H);
+      g.save();
+      g.transform(f.s, f.s / 2, -f.s, f.s / 2, f.ox, f.oy);
+      g.imageSmoothingEnabled = false;
+      g.drawImage(minimap.base, 0, 0);
+      g.restore();
+      const at = (x, y) => ({ x: f.ox + (x - y) * f.s, y: f.oy + (x + y) * f.s / 2 });
+      const dotAt = (x, y, col, r = 1.8) => {
+        const p = at(x + 0.5, y + 0.5);
+        g.fillStyle = col;
+        g.beginPath(); g.arc(p.x, p.y, r, 0, Math.PI * 2); g.fill();
+      };
+      for (const s of GAME.ships) dotAt(s.x, s.y, isWarship(s) ? '#8ab4ff' : '#ffffff');
+      const T = GAME.trader, R = GAME.pirates?.ship, RS = GAME.rival?.ship;
+      if (T && isSeen(Math.round(T.x), Math.round(T.y))) dotAt(T.x, T.y, '#f0c040');
+      if (RS && isSeen(Math.round(RS.x), Math.round(RS.y))) dotAt(RS.x, RS.y, '#ff6a5a');
+      if (R && isSeen(Math.round(R.x), Math.round(R.y))) dotAt(R.x, R.y, '#000', 2.4);
+      // Camera frame: the four screen corners in tile coordinates
+      const corners = [[0, 0], [canvas.width, 0], [canvas.width, canvas.height], [0, canvas.height]].map(([px, py]) => {
+        const w = screenToWorld(px, py);
+        const tx = (w.x / 32 + w.y / 16) / 2, ty = (w.y / 16 - w.x / 32) / 2;
+        return at(tx + 0.5, ty + 0.5);
+      });
+      g.strokeStyle = 'rgba(255,255,255,0.85)';
+      g.lineWidth = 1;
+      g.beginPath();
+      corners.forEach((p, i) => i ? g.lineTo(p.x, p.y) : g.moveTo(p.x, p.y));
+      g.closePath();
+      g.stroke();
+    }
+
+    // ===== SOUND =====
+    // All sound is synthesised with the Web Audio API: short effects, a soft sea ambience and a gentle lute-like tune.
+    const AUDIO_KEY = 'anno-online-audio';
+    const audio = { ctx: null, sfxGain: null, musicGain: null, master: null, sound: true, music: true, volume: 60, last: {}, musicTimer: null, nextNote: 0, step: 0 };
+    try { Object.assign(audio, JSON.parse(localStorage.getItem(AUDIO_KEY)) || {}); } catch { /* defaults */ }
+
+    function saveAudioPrefs() {
+      try { localStorage.setItem(AUDIO_KEY, JSON.stringify({ sound: audio.sound, music: audio.music, volume: audio.volume })); } catch { /* not remembered */ }
+    }
+
+    // Browsers only allow audio after a user gesture, so the context is created on the first click or key
+    function ensureAudio() {
+      if (audio.ctx) { if (audio.ctx.state === 'suspended' && !document.hidden) audio.ctx.resume(); return; }
+      const AC = window.AudioContext || window.webkitAudioContext;
+      if (!AC) return;
+      audio.ctx = new AC();
+      audio.master = audio.ctx.createGain();
+      audio.master.gain.value = audio.volume / 100;
+      audio.master.connect(audio.ctx.destination);
+      audio.sfxGain = audio.ctx.createGain();
+      audio.sfxGain.gain.value = audio.sound ? 1 : 0;
+      audio.sfxGain.connect(audio.master);
+      audio.musicGain = audio.ctx.createGain();
+      audio.musicGain.gain.value = audio.music ? 1 : 0;
+      audio.musicGain.connect(audio.master);
+      startAmbience();
+      startMusic();
+    }
+    window.addEventListener('pointerdown', ensureAudio);
+    window.addEventListener('keydown', ensureAudio);
+    document.addEventListener('visibilitychange', () => {
+      if (!audio.ctx) return;
+      if (document.hidden) audio.ctx.suspend(); else audio.ctx.resume();
+    });
+
+    function tone(freq, dur, { type = 'sine', vol = 0.2, when = 0, slide = null, dest = audio.sfxGain, attack = 0.005 } = {}) {
+      const c = audio.ctx, t0 = c.currentTime + when;
+      const o = c.createOscillator(), g = c.createGain();
+      o.type = type;
+      o.frequency.setValueAtTime(freq, t0);
+      if (slide) o.frequency.exponentialRampToValueAtTime(slide, t0 + dur);
+      g.gain.setValueAtTime(0.0001, t0);
+      g.gain.exponentialRampToValueAtTime(vol, t0 + attack);
+      g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+      o.connect(g).connect(dest);
+      o.start(t0);
+      o.stop(t0 + dur + 0.05);
+    }
+
+    let noiseBuf = null;
+    function noiseBuffer() {
+      if (noiseBuf) return noiseBuf;
+      const c = audio.ctx, len = c.sampleRate * 2;
+      noiseBuf = c.createBuffer(1, len, c.sampleRate);
+      const d = noiseBuf.getChannelData(0);
+      for (let i = 0; i < len; i++) d[i] = Math.random() * 2 - 1;
+      return noiseBuf;
+    }
+
+    function noise(dur, { vol = 0.3, freq = 800, when = 0, type = 'lowpass', dest = audio.sfxGain, attack = 0.005 } = {}) {
+      const c = audio.ctx, t0 = c.currentTime + when;
+      const src = c.createBufferSource(), f = c.createBiquadFilter(), g = c.createGain();
+      src.buffer = noiseBuffer();
+      f.type = type;
+      f.frequency.value = freq;
+      g.gain.setValueAtTime(0.0001, t0);
+      g.gain.exponentialRampToValueAtTime(vol, t0 + attack);
+      g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+      src.connect(f).connect(g).connect(dest);
+      src.start(t0, Math.random());
+      src.stop(t0 + dur + 0.05);
+    }
+
+    const SFX = {
+      click:    () => tone(700, 0.06, { type: 'square', vol: 0.04 }),
+      build:    () => { noise(0.18, { vol: 0.35, freq: 500 }); tone(150, 0.2, { type: 'triangle', vol: 0.25, slide: 70 }); noise(0.1, { vol: 0.2, freq: 1500, when: 0.12 }); },
+      demolish: () => { noise(0.5, { vol: 0.4, freq: 900, attack: 0.02 }); tone(100, 0.4, { type: 'triangle', vol: 0.25, slide: 45 }); },
+      coins:    () => [988, 1319, 1568].forEach((f, i) => tone(f, 0.18, { vol: 0.12, when: i * 0.07 })),
+      horn:     () => { tone(196, 0.9, { type: 'sawtooth', vol: 0.08, attack: 0.1 }); tone(247, 0.7, { type: 'sawtooth', vol: 0.06, attack: 0.1, when: 0.5 }); },
+      alarm:    () => [0, 0.25, 0.5].forEach(w => tone(880, 0.35, { type: 'triangle', vol: 0.12, when: w })),
+      cannon:   () => { noise(0.6, { vol: 0.5, freq: 260, attack: 0.002 }); tone(70, 0.4, { type: 'sine', vol: 0.4, slide: 30 }); },
+      discover: () => [523, 659, 784, 1047].forEach((f, i) => tone(f, 0.35, { type: 'triangle', vol: 0.12, when: i * 0.09 })),
+      fanfare:  () => [[523, 0], [659, 0.15], [784, 0.3], [1047, 0.45], [784, 0.75], [1047, 0.9]].forEach(([f, w]) => {
+        tone(f, 0.4, { type: 'triangle', vol: 0.15, when: w }); tone(f / 2, 0.4, { type: 'sine', vol: 0.08, when: w });
+      }),
+      thunder:  () => noise(2.5, { vol: 0.35, freq: 180, attack: 0.3 })
+    };
+
+    function sfx(name) {
+      if (!audio.ctx || !audio.sound || audio.ctx.state !== 'running' || !SFX[name]) return;
+      const now = performance.now();
+      if (now - (audio.last[name] || 0) < 120) return; // no machine-gun repeats
+      audio.last[name] = now;
+      SFX[name]();
+    }
+
+    // Sea ambience: filtered noise swelling like waves, and a gull now and then
+    function startAmbience() {
+      const c = audio.ctx;
+      const src = c.createBufferSource(), f = c.createBiquadFilter(), g = c.createGain(), lfo = c.createOscillator(), depth = c.createGain();
+      src.buffer = noiseBuffer();
+      src.loop = true;
+      f.type = 'lowpass';
+      f.frequency.value = 420;
+      g.gain.value = 0.05;
+      lfo.frequency.value = 0.12;
+      depth.gain.value = 0.035;
+      lfo.connect(depth).connect(g.gain);
+      src.connect(f).connect(g).connect(audio.musicGain);
+      src.start();
+      lfo.start();
+      const gull = () => {
+        if (audio.ctx.state === 'running' && audio.music) {
+          tone(1500, 0.22, { type: 'triangle', vol: 0.025, slide: 950, dest: audio.musicGain });
+          tone(1400, 0.25, { type: 'triangle', vol: 0.02, slide: 900, when: 0.3, dest: audio.musicGain });
+        }
+        setTimeout(gull, 9000 + Math.random() * 16000);
+      };
+      setTimeout(gull, 5000);
+    }
+
+    // Soft plucked tune over a slow chord progression (D major pentatonic), scheduled a little ahead
+    const CHORDS = [[146.8, [293.7, 370, 440]], [123.5, [246.9, 293.7, 370]], [98, [293.7, 392, 493.9]], [110, [277.2, 329.6, 440]]];
+    const MELODY = [587.3, 659.3, 740, 880, 987.8, 1174.7];
+    function pluck(freq, when, vol) {
+      tone(freq, 0.9, { type: 'triangle', vol, when, dest: audio.musicGain, attack: 0.01 });
+      tone(freq * 2, 0.4, { type: 'sine', vol: vol * 0.3, when, dest: audio.musicGain, attack: 0.01 });
+    }
+    function startMusic() {
+      const EIGHTH = 0.36;
+      audio.nextNote = audio.ctx.currentTime + 0.5;
+      audio.musicTimer = setInterval(() => {
+        const c = audio.ctx;
+        if (c.state !== 'running' || !audio.music) { audio.nextNote = c.currentTime + 0.2; return; }
+        while (audio.nextNote < c.currentTime + 0.6) {
+          const bar = Math.floor(audio.step / 8) % CHORDS.length, beat = audio.step % 8;
+          const [bass, chord] = CHORDS[bar];
+          if (beat === 0) tone(bass, 2.4, { type: 'sine', vol: 0.05, when: audio.nextNote - c.currentTime, dest: audio.musicGain, attack: 0.05 });
+          if (beat % 2 === 0) pluck(chord[(beat / 2) % 3], audio.nextNote - c.currentTime, 0.025);
+          if (Math.random() < 0.35) pluck(MELODY[Math.floor(Math.random() * MELODY.length)], audio.nextNote - c.currentTime, 0.02);
+          audio.nextNote += EIGHTH;
+          audio.step++;
+        }
+      }, 150);
+    }
+
+    function initAudioControls() {
+      const snd = document.getElementById('opt-sound'), mus = document.getElementById('opt-music'), vol = document.getElementById('opt-volume');
+      snd.checked = audio.sound;
+      mus.checked = audio.music;
+      vol.value = audio.volume;
+      snd.addEventListener('change', () => {
+        audio.sound = snd.checked;
+        if (audio.sfxGain) audio.sfxGain.gain.value = audio.sound ? 1 : 0;
+        saveAudioPrefs();
+        sfx('click');
+      });
+      mus.addEventListener('change', () => {
+        audio.music = mus.checked;
+        if (audio.musicGain) audio.musicGain.gain.value = audio.music ? 1 : 0;
+        saveAudioPrefs();
+      });
+      vol.addEventListener('input', () => {
+        audio.volume = Number(vol.value);
+        if (audio.master) audio.master.gain.value = audio.volume / 100;
+        saveAudioPrefs();
+      });
+    }
+
     // ===== SAVE / LOAD =====
     // The game autosaves to localStorage after every action, every 10 s and when the page closes.
     // The map is stored as one character per tile; decoration is regenerated from NOISE_SEED.
     const SAVE_KEY = 'anno-online-save';
-    const SAVE_VERSION = 3;
+    const SAVE_VERSION = 4;
     const AUTOSAVE_TICKS = 10;
     const TYPE_CODES = { grass: 'g', forest: 'f', water: 'w', beach: 'b', rock: 'r' };
     const CODE_TYPES = Object.fromEntries(Object.entries(TYPE_CODES).map(([t, c]) => [c, t]));
@@ -5015,15 +6813,18 @@
     let oldSaveIgnored = false;
     const pendingNotices = []; // messages from loading, shown once the UI is up
     let migratedFrom = null;
+    const validMapSize = (n) => Object.values(MAP_SIZES).some(s => s.size === n);
 
     function saveGame(manual = false) {
-      if (saveDisabled) return false;
+      if (saveDisabled || !GAME.grid.length) return false;
       const data = {
         v: SAVE_VERSION,
         mapSize: MAP_SIZE,
+        settings: GAME.settings,
         noiseSeed: NOISE_SEED,
         // Extra codes: c = canal, s = clearing with stumps, q = worked-out quarry
         terrain: GAME.grid.map(t => t.canal ? 'c' : t.stumps ? 's' : t.quarried ? 'q' : TYPE_CODES[t.type]).join(''),
+        seen: encodeSeen(),
         // Only tiles that differ from "full" are stored: [tile index, amount]
         wood: GAME.grid.flatMap((t, i) => t.type === 'forest' && t.wood < t.woodMax ? [[i, t.wood]] : []),
         stone: GAME.grid.flatMap((t, i) => t.type === 'rock' && t.stone < ROCK_STONE ? [[i, t.stone]] : []),
@@ -5032,19 +6833,25 @@
         // Islands are matched on load by their anchor tile, since ids come from re-labelling the map
         islands: [...GAME.islands.values()].map(i => ({ anchor: i.anchor, name: i.name, home: i.home, start: i.start,
                                                          resources: i.resources, pop: i.pop, fertility: i.fertility, supplied: i.supplied,
-                                                         ore: i.ore, trade: i.trade, allowUpgrade: i.allowUpgrade })),
+                                                         ore: i.ore, gold: i.gold, trade: i.trade, allowUpgrade: i.allowUpgrade,
+                                                         owner: i.owner, pirate: i.pirate, mood: i.mood, tax: i.tax })),
         ore: GAME.grid.flatMap((t, i) => t.ore > 0 ? [[i, t.ore]] : []),
+        gold: GAME.grid.flatMap((t, i) => t.gold > 0 ? [[i, t.gold]] : []),
         oreAssigned: true,
+        goldAssigned: true,
+        pirates: GAME.pirates && { fort: GAME.pirates.fort, fortHp: GAME.pirates.fortHp, nextRaid: GAME.pirates.nextRaid },
+        rival: GAME.rival && { buildings: GAME.rival.buildings, counter: GAME.rival.counter, next: GAME.rival.next, growIn: GAME.rival.growIn },
+        bankrupt: GAME.bankrupt,
         events: GAME.events,
         won: GAME.won,
         history: GAME.history,
-        ships: GAME.ships.map(({ id, type, name, x, y, dir, routeId, cargo, state, trips }) => ({ id, type, name, x, y, dir, routeId, cargo, state, trips })),
+        ships: GAME.ships.map(({ id, type, name, x, y, dir, routeId, cargo, state, trips, hp }) => ({ id, type, name, x, y, dir, routeId, cargo, state, trips, hp })),
         shipCounter: GAME.shipCounter,
         routes: GAME.routes.map(({ id, from, to, waypoints, res, back, keepRes, keepBack }) => ({ id, from, to, waypoints, res, back, keepRes, keepBack })),
         routeCounter: GAME.routeCounter,
         coins: GAME.coins,
         tierReached: GAME.tierReached,
-        questIndex: GAME.questIndex,
+        questId: QUESTS[GAME.questIndex]?.id || 'done',
         tick: GAME.tick,
         phase: GAME.phase,
         camera: GAME.camera,
@@ -5062,15 +6869,19 @@
       }
     }
 
-    function initIslands() {
+    function initIslands(pirateSpot) {
       GAME.islands = new Map();
       for (const c of labelIslands()) GAME.islands.set(c.id, newIsland(c));
       // The biggest island is the start island; it gets grain only (see assignFertility)
       const start = [...GAME.islands.values()].sort((a, b) => b.size - a.size)[0];
       start.start = true;
+      const pirateIsl = pirateSpot && GAME.islands.get(tileAt(pirateSpot.x, pirateSpot.y)?.island);
+      if (pirateIsl) pirateIsl.pirate = true;
       assignFertility(start.id);
       assignOre(start.id);
+      assignGold(start.id);
       updateIslandStats();
+      initPirates(pirateSpot);
     }
 
     // Version 2 saves (before house levels and coins): borgerhus -> level 2 house, pioneer huts are dropped
@@ -5096,12 +6907,16 @@
         return false;
       }
       if (data && data.v === 2) { data = migrateV2(data); migratedFrom = 2; }
+      else if (data && data.v === 3) migratedFrom = 3;
       else if (data && data.v !== SAVE_VERSION) oldSaveIgnored = true;
-      if (!data || (data.v !== SAVE_VERSION && migratedFrom !== 2) || data.mapSize !== MAP_SIZE ||
-          typeof data.terrain !== 'string' || data.terrain.length !== MAP_SIZE * MAP_SIZE) {
+      if (!data || (data.v !== SAVE_VERSION && !migratedFrom) || !validMapSize(data.mapSize) ||
+          typeof data.terrain !== 'string' || data.terrain.length !== data.mapSize * data.mapSize) {
         return false;
       }
 
+      MAP_SIZE = data.mapSize;
+      const sizeKey = Object.keys(MAP_SIZES).find(k => MAP_SIZES[k].size === MAP_SIZE);
+      GAME.settings = { ...DEFAULT_SETTINGS, size: sizeKey, ...(data.settings || {}) };
       NOISE_SEED = data.noiseSeed;
       GAME.grid = [...data.terrain].map((c, i) => ({
         x: i % MAP_SIZE, y: Math.floor(i / MAP_SIZE),
@@ -5112,6 +6927,9 @@
       for (const [i, amt] of data.wood || []) GAME.grid[i].wood = amt;
       for (const [i, amt] of data.stone || []) GAME.grid[i].stone = amt;
       for (const [i, amt] of data.ore || []) GAME.grid[i].ore = amt;
+      for (const [i, amt] of data.gold || []) GAME.grid[i].gold = amt;
+      // Saves from before the fog of war know the whole map
+      GAME.seen = data.seen ? decodeSeen(data.seen) : new Uint8Array(MAP_SIZE * MAP_SIZE).fill(1);
       GAME.buildings = data.buildings.filter(b => DEFS[b.type]);
       GAME.roads = new Set(data.roads);
       GAME.occupancy.clear();
@@ -5130,25 +6948,28 @@
         const isl = newIsland(c);
         if (saved) {
           Object.assign(isl, { name: saved.name, home: saved.home, start: saved.start, pop: saved.pop, fertility: saved.fertility || [], supplied: saved.supplied,
-                               ore: saved.ore, trade: saved.trade, allowUpgrade: saved.allowUpgrade });
+                               ore: saved.ore, gold: saved.gold, trade: saved.trade, allowUpgrade: saved.allowUpgrade,
+                               owner: saved.owner || null, pirate: saved.pirate, mood: saved.mood ?? MOOD_START, tax: saved.tax || 'normal' });
           Object.assign(isl.resources, saved.resources); // merge: resources added later keep 0
         }
         GAME.islands.set(c.id, isl);
       }
+      // Islands with any explored tile count as discovered
+      GAME.grid.forEach((t, i) => { if (GAME.seen[i] && t.island) GAME.islands.get(t.island).discovered = true; });
       if (data.needsFertility) {
         const home = homeIsland() || [...GAME.islands.values()].sort((a, b) => b.size - a.size)[0];
         home.start = true;
         assignFertility(home.id);
       }
-      // Saves from before iron ore get ore veins now
-      if (!data.oreAssigned) {
-        const start = [...GAME.islands.values()].find(i => i.start) || homeIsland() || [...GAME.islands.values()].sort((a, b) => b.size - a.size)[0];
-        assignOre(start.id);
-      }
+      const startIsl = [...GAME.islands.values()].find(i => i.start) || homeIsland() || [...GAME.islands.values()].sort((a, b) => b.size - a.size)[0];
+      // Saves from before iron ore / gold get their veins now
+      if (!data.oreAssigned) assignOre(startIsl.id);
+      if (!data.goldAssigned) assignGold(startIsl.id);
+      ensureGrapes();
       updateIslandStats();
       // Colonies founded before founding supplies existed get them delivered once
       for (const isl of GAME.islands.values()) {
-        if (!isl.home && isl.warehouses && !isl.supplied) {
+        if (!isl.home && isl.warehouses && !isl.supplied && isl.owner !== 'rival') {
           const got = deliverSupplies(homeIsland(), isl);
           pendingNotices.push(`⚓ ${isl.name} har fået en startforsyning: ${fmtCost(got)}`);
         }
@@ -5157,10 +6978,12 @@
       GAME.routes = (data.routes || []).map(r => ({ keepRes: {}, keepBack: {}, ...r, length: 0 }));
       GAME.events = data.events ?? true;
       GAME.won = !!data.won;
+      GAME.bankrupt = !!data.bankrupt;
       GAME.history = data.history || [];
       GAME.routeCounter = data.routeCounter || GAME.routes.length;
       GAME.ships = (data.ships || []).filter(s => SHIP_TYPES[s.type]).map(s => {
         const ship = { ...s, cargo: { ...emptyStock(), ...s.cargo }, path: [], timer: 0, routeId: s.routeId || null };
+        if (SHIP_TYPES[s.type].warship) ship.hp = s.hp ?? SHIP_TYPES[s.type].hp;
         if (s.route) {
           GAME.routeCounter++;
           const r = { id: `r_${GAME.routeCounter}`, from: s.route.from, to: s.route.to, waypoints: [], res: s.route.res || [], back: s.route.back || [], length: 0 };
@@ -5173,10 +6996,31 @@
       GAME.shipCounter = data.shipCounter || GAME.ships.length;
       GAME.coins = data.coins ?? START_COINS;
       GAME.tierReached = data.tierReached || 1;
-      GAME.questIndex = data.questIndex || 0;
+      GAME.questIndex = data.questId ? (data.questId === 'done' ? QUESTS.length : questIndexOf(data.questId))
+        : questIndexOf(OLD_QUEST_IDS[Math.min(data.questIndex || 0, OLD_QUEST_IDS.length - 1)] || 'fisher');
       Object.assign(GAME.camera, data.camera);
       GAME.tick = data.tick || 0;
       GAME.phase = data.phase === 'play' ? 'play' : 'setup';
+
+      // Pirates and the rival: restored, or (older saves) created now
+      if (data.pirates) {
+        GAME.pirates = { ...data.pirates, ship: null };
+        const pi = GAME.islands.get(tileAt(GAME.pirates.fort.x, GAME.pirates.fort.y)?.island);
+        if (pi && GAME.pirates.fortHp > 0) pi.pirate = true;
+      } else if (!data.v || data.v < 4) {
+        initPirates(null);
+        if (GAME.pirates) pendingNotices.push('🏴‍☠️ Pirater har slået sig ned på en ø. Byg fregatter og vagttårne for at beskytte dine skibe.');
+      }
+      if (data.rival) {
+        GAME.rival = { ...data.rival, ship: null };
+        for (const b of GAME.rival.buildings) {
+          const def = DEFS[b.type];
+          for (let dy = 0; dy < def.h; dy++) for (let dx = 0; dx < def.w; dx++) GAME.occupancy.set(`${b.x + dx},${b.y + dy}`, b.id);
+        }
+      } else if (GAME.phase === 'play' && GAME.settings.rival && migratedFrom) {
+        initRival();
+        pendingNotices.push(`⚑ ${RIVAL_NAME} er ankommet og konkurrerer nu om øerne.`);
+      }
       lastSavedAt = new Date(data.savedAt);
       return true;
     }
@@ -5184,6 +7028,8 @@
     // Ships resume their route after loading (paths aren't saved)
     function resumeShips() {
       for (const s of GAME.ships) {
+        if (s.state === 'autoExplore') { autoExplore(s); continue; }
+        if (s.state === 'attacking') { if (attackFort(s)) s.state = 'idle'; continue; }
         const r = shipRoute(s);
         const from = r && buildingById(r.from), to = r && buildingById(r.to);
         if (!from || !to) { stopRoute(s); continue; }
@@ -5194,10 +7040,70 @@
     }
 
     function newGame() {
-      if (!confirm('Starte et nyt spil? Dit nuværende spil bliver slettet.')) return;
+      openNewGameDialog(true);
+    }
+
+    // ----- New game dialog -----
+    const NEWGAME_KEY = 'anno-online-newgame';
+    let gameStarted = false;
+    const ngChoice = { ...DEFAULT_SETTINGS };
+
+    function openNewGameDialog(canCancel) {
+      const el = document.getElementById('newgame');
+      Object.assign(ngChoice, GAME.settings);
+      const opts = (key, table) => Object.entries(table).map(([k, o]) =>
+        `<button data-ng="${key}" data-val="${k}" class="${ngChoice[key] === k ? 'active' : ''}">${o.name}${o.size ? ` <small>${o.size}×${o.size}</small>` : ''}</button>`).join('');
+      el.querySelector('.ng-body').innerHTML = `
+        <div class="ng-row"><span>Kortstørrelse</span><div class="ng-opts">${opts('size', MAP_SIZES)}</div></div>
+        <div class="ng-row"><span>Antal øer</span><div class="ng-opts">${opts('islands', ISLAND_AMOUNTS)}</div></div>
+        <div class="ng-row"><span>Sværhedsgrad</span><div class="ng-opts">${opts('difficulty', DIFFICULTIES)}</div></div>
+        <p class="ng-hint" id="ng-hint"></p>
+        <label class="ng-check"><input type="checkbox" id="ng-rival" ${ngChoice.rival ? 'checked' : ''}> ⚑ ${RIVAL_NAME} konkurrerer om øerne</label>
+        <label class="ng-check"><input type="checkbox" id="ng-events" ${ngChoice.events ? 'checked' : ''}> 🔥 Begivenheder: brand, storm og pirater</label>`;
+      const hint = () => {
+        const d = DIFFICULTIES[ngChoice.difficulty];
+        document.getElementById('ng-hint').textContent =
+          `${d.coins} mønter at starte med · ${d.events < 1 ? 'færre' : d.events > 1 ? 'flere' : 'normale'} brande og storme · rivalen tager op til ${d.rivalMax} øer`;
+      };
+      hint();
+      el.querySelectorAll('[data-ng]').forEach(b => b.addEventListener('click', () => {
+        ngChoice[b.dataset.ng] = b.dataset.val;
+        el.querySelectorAll(`[data-ng="${b.dataset.ng}"]`).forEach(o => o.classList.toggle('active', o === b));
+        hint();
+      }));
+      document.getElementById('ng-cancel').hidden = !canCancel;
+      el.hidden = false;
+    }
+
+    document.getElementById('ng-cancel').addEventListener('click', () => { document.getElementById('newgame').hidden = true; });
+    document.getElementById('ng-start').addEventListener('click', () => {
+      ngChoice.rival = document.getElementById('ng-rival').checked;
+      ngChoice.events = document.getElementById('ng-events').checked;
+      document.getElementById('newgame').hidden = true;
+      sfx('click');
+      if (!gameStarted) { startNewGame({ ...ngChoice }); return; }
+      if (!confirm('Starte et nyt spil? Dit nuværende spil bliver slettet (gem det i en plads først, hvis du vil beholde det).')) return;
       saveDisabled = true;
-      try { localStorage.removeItem(SAVE_KEY); } catch { /* storage unavailable: nothing to delete */ }
+      try {
+        localStorage.removeItem(SAVE_KEY);
+        localStorage.setItem(NEWGAME_KEY, JSON.stringify(ngChoice));
+      } catch { /* storage unavailable: the reload just shows the dialog again */ }
       location.reload();
+    });
+
+    // Generates a fresh map from the chosen settings and enters the setup phase
+    function startNewGame(settings) {
+      GAME.settings = { ...DEFAULT_SETTINGS, ...settings };
+      MAP_SIZE = MAP_SIZES[GAME.settings.size]?.size || 128;
+      GAME.events = GAME.settings.events;
+      log('Generating terrain...', 'ok');
+      const gen = generateTerrain(MAP_SIZE, MAP_SIZE, ISLAND_AMOUNTS[GAME.settings.islands]?.f || 1);
+      GAME.grid = gen.grid;
+      initIslands(gen.pirate);
+      initFog();
+      GAME.coins = diff().coins;
+      centerOn(MAP_SIZE / 2, MAP_SIZE / 2);
+      finishInit(false);
     }
 
     let toastTimer = null;
@@ -5252,7 +7158,7 @@
     function loadSaveString(str) {
       try {
         const d = JSON.parse(str);
-        if (!d || !d.terrain || d.mapSize !== MAP_SIZE) throw new Error('ugyldig');
+        if (!d || !d.terrain || !validMapSize(d.mapSize)) throw new Error('ugyldig');
       } catch {
         showToast('⚠ Filen er ikke et gyldigt gemt spil');
         return;
@@ -5288,7 +7194,7 @@
       GAME.won = true;
       const merchants = Math.floor(totalMerchants());
       document.getElementById('victory-stats').innerHTML =
-        `👥 ${totalPopulation()} beboere · ${merchants} Købmænd<br>🏝️ ${[...GAME.islands.values()].filter(i => i.warehouses).length} øer · ⛵ ${GAME.ships.length} skibe<br>⏱️ ${Math.floor(GAME.tick / 60)} minutter`;
+        `👥 ${totalPopulation()} beboere · ${merchants} Købmænd · ${Math.floor(totalNobles())} Adelige<br>🏝️ ${[...GAME.islands.values()].filter(i => i.warehouses).length} øer · ⛵ ${GAME.ships.length} skibe<br>⏱️ ${Math.floor(GAME.tick / 60)} minutter`;
       document.getElementById('victory').hidden = false;
       saveGame();
     }
@@ -5355,8 +7261,10 @@
     }
 
     // The tile a harvester is working on: keeps chopping the same one until it's empty, then the nearest next
+    // Upgraded harvesters reach one tile further per level
+    const harvestRadius = (b) => DEFS[b.type].harvest.radius + prodLevel(b) - 1;
     function harvestTarget(b) {
-      const { terrain, key, radius } = DEFS[b.type].harvest;
+      const { terrain, key } = DEFS[b.type].harvest, radius = harvestRadius(b);
       const ok = (t) => t && t.type === terrain && t[key] > 0;
       let t = b.harvestAt && tileAt(b.harvestAt[0], b.harvestAt[1]);
       if (!ok(t)) {
@@ -5368,7 +7276,7 @@
 
     // Remaining harvestable amount around a harvester (for the info panel)
     const harvestLeft = (b) => {
-      const { terrain, key, radius } = DEFS[b.type].harvest;
+      const { terrain, key } = DEFS[b.type].harvest, radius = harvestRadius(b);
       return Math.round(tilesAround(b, radius).reduce((s, t) => s + (t.type === terrain ? t[key] || 0 : 0), 0));
     };
 
@@ -5413,7 +7321,8 @@
     }
 
     function naturalRegrowth() {
-      for (let i = 0; i < REGROW_SAMPLES; i++) {
+      const samples = Math.round(REGROW_SAMPLES * GAME.grid.length / REGROW_BASE_AREA);
+      for (let i = 0; i < samples; i++) {
         const t = GAME.grid[Math.floor(Math.random() * GAME.grid.length)];
         if (t.type === 'forest' && t.wood < t.woodMax && Math.random() < REGROW_CHANCE) t.wood++;
         else if (t.stumps && canPlantOn(t) && Math.random() < STUMP_SPROUT_CHANCE) plantTree(t);
@@ -5425,15 +7334,17 @@
 
     function rollEvents() {
       for (const b of GAME.buildings) {
-        if (!b.fire && burnable(b) && Math.random() < FIRE_CHANCE) {
+        if (!b.fire && burnable(b) && Math.random() < FIRE_CHANCE * diff().events) {
           b.fire = FIRE_TICKS;
           const isl = islandOfBuilding(b);
           notify(`🔥 Brand i ${DEFS[b.type].name.toLowerCase()} på ${isl.name}!${b.cov?.fire ? ' Brandstationen rykker ud.' : ' Byg en brandstation i nærheden.'}`);
+          sfx('alarm');
         }
       }
-      if (!GAME.storm && Math.random() < STORM_CHANCE) {
+      if (!GAME.storm && Math.random() < STORM_CHANCE * diff().events) {
         GAME.storm = STORM_TICKS;
         notify('🌧️ Storm! Skibene sejler langsommere et stykke tid');
+        sfx('thunder');
       }
     }
 
@@ -5465,24 +7376,34 @@
       recomputeConnectivity();
     }
 
-    // Pirates may plunder part of the cargo on long voyages
-    function pirateCheck(ship, r) {
-      if (!GAME.events || r.length <= PIRATE_MIN_LENGTH || cargoTotal(ship) < 1 || Math.random() >= PIRATE_CHANCE) return;
-      let lost = 0;
-      for (const k of RES_KEYS) {
-        const t = Math.floor(ship.cargo[k] * 0.3);
-        ship.cargo[k] -= t;
-        lost += t;
-      }
-      if (lost) notify(`🏴‍☠️ Pirater plyndrede ${ship.name} for ${lost} varer`);
-    }
-
     function recordHistory(islands) {
       const stock = emptyStock();
-      for (const isl of islands) for (const k of RES_KEYS) stock[k] += isl.resources[k];
+      for (const isl of islands) if (isl.owner !== 'rival') for (const k of RES_KEYS) stock[k] += isl.resources[k];
       GAME.history.push({ tick: GAME.tick, coins: Math.round(GAME.coins), stock: Object.fromEntries(RES_KEYS.map(k => [k, Math.round(stock[k])])) });
       if (GAME.history.length > 60) GAME.history.shift();
     }
+
+    // Happiness factors for an island: [label, points]. The island's mood drifts towards their sum (0-100).
+    function moodFactors(isl, byL) {
+      const f = [['Grundstemning', 55]];
+      const t = TAX_LEVELS[isl.tax || 'normal'];
+      if (t.mood) f.push([`Skat: ${t.name.toLowerCase()}`, t.mood]);
+      if (isl.hunger) f.push(['Sult', -35]);
+      for (const n of ['meat', 'cloth', 'beer', 'wine', 'jewelry']) {
+        const wanted = byL.some((p, L) => L >= NEED_FROM[n] && p > 0.5);
+        if (wanted && isl.needsMet[n] === false) f.push([`Mangler ${NEED_INFO[n].name.toLowerCase()}`, -12]);
+      }
+      const houses = GAME.buildings.filter(b => DEFS[b.type].house && islandOfBuilding(b) === isl);
+      if (houses.length) {
+        const served = houses.filter(b => b.cov?.market && servicesMet(b, b.level || 1)).length / houses.length;
+        f.push(['Offentlige bygninger', Math.round((served - 0.5) * 30)]);
+      }
+      if (GAME.bankrupt) f.push(['Fallit – byen forfalder', -15]);
+      if (GAME.buildings.some(b => b.fire && islandOfBuilding(b) === isl)) f.push(['Brand', -8]);
+      return f;
+    }
+    const moodIcon = (m) => m >= 70 ? '😊' : m >= 45 ? '😐' : m >= 30 ? '😟' : '😠';
+    const taxMult = (isl) => TAX_LEVELS[isl.tax || 'normal'].mult * (isl.mood >= 70 ? 1.1 : isl.mood < 40 ? 0.8 : 1);
 
     function tick() {
       updateIslandStats();
@@ -5497,7 +7418,7 @@
       const staffed = GAME.buildings.filter(b => DEFS[b.type].workers)
         .sort((a, b) => (DEFS[b.type].food ? 1 : 0) - (DEFS[a.type].food ? 1 : 0));
       for (const b of staffed) {
-        const isl = islandOfBuilding(b), need = DEFS[b.type].workers;
+        const isl = islandOfBuilding(b), need = workersOf(b);
         if (b.paused) { b.staffed = false; continue; } // paused buildings release their workers
         b.staffed = isl.workersFree >= need;
         if (b.staffed) isl.workersFree -= need;
@@ -5505,16 +7426,19 @@
       updateFires();
 
       // Production. Raw producers first, then processors, so this tick's raw output can be processed.
+      // When bankrupt, only food production keeps running.
       const producers = GAME.buildings.filter(b => DEFS[b.type].produces);
       producers.sort((a, b) => !!DEFS[a.type].consumes - !!DEFS[b.type].consumes);
       for (const b of producers) {
-        const def = DEFS[b.type], isl = islandOfBuilding(b), R = isl.resources, out = def.rate ?? 1;
+        const def = DEFS[b.type], isl = islandOfBuilding(b), R = isl.resources;
+        const mult = PROD_LEVELS[prodLevel(b)].mult, out = (def.rate ?? 1) * mult;
         if (b.paused) { b.status = 'paused'; continue; }
         if (b.fire) { b.status = 'fire'; continue; }
+        if (GAME.bankrupt && !def.food) { b.status = 'nocoins'; continue; }
         if (!GAME.connected.has(b.id)) { b.status = 'noroad'; continue; }
         if (!b.staffed) { b.status = 'noworkers'; continue; }
         if (R[def.produces] >= isl.cap) { b.status = 'full'; continue; }
-        const inputs = Object.entries(def.consumes || {});
+        const inputs = Object.entries(def.consumes || {}).map(([r, n]) => [r, n * mult]);
         if (inputs.some(([r, n]) => R[r] < n)) { b.status = 'noinput'; continue; }
         let made = out;
         if (def.harvest) {
@@ -5538,7 +7462,7 @@
       // Foresters plant and tend trees; the wild slowly grows back by itself
       for (const b of GAME.buildings) {
         if (b.type !== 'forester') continue;
-        b.status = b.paused ? 'paused' : !b.staffed ? 'noworkers' : tendForest(b) ? 'planting' : 'idle';
+        b.status = b.paused ? 'paused' : GAME.bankrupt ? 'nocoins' : !b.staffed ? 'noworkers' : tendForest(b) ? 'planting' : 'idle';
       }
       naturalRegrowth();
 
@@ -5546,26 +7470,23 @@
       for (const b of GAME.buildings) {
         if (b.type !== 'shipyard') continue;
         const linked = GAME.connected.has(b.id);
-        b.status = b.paused ? 'paused' : !linked ? 'noroad' : !b.staffed ? 'noworkers' : b.queue ? 'building' : 'idle';
-        if (b.queue && linked && b.staffed && !b.paused && !b.fire && ++b.queue.progress >= SHIP_TYPES[b.queue.type].buildTime) {
+        b.status = b.paused ? 'paused' : GAME.bankrupt ? 'nocoins' : !linked ? 'noroad' : !b.staffed ? 'noworkers' : b.queue ? 'building' : 'idle';
+        if (b.queue && b.status === 'building' && !b.fire && ++b.queue.progress >= SHIP_TYPES[b.queue.type].buildTime) {
           spawnShip(b.queue.type, b);
           b.queue = null;
         }
       }
 
-      // Residents' needs, growth and taxes, per island
+      // Residents' needs, happiness, growth and taxes, per island
       let tax = 0;
       for (const isl of islands) {
+        if (isl.owner === 'rival') continue;
         const byL = popByLevel(isl);
-        const upper = byL[2] + byL[3];
-        const demand = {
-          meat: upper * NEED_RATES.meat,
-          cloth: upper * NEED_RATES.cloth,
-          beer: byL[3] * NEED_RATES.beer,
-          food: Math.max(0, isl.pop - FREE_SETTLERS) * NEED_RATES.food
-        };
-        // Meat is eaten as a need first; general food (fish or meat) afterwards
-        for (const need of ['meat', 'cloth', 'beer', 'food']) {
+        const demand = { food: Math.max(0, isl.pop - FREE_SETTLERS) * NEED_RATES.food };
+        for (const n of ['meat', 'cloth', 'beer', 'wine', 'jewelry']) {
+          demand[n] = byL.reduce((s, p, L) => s + (L >= NEED_FROM[n] ? p : 0), 0) * NEED_RATES[n];
+        }
+        for (const need of NEED_ORDER) {
           const eaten = consume(isl, NEED_INFO[need].keys, demand[need]);
           // With no one to consume it yet, a need counts as met when the goods are in stock
           isl.needsMet[need] = demand[need] > 1e-9 ? eaten >= demand[need] - 1e-6 : (need === 'food' || inStock(isl, need));
@@ -5577,16 +7498,31 @@
           if (++isl.hunger === 1 && isl.pop > 0) warnOnce(`hunger-${isl.name}`, `🍽️ Beboerne på ${isl.name} sulter!`, 60);
           if (isl.hunger % STARVE_TICKS === 0 && isl.pop > 0) isl.pop--;
         }
-        if (isl.pop > isl.popCap) isl.pop--;
-        else if (fed && hasFood && isl.pop < isl.popCap) isl.pop = Math.min(isl.popCap, isl.pop + 1 + Math.floor(isl.popCap / 60));
-        else if (isl.pop < Math.min(isl.popCap, FREE_SETTLERS)) isl.pop++; // first settlers come even without food
 
-        for (let L = 1; L <= 3; L++) {
+        // Mood drifts towards the sum of its factors
+        isl.mood = isl.mood ?? MOOD_START;
+        if (isl.pop > 0) {
+          const target = Math.max(0, Math.min(100, moodFactors(isl, byL).reduce((s, [, v]) => s + v, 0)));
+          isl.mood += Math.max(-2, Math.min(2, target - isl.mood));
+        }
+        const mood = isl.mood;
+
+        if (isl.pop > isl.popCap) isl.pop--;
+        else if (mood < 30 && isl.pop > FREE_SETTLERS) {
+          // Unhappy residents move away
+          if (GAME.tick % 4 === 0) isl.pop--;
+          warnOnce(`mood-${isl.name}`, `😠 Beboerne på ${isl.name} er utilfredse og flytter! Sænk skatten eller dæk deres behov.`, 120);
+        } else if (fed && hasFood && isl.pop < isl.popCap && (mood >= 45 || GAME.tick % 2 === 0)) {
+          const bonus = mood >= 75 ? 1 : 0;
+          isl.pop = Math.min(isl.popCap, isl.pop + 1 + bonus + Math.floor(isl.popCap / 60));
+        } else if (isl.pop < Math.min(isl.popCap, FREE_SETTLERS)) isl.pop++; // first settlers come even without food
+
+        for (let L = 1; L <= MAX_LEVEL; L++) {
           const happy = HOUSE_LEVELS[L].needs.every(n => isl.needsMet[n]);
-          tax += byL[L] * HOUSE_LEVELS[L].tax * (happy ? 1 : 0.5);
+          tax += byL[L] * HOUSE_LEVELS[L].tax * (happy ? 1 : 0.5) * taxMult(isl);
         }
 
-        if (isl.pop > 0 && GAME.buildings.some(b => DEFS[b.type].workers && !b.staffed && islandOfBuilding(b) === isl)) {
+        if (isl.pop > 0 && GAME.buildings.some(b => DEFS[b.type].workers && !b.staffed && !b.paused && islandOfBuilding(b) === isl)) {
           warnOnce(`workers-${isl.name}`, `👷 Der mangler arbejdere på ${isl.name} – byg flere boliger`, 180);
         }
         for (const k of RES_KEYS) {
@@ -5596,33 +7532,58 @@
         }
       }
 
-      // Coins: taxes in, upkeep of buildings and ships out
-      const upkeep = GAME.buildings.reduce((s, b) => s + (b.paused ? 0 : DEFS[b.type].upkeep || 0), 0) +
+      // Coins: taxes in, upkeep of running buildings and ships out. Buildings halted by bankruptcy cost nothing.
+      const running = (b) => !b.paused && !(GAME.bankrupt && b.status === 'nocoins') &&
+        !(GAME.bankrupt && DEFS[b.type].service && DEFS[b.type].service !== 'market');
+      const upkeep = GAME.buildings.reduce((s, b) => s + (running(b) ? upkeepOf(b) : 0), 0) +
                      GAME.ships.reduce((s, sh) => s + SHIP_TYPES[sh.type].upkeep, 0);
       GAME.coins += tax - upkeep;
       GAME.lastTax = tax;
       GAME.lastUpkeep = upkeep;
-      if (GAME.coins < 0) warnOnce('debt', '⚠ Du er i gæld! Byg ikke mere, før skatten overstiger driften.', 90);
+      updateBankruptcy(tax - upkeep);
 
       if (GAME.tick % UPGRADE_EVERY === 0) upgradeHouses(islands);
       if (GAME.events) rollEvents();
       if (GAME.storm > 0 && --GAME.storm === 0) notify('🌤️ Stormen er drevet over', false);
       traderTick();
+      pirateTick();
+      rivalTick();
+      repairShips();
+      for (const s of GAME.ships) reveal(s.x, s.y, SHIP_SIGHT);
       if (GAME.tick % 10 === 0) recordHistory(islands);
       checkQuests();
       if (rocksDirty) { rocksDirty = false; decorateTerrain(GAME.grid); } // rebuild shrinking mountains
+      if (GAME.tick % 5 === 0) minimapDirty = true;
 
       GAME.tick++;
       if (GAME.tick % AUTOSAVE_TICKS === 0) saveGame();
     }
 
-    // One house per island may upgrade when the island's houses are (nearly) full, the house's current needs
-    // are met, the next level's goods are in stock and the island can pay the materials.
+    // Below zero coins you're bankrupt: production (except food), shipyards and most public buildings stop
+    // until the treasury is positive again. Before that, warn when the money is about to run out.
+    function updateBankruptcy(net) {
+      if (!GAME.bankrupt && GAME.coins < 0) {
+        GAME.bankrupt = true;
+        notify('💸 Fallit! Al produktion undtagen mad står stille, og kapeller, kroer og teatre lukker, indtil du er ude af gælden.');
+        sfx('alarm');
+        updateIslandStats();
+      } else if (GAME.bankrupt && GAME.coins >= 50) {
+        GAME.bankrupt = false;
+        notify('🪙 Du er ude af gælden – alt kører igen');
+        sfx('coins');
+        updateIslandStats();
+      } else if (!GAME.bankrupt && net < 0 && GAME.coins / -net < 120) {
+        warnOnce('lowcoins', `⚠ Mønterne slipper op om ca. ${Math.max(1, Math.round(GAME.coins / -net))} sekunder! Sæt skatten op, sæt bygninger på pause eller sælg varer.`, 90);
+      }
+    }
+
+    // One house per island may upgrade when the island's houses are (nearly) full, the residents are content,
+    // the house's current needs are met, the next level's goods are in stock and the island can pay the materials.
     function upgradeHouses(islands) {
       for (const isl of islands) {
         if (!isl.houses || isl.pop < isl.popCap * 0.9) continue;
-        if (isl.allowUpgrade === false) continue;
-        const b = GAME.buildings.find(h => DEFS[h.type].house && islandOfBuilding(h) === isl && (h.level || 1) < 3 &&
+        if (isl.allowUpgrade === false || (isl.mood ?? MOOD_START) < 50) continue;
+        const b = GAME.buildings.find(h => DEFS[h.type].house && islandOfBuilding(h) === isl && (h.level || 1) < MAX_LEVEL &&
           !h.lockLevel && !h.fire &&
           HOUSE_LEVELS[h.level || 1].needs.every(n => isl.needsMet[n]) && servicesMet(h, h.level || 1) &&
           HOUSE_LEVELS[(h.level || 1) + 1].needs.every(n => inStock(isl, n)) && servicesMet(h, (h.level || 1) + 1) &&
@@ -5635,7 +7596,8 @@
           GAME.tierReached = b.level;
           const unlocked = [...Object.values(DEFS).filter(d => d.tier === b.level).map(d => d.name),
                             ...Object.values(SHIP_TYPES).filter(t => t.tier === b.level).map(t => t.name)];
-          notify(`🎉 Du har nu ${tierName(b.level)}! Låst op: ${unlocked.join(', ')}`);
+          notify(`🎉 Du har nu ${tierName(b.level)}! Låst op: ${unlocked.join(', ') || 'intet nyt'}`);
+          sfx('fanfare');
         }
       }
       updateIslandStats();
@@ -5652,6 +7614,8 @@
       const gdt = dt * GAME.speed; // game time runs at the chosen speed (0 = paused)
       updateShips(gdt);
       updateTrader(gdt);
+      updatePirates(gdt);
+      updateRivalShip(gdt);
 
       acc += gdt;
       while (acc >= 1000) {
@@ -5660,6 +7624,7 @@
       }
 
       render();
+      renderMinimap();
       updateHud();
       refreshMenuState();
       infoTimer += dt;
@@ -5676,12 +7641,16 @@
     function updateHud() {
       const isl = activeIsland();
       const net = (GAME.lastTax || 0) - (GAME.lastUpkeep || 0);
-      document.getElementById('coins').innerHTML =
-        `🪙 ${Math.floor(GAME.coins)} <small class="${net < 0 ? 'neg' : 'pos'}">${net >= 0 ? '+' : ''}${rate(net)}/s</small>`;
+      const coinsEl = document.getElementById('coins');
+      coinsEl.innerHTML =
+        `🪙 ${Math.floor(GAME.coins)} <small class="${net < 0 ? 'neg' : 'pos'}">${net >= 0 ? '+' : ''}${rate(net)}/s</small>${GAME.bankrupt ? ' <b class="neg">FALLIT</b>' : ''}`;
+      coinsEl.classList.toggle('bankrupt', GAME.bankrupt);
       document.getElementById('pop').textContent = `👥 ${totalPopulation()} / ${totalPopCap()} · ${tierName(GAME.tierReached)}`;
-      const fert = isl?.fertility.map(f => FERTILITY[f].icon).join('') || '';
-      document.getElementById('island-name').textContent =
-        `📍 ${isl ? isl.name : 'Havet'} ${fert}${isl?.ore ? '⛏️' : ''}${isl && !isl.warehouses ? ' (intet lager)' : ''}`;
+      const known = isl && isl.discovered;
+      const fert = known ? isl.fertility.map(f => FERTILITY[f].icon).join('') + (isl.ore ? '⛏️' : '') + (isl.gold ? '🥇' : '') : '';
+      const extra = !isl ? '' : !known ? '' : isl.owner === 'rival' ? ` (${RIVAL_NAME})` : isl.pirate ? ' (pirater)' :
+        !isl.warehouses ? ' (intet lager)' : isl.pop ? ` ${moodIcon(isl.mood ?? MOOD_START)}` : '';
+      document.getElementById('island-name').textContent = `📍 ${isl ? (known ? isl.name : 'Ukendt ø') : 'Havet'} ${fert}${extra}`;
       document.getElementById('tick').textContent = `Tick: ${GAME.tick}${GAME.speed === 0 ? ' · ⏸ Pause' : ''}`;
       const unlinked = GAME.buildings.filter(b => needsRoad(DEFS[b.type]) && !GAME.connected.has(b.id)).length;
       document.getElementById('status').textContent =
@@ -5697,27 +7666,39 @@
       log('Initializing game...', 'info');
       resizeCanvas();
       window.addEventListener('resize', resizeCanvas);
-
-      const loaded = loadGame();
-      if (!loaded) {
-        log('Generating terrain...', 'ok');
-        GAME.grid = generateTerrain(MAP_SIZE, MAP_SIZE);
-        initIslands();
-        GAME.coins = START_COINS;
-        centerOn(MAP_SIZE / 2, MAP_SIZE / 2);
-      }
-      decorateTerrain(GAME.grid);
       buildMenu();
       setSpeed(1);
+      initMinimap();
+      initAudioControls();
+
+      if (loadGame()) { finishInit(true); return; }
+      // A new game chosen before the reload, or the new-game dialog on first start
+      let pending = null;
+      try {
+        pending = JSON.parse(localStorage.getItem(NEWGAME_KEY));
+        localStorage.removeItem(NEWGAME_KEY);
+      } catch { /* no stored choice */ }
+      if (pending) startNewGame(pending);
+      else openNewGameDialog(false);
+    });
+
+    // Everything after the map exists (loaded or freshly generated)
+    function finishInit(loaded) {
+      gameStarted = true;
+      decorateTerrain(GAME.grid);
       document.getElementById('opt-events').checked = GAME.events;
+      minimapDirty = true;
+      fogLayer.dirty = true;
 
       if (GAME.phase === 'play') {
         document.getElementById('banner').hidden = true;
         recomputeConnectivity();
+        GAME.routes.forEach(routePath); // lengths for the route lists
         resumeShips();
         refreshMenuState();
         log('Gemt spil indlæst', 'ok');
-        showToast(migratedFrom ? '📂 Dit spil er opdateret til den nye version (boliger og mønter er nulstillet)' : '📂 Dit gemte spil er indlæst');
+        showToast(migratedFrom === 2 ? '📂 Dit spil er opdateret til den nye version (boliger og mønter er nulstillet)'
+          : migratedFrom === 3 ? '📂 Dit spil er opdateret: nye øer at udforske, pirater, en rival og Adelige' : '📂 Dit gemte spil er indlæst');
       } else {
         // Setup phase: the player picks where the first (free) warehouse goes
         openBuildCategory('harbor');
@@ -5730,7 +7711,7 @@
       renderQuest();
       for (const msg of pendingNotices) notify(msg, false);
       requestAnimationFrame(gameLoop);
-    });
+    }
   </script>
 </body>
 </html>
