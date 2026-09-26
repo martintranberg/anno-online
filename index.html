@@ -1,0 +1,1844 @@
+<!DOCTYPE html>
+<html lang="da">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Anno Online Klon</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: Arial, sans-serif; background: #1a1a1a; color: #fff; overflow: hidden; width: 100vw; height: 100vh; }
+    canvas { display: block; width: 100%; height: 100%; }
+
+    #hud {
+      position: absolute;
+      top: 10px; left: 10px;
+      background: rgba(0,0,0,0.8);
+      padding: 15px;
+      border-radius: 5px;
+      z-index: 10;
+      border: 1px solid #4a6fa5;
+    }
+
+    #hud span { display: block; margin: 5px 0; font-size: 13px; }
+
+    /* ----- Build menu: category tabs with a card panel above ----- */
+    #build-menu {
+      position: absolute;
+      bottom: 10px; left: 50%;
+      transform: translateX(-50%);
+      z-index: 10;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 6px;
+      max-width: calc(100vw - 20px);
+    }
+
+    #build-tabs {
+      display: flex;
+      gap: 4px;
+      background: rgba(34,24,14,0.94);
+      border: 2px solid #c9a24e;
+      border-radius: 8px;
+      padding: 5px;
+      box-shadow: 0 4px 14px rgba(0,0,0,0.5);
+    }
+
+    .build-tab {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 7px 14px;
+      background: linear-gradient(#5a4028, #3e2c1a);
+      border: 1px solid #7a5a32;
+      border-radius: 5px;
+      color: #f0e2c0;
+      font-size: 13px;
+      cursor: pointer;
+    }
+    .build-tab .tab-icon { font-size: 17px; }
+    .build-tab .tab-key { font-size: 10px; color: #b09a6a; }
+    .build-tab:hover { background: linear-gradient(#6a4c30, #4a3420); }
+    .build-tab.active { background: linear-gradient(#8a6a34, #6a4c22); border-color: #ffd700; color: #fff; }
+    .build-tab:disabled { opacity: 0.35; cursor: not-allowed; }
+
+    #build-panel {
+      background: rgba(34,24,14,0.94);
+      border: 2px solid #c9a24e;
+      border-radius: 8px;
+      padding: 8px 10px 6px;
+      box-shadow: 0 4px 14px rgba(0,0,0,0.5);
+      color: #f0e2c0;
+    }
+    #build-panel[hidden] { display: none; }
+    .panel-title { font-size: 12px; letter-spacing: 1px; text-transform: uppercase; color: #c9a24e; margin-bottom: 6px; }
+    .cards { display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; }
+    .panel-desc { margin-top: 6px; font-size: 11px; color: #d8c8a0; min-height: 14px; text-align: center; }
+
+    .build-card {
+      width: 110px;
+      padding: 5px 5px 6px;
+      background: linear-gradient(#efe3c4, #d8c69c);
+      border: 2px solid #8a6a3a;
+      border-radius: 6px;
+      color: #3a2616;
+      cursor: pointer;
+      text-align: center;
+      font-family: inherit;
+    }
+    .build-card canvas {
+      display: block;
+      margin: 0 auto 3px;
+      background: radial-gradient(ellipse at 50% 80%, #7aa84e 0%, #5a8a3a 60%, #4a7a2e 100%);
+      border-radius: 4px;
+    }
+    .build-card .card-name { font-size: 12px; font-weight: bold; }
+    .build-card .card-meta { display: flex; justify-content: space-between; font-size: 11px; margin-top: 2px; padding: 0 3px; }
+    .build-card .card-size { color: #7a6040; }
+    .build-card:hover { border-color: #c9a24e; filter: brightness(1.05); }
+    .build-card.active { border-color: #ffd700; box-shadow: 0 0 12px rgba(255,215,0,0.8); }
+    .build-card.unaffordable .card-cost { color: #b02a2a; font-weight: bold; }
+    .build-card.unaffordable canvas { filter: grayscale(0.7); }
+    .build-card:disabled { opacity: 0.4; cursor: not-allowed; filter: grayscale(0.8); }
+
+    #banner {
+      position: absolute;
+      top: 14px; left: 50%;
+      transform: translateX(-50%);
+      background: rgba(20,30,50,0.92);
+      border: 1px solid #ffd700;
+      border-radius: 5px;
+      padding: 10px 18px;
+      font-size: 14px;
+      z-index: 10;
+      text-align: center;
+    }
+    #banner small { display: block; color: #aab; margin-top: 3px; font-size: 11px; }
+    #banner[hidden] { display: none; }
+
+    #status { color: #f0a040; font-size: 12px; }
+
+    #view-controls {
+      position: absolute;
+      bottom: 10px; right: 10px;
+      background: rgba(0,0,0,0.85);
+      border: 1px solid #4a6fa5;
+      border-radius: 5px;
+      padding: 8px;
+      z-index: 10;
+      text-align: right;
+    }
+    #view-controls button {
+      width: 34px; height: 34px;
+      margin-left: 4px;
+      background: #4a6fa5;
+      border: none;
+      border-radius: 3px;
+      color: #fff;
+      font-size: 18px;
+      cursor: pointer;
+    }
+    #view-controls button:hover { background: #5a7fb5; }
+    #view-controls .hint { margin-top: 6px; font-size: 10px; color: #99a; line-height: 1.5; }
+
+    #debug {
+      position: absolute;
+      top: 10px; right: 10px;
+      background: rgba(0,0,0,0.9);
+      padding: 10px;
+      border-radius: 5px;
+      font-size: 11px;
+      z-index: 10;
+      border: 1px solid #4a4a4a;
+      max-width: 300px;
+      max-height: 250px;
+      overflow-y: auto;
+      font-family: monospace;
+    }
+
+    .log { margin: 2px 0; padding: 1px 4px; }
+    .log-ok { color: #4a4; }
+    .log-err { color: #a44; }
+    .log-info { color: #4aa; }
+  </style>
+</head>
+<body>
+  <canvas id="canvas"></canvas>
+
+  <div id="hud">
+    <strong>Anno</strong>
+    <span id="wood">🌲 0</span>
+    <span id="planks">📦 0</span>
+    <span id="stone">🪨 0</span>
+    <span id="pop">👥 0/0</span>
+    <span id="status"></span>
+    <span id="tick" style="color: #888; font-size: 11px;">Tick: 0</span>
+  </div>
+
+  <div id="banner">
+    🏚️ Vælg hvor dit første lager skal stå
+    <small>Det første lager er gratis. Alle produktionsbygninger skal forbindes til et lager med vej.</small>
+  </div>
+
+  <div id="build-menu">
+    <div id="build-panel" hidden></div>
+    <div id="build-tabs"></div>
+  </div>
+
+  <div id="view-controls">
+    <button data-view="out" title="Zoom ud (-)">−</button>
+    <button data-view="in" title="Zoom ind (+)">+</button>
+    <button data-view="home" title="Centrér på lager (H)">⌂</button>
+    <div class="hint">Træk: flyt kort · Scroll: zoom<br>WASD / piletaster: flyt · H: hjem</div>
+  </div>
+
+  <div id="debug">DEBUG</div>
+
+  <script>
+    'use strict';
+
+    // Simple debug logger
+    const LOG = [];
+    function log(msg, type = 'info') {
+      const prefix = type === 'ok' ? '✓' : type === 'err' ? '✗' : 'i';
+      const entry = `[${prefix}] ${msg}`;
+      LOG.unshift(entry);
+      if (LOG.length > 20) LOG.pop();
+      console.log(entry);
+      updateDebug();
+    }
+
+    function updateDebug() {
+      const el = document.getElementById('debug');
+      if (el) {
+        el.innerHTML = LOG.map(l => {
+          let cls = 'log-info';
+          if (l.includes('✓')) cls = 'log-ok';
+          if (l.includes('✗')) cls = 'log-err';
+          return `<div class="log ${cls}">${l}</div>`;
+        }).join('');
+      }
+    }
+
+    // ===== GAME STATE =====
+    const MAP_SIZE = 80;
+
+    const GAME = {
+      grid: [],
+      buildings: [],
+      occupancy: new Map(),
+      // Enough for woodcutter + sawmill (40) plus a little slack
+      resources: { wood: 0, planks: 50, stone: 0 },
+      storageCap: { wood: 100, planks: 100, stone: 100 },
+      population: { total: 4, capacity: 4 },
+      roads: new Set(),        // "x,y" keys of road tiles
+      connected: new Set(),    // ids of buildings linked to a warehouse by road
+      phase: 'setup',          // 'setup' until the first warehouse is placed, then 'play'
+      roadDrag: null,          // start tile while dragging out a road
+      tick: 0,
+      selectedBuilding: null,
+      hoveredTile: null,
+      camera: { x: 0, y: 0, zoom: 1 }
+    };
+
+    const DEFS = {
+      house_small: { id: 'house_small', name: 'Pionerhytte', w: 1, h: 1, cost: { planks: 10 }, capacity: 4,
+        desc: 'Enkel bolig til 4 pionerer.' },
+      house_medium: { id: 'house_medium', name: 'Borgerhus', w: 2, h: 2, cost: { planks: 20, stone: 15 }, capacity: 12,
+        desc: 'Bindingsværkshus med stensokkel til 12 borgere.' },
+      woodcutter: { id: 'woodcutter', name: 'Skovhugger', w: 2, h: 2, cost: { planks: 15 }, produces: 'wood',
+        near: { terrain: 'forest', label: 'skov' },
+        desc: 'Fælder træ (+1/s). Kræver skov i nærheden og vej til et lager.' },
+      sawmill: { id: 'sawmill', name: 'Savværk', w: 3, h: 2, cost: { planks: 25 }, consumes: 'wood', produces: 'planks',
+        desc: 'Saver træ til planker (1 træ → 1 planke/s). Kræver vej til et lager.' },
+      stonecutter: { id: 'stonecutter', name: 'Stenhugger', w: 2, h: 2, cost: { planks: 20 }, produces: 'stone', rate: 0.5,
+        near: { terrain: 'rock', label: 'klipper' },
+        desc: 'Hugger sten (+0,5/s). Kræver klipper i nærheden og vej til et lager.' },
+      warehouse: { id: 'warehouse', name: 'Lager', w: 2, h: 2, cost: { planks: 20 }, storage: 200,
+        desc: 'Opbevarer varer (+200 plads). Vejnettet skal forbinde bygninger hertil.' },
+      road: { id: 'road', name: 'Vej', w: 1, h: 1, cost: {},
+        desc: 'Forbinder bygninger med lageret. Hold venstre museknap nede og træk.' }
+    };
+
+    const RES_ICONS = { wood: '🌲', planks: '📦', stone: '🪨' };
+
+    // Tools that aren't buildings
+    const TOOLS = {
+      demolish: { id: 'demolish', name: 'Riv ned', desc: 'Fjerner veje og bygninger. Giver 50% af prisen tilbage.' }
+    };
+    const itemInfo = (id) => DEFS[id] || TOOLS[id];
+
+    // Build menu grouping
+    const CATEGORIES = [
+      { id: 'terrain', name: 'Terræn', icon: '🛤️', items: ['road', 'demolish'] },
+      { id: 'housing', name: 'Boliger', icon: '🏠', items: ['house_small', 'house_medium'] },
+      { id: 'production', name: 'Produktion', icon: '🪵', items: ['woodcutter', 'sawmill', 'stonecutter'] },
+      { id: 'storage', name: 'Lager', icon: '🏚️', items: ['warehouse'] }
+    ];
+
+    // Buildings that only work when connected to a warehouse by road
+    const needsRoad = (def) => !!(def.produces || def.consumes);
+
+    const ISO = {
+      TW: 64,
+      TH: 32,
+      // Accepts fractional tile coords; integer coords give the tile centre
+      tileToScreen: (tx, ty) => ({
+        x: (tx - ty) * 32,
+        y: (tx + ty) * 16
+      }),
+      screenToTile: (sx, sy) => ({
+        tx: Math.round((sx / 32 + sy / 16) / 2),
+        ty: Math.round((sy / 16 - sx / 32) / 2)
+      })
+    };
+
+    // ===== TERRAIN GENERATION WITH CLUSTERING =====
+    function generateTerrain(w, h) {
+      const grid = [];
+      // Start all grass
+      for (let y = 0; y < h; y++) {
+        for (let x = 0; x < w; x++) {
+          grid.push({ x, y, type: 'grass', seed: Math.random() });
+        }
+      }
+
+      // Create larger water/forest clusters using blob algorithm
+      const clusters = [];
+
+      // Blob counts scale with map area (tuned for 40x40 = 1600 tiles)
+      const areaScale = (w * h) / 1600;
+
+      // Water clusters (2-4 blobs per 40x40)
+      const waterCount = Math.round((1.5 + Math.random() * 2) * areaScale);
+      for (let i = 0; i < waterCount; i++) {
+        clusters.push({
+          cx: 5 + Math.random() * (w - 10),
+          cy: 5 + Math.random() * (h - 10),
+          radius: 5 + Math.random() * 6,
+          type: 'water'
+        });
+      }
+
+      // Forest clusters (4-6 blobs per 40x40)
+      const forestCount = Math.round((4 + Math.random() * 2) * areaScale);
+      for (let i = 0; i < forestCount; i++) {
+        clusters.push({
+          cx: 5 + Math.random() * (w - 10),
+          cy: 5 + Math.random() * (h - 10),
+          radius: 4 + Math.random() * 5,
+          type: 'forest'
+        });
+      }
+
+      // Rock outcrops (1-2.5 small blobs per 40x40) - source of stone
+      const rockCount = Math.round((1 + Math.random() * 1.5) * areaScale);
+      for (let i = 0; i < rockCount; i++) {
+        clusters.push({
+          cx: 4 + Math.random() * (w - 8),
+          cy: 4 + Math.random() * (h - 8),
+          radius: 1.5 + Math.random() * 2.5,
+          type: 'rock'
+        });
+      }
+
+      // Apply clusters to grid
+      for (let idx = 0; idx < grid.length; idx++) {
+        const tile = grid[idx];
+        for (const cluster of clusters) {
+          const dx = tile.x - cluster.cx;
+          const dy = tile.y - cluster.cy;
+          const dist = Math.sqrt(dx * dx + dy * dy);
+
+          // Falloff - gradually transition at edges
+          if (dist < cluster.radius) {
+            tile.type = cluster.type;
+          } else if (dist < cluster.radius + 2) {
+            // Edge blending: 20% chance to be cluster type in transition zone
+            if (Math.random() < 0.3) tile.type = cluster.type;
+          }
+        }
+      }
+
+      // Add some beach at water edges
+      const indexed = new Map();
+      for (const tile of grid) {
+        indexed.set(`${tile.x},${tile.y}`, tile);
+      }
+
+      for (const tile of grid) {
+        if (tile.type === 'grass') {
+          let adjacentWater = 0;
+          for (let dy = -1; dy <= 1; dy++) {
+            for (let dx = -1; dx <= 1; dx++) {
+              if (dx === 0 && dy === 0) continue;
+              const adj = indexed.get(`${tile.x + dx},${tile.y + dy}`);
+              if (adj && adj.type === 'water') adjacentWater++;
+            }
+          }
+          if (adjacentWater > 0 && Math.random() < 0.4) {
+            tile.type = 'beach';
+          }
+        }
+      }
+
+      return grid;
+    }
+
+    // ===== RENDERING =====
+    const canvas = document.getElementById('canvas');
+    // `let` so build-menu previews can temporarily redirect all drawing to their own canvas
+    let ctx = canvas.getContext('2d');
+    let animTime = 0; // ms, drives smoke, flags and saw blades
+
+    const TERRAIN_COLORS = {
+      grass: '#5a8a3a',
+      forest: '#3a6a2a',
+      beach: '#d8c48a',
+      water: '#1a5a8a',
+      rock: '#7e7a6e'
+    };
+
+    function resizeCanvas() {
+      canvas.width = window.innerWidth;
+      canvas.height = window.innerHeight;
+    }
+
+    function drawTile(x, y, tile) {
+      const p = ISO.tileToScreen(x, y);
+      const TW = ISO.TW, TH = ISO.TH;
+
+      ctx.fillStyle = TERRAIN_COLORS[tile.type];
+      ctx.beginPath();
+      ctx.moveTo(p.x, p.y - TH / 2);
+      ctx.lineTo(p.x + TW / 2, p.y);
+      ctx.lineTo(p.x, p.y + TH / 2);
+      ctx.lineTo(p.x - TW / 2, p.y);
+      ctx.closePath();
+      ctx.fill();
+      ctx.strokeStyle = 'rgba(0,0,0,0.1)';
+      ctx.lineWidth = 1;
+      ctx.stroke();
+    }
+
+    function drawTree(x, y) {
+      const p = ISO.tileToScreen(x, y);
+      ctx.fillStyle = '#6b4423';
+      ctx.fillRect(p.x - 2, p.y - 8, 4, 12);
+      ctx.fillStyle = '#2a5a1a';
+      ctx.beginPath();
+      ctx.arc(p.x, p.y - 18, 8, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    // ===== BUILDING RENDERING =====
+    // Everything is drawn procedurally in a small 3D iso space:
+    // u/v in tile units (tile centres at integers), z in screen pixels.
+    // Visible walls are the front-left (plane v = const) and front-right (plane u = const).
+    // Light comes from the right, so front-right faces are lit and front-left faces are shaded.
+    const P = (u, v, z = 0) => ({ x: (u - v) * 32, y: (u + v) * 16 - z });
+    const lerp = (a, b, t) => ({ x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t });
+    const OUTLINE = 'rgba(35,22,10,0.6)';
+    const TILE_PX = 36; // approx. screen length of one tile edge, used for round shapes
+
+    function shade(hex, f) {
+      const n = parseInt(hex.slice(1), 16);
+      const c = (v) => Math.min(255, Math.round(v * f));
+      return `rgb(${c((n >> 16) & 255)},${c((n >> 8) & 255)},${c(n & 255)})`;
+    }
+
+    // Deterministic per-building randomness so details don't flicker between frames
+    function seeded(seed) {
+      let s = seed >>> 0 || 1;
+      return () => {
+        s ^= s << 13; s ^= s >>> 17; s ^= s << 5;
+        return (s >>> 0) / 4294967296;
+      };
+    }
+
+    function poly(fill, pts, stroke = OUTLINE) {
+      ctx.beginPath();
+      ctx.moveTo(pts[0].x, pts[0].y);
+      for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i].x, pts[i].y);
+      ctx.closePath();
+      if (fill) { ctx.fillStyle = fill; ctx.fill(); }
+      if (stroke) { ctx.strokeStyle = stroke; ctx.lineWidth = 0.8; ctx.stroke(); }
+    }
+
+    function line(a, b, color, w = 1) {
+      ctx.strokeStyle = color;
+      ctx.lineWidth = w;
+      ctx.beginPath();
+      ctx.moveTo(a.x, a.y);
+      ctx.lineTo(b.x, b.y);
+      ctx.stroke();
+    }
+
+    function dot(p, r, color) {
+      ctx.fillStyle = color;
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, r, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    // Wall faces. at(s, t): s = tiles along the wall (left → right on screen), t = pixels up.
+    const wallL = (u0, u1, v, z0, z1) => ({ len: u1 - u0, h: z1 - z0, at: (s, t) => P(u0 + s, v, z0 + t) });
+    const wallR = (u, v0, v1, z0, z1) => ({ len: v1 - v0, h: z1 - z0, at: (s, t) => P(u, v1 - s, z0 + t) });
+    const rectOn = (f, s0, t0, s1, t1) => [f.at(s0, t0), f.at(s1, t0), f.at(s1, t1), f.at(s0, t1)];
+
+    function walls(u0, v0, u1, v1, z0, z1, color, top) {
+      const L = wallL(u0, u1, v1, z0, z1), R = wallR(u1, v0, v1, z0, z1);
+      poly(shade(color, 0.78), rectOn(L, 0, 0, L.len, L.h));
+      poly(color, rectOn(R, 0, 0, R.len, R.h));
+      if (top) poly(top, [P(u0, v0, z1), P(u1, v0, z1), P(u1, v1, z1), P(u0, v1, z1)]);
+      return { L, R };
+    }
+
+    // --- Wall surface details ---
+    function boards(f, spacing = 0.08) {
+      const n = Math.max(1, Math.round(f.len / spacing));
+      for (let i = 1; i < n; i++) line(f.at(f.len * i / n, 0), f.at(f.len * i / n, f.h), 'rgba(0,0,0,0.22)', 0.7);
+    }
+
+    function logCourses(f, n) {
+      for (let i = 1; i < n; i++) line(f.at(0, f.h * i / n), f.at(f.len, f.h * i / n), 'rgba(30,15,5,0.45)', 1);
+    }
+
+    function stones(f) {
+      const rows = Math.max(1, Math.round(f.h / 4));
+      for (let r = 0; r < rows; r++) {
+        const t0 = f.h * r / rows, t1 = f.h * (r + 1) / rows;
+        if (r > 0) line(f.at(0, t0), f.at(f.len, t0), 'rgba(0,0,0,0.25)', 0.6);
+        for (let s = (r % 2) * 0.07 + 0.07; s < f.len; s += 0.14) line(f.at(s, t0), f.at(s, t1), 'rgba(0,0,0,0.2)', 0.6);
+      }
+    }
+
+    // Half-timbering: sill, header, posts and alternating braces
+    function timber(f, color = '#4a3020', spacing = 0.28) {
+      const n = Math.max(1, Math.round(f.len / spacing));
+      for (let i = 0; i < n; i++) {
+        const a = f.len * i / n, b = f.len * (i + 1) / n;
+        if (i % 2) line(f.at(a, 0), f.at(b, f.h), color, 1);
+        else line(f.at(b, 0), f.at(a, f.h), color, 1);
+      }
+      for (let i = 0; i <= n; i++) line(f.at(f.len * i / n, 0), f.at(f.len * i / n, f.h), color, 1.4);
+      line(f.at(0, 0.7), f.at(f.len, 0.7), color, 1.6);
+      line(f.at(0, f.h - 0.7), f.at(f.len, f.h - 0.7), color, 1.6);
+    }
+
+    function win(f, s, t, ws, ht, opts = {}) {
+      const a = s - ws / 2, b = s + ws / 2;
+      poly('#3a2616', rectOn(f, a - 0.015, t - 1, b + 0.015, t + ht + 1), null);
+      poly(opts.lit ? '#f0d890' : '#5e7e9c', rectOn(f, a, t, b, t + ht), null);
+      line(f.at(s, t), f.at(s, t + ht), '#3a2616', 0.8);
+      line(f.at(a, t + ht / 2), f.at(b, t + ht / 2), '#3a2616', 0.8);
+      if (opts.shutter) {
+        const sw = ws * 0.45;
+        poly(opts.shutter, rectOn(f, a - sw - 0.01, t, a - 0.01, t + ht));
+        poly(opts.shutter, rectOn(f, b + 0.01, t, b + sw + 0.01, t + ht));
+      }
+      if (opts.flowers) {
+        poly('#5a3a1a', rectOn(f, a - 0.02, t - 3, b + 0.02, t - 1));
+        for (let i = 0; i < 3; i++) dot(f.at(a + ws * (i + 0.5) / 3, t - 0.5), 1.1, i % 2 ? '#e05050' : '#f0c040');
+      }
+    }
+
+    function door(f, s, ws, ht, color = '#5a3a1a') {
+      poly('#2e1c0c', rectOn(f, s - ws / 2 - 0.015, 0, s + ws / 2 + 0.015, ht + 1), null);
+      poly(color, rectOn(f, s - ws / 2, 0, s + ws / 2, ht));
+      line(f.at(s - ws / 6, 0), f.at(s - ws / 6, ht), 'rgba(0,0,0,0.3)', 0.6);
+      line(f.at(s + ws / 6, 0), f.at(s + ws / 6, ht), 'rgba(0,0,0,0.3)', 0.6);
+      dot(f.at(s + ws / 3, ht * 0.45), 0.8, '#d8b060');
+    }
+
+    // Large arched double door (barns, warehouses)
+    function barnDoor(f, s, ws, ht) {
+      const a = s - ws / 2, b = s + ws / 2, arch = ws * 14;
+      const outline = [f.at(a, 0), f.at(b, 0)];
+      for (let i = 0; i <= 8; i++) {
+        const ang = (i / 8) * Math.PI;
+        outline.push(f.at(s + Math.cos(ang) * ws / 2, ht + Math.sin(ang) * arch));
+      }
+      poly('#4e3014', outline);
+      line(f.at(s, 0), f.at(s, ht + arch), '#2e1c0c', 1);
+      line(f.at(a, ht * 0.15), f.at(s, ht * 0.85), 'rgba(0,0,0,0.35)', 1);
+      line(f.at(b, ht * 0.15), f.at(s, ht * 0.85), 'rgba(0,0,0,0.35)', 1);
+      line(f.at(a, ht * 0.5), f.at(b, ht * 0.5), 'rgba(0,0,0,0.35)', 0.8);
+    }
+
+    // --- Roofs ---
+    function roofTexture(q, col, style) {
+      const [A, B, C, D] = q;
+      if (style === 'thatch') {
+        for (let i = 1; i < 5; i++) line(lerp(A, D, i / 5), lerp(B, C, i / 5), shade(col, 0.72), 1.2);
+        line(A, B, shade(col, 0.6), 2.2);
+      } else {
+        const rows = style === 'shingle' ? 6 : 5;
+        for (let i = 1; i < rows; i++) line(lerp(A, D, i / rows), lerp(B, C, i / rows), shade(col, 0.62), 0.8);
+        const len = Math.hypot(B.x - A.x, B.y - A.y);
+        const cols = Math.max(3, Math.round(len / (style === 'shingle' ? 6 : 4.5)));
+        for (let j = 1; j < cols; j++) line(lerp(A, B, j / cols), lerp(D, C, j / cols), shade(col, 0.8), 0.5);
+      }
+      line(D, C, shade(col, 0.5), 2); // ridge
+    }
+
+    function gableDeco(g, opts) {
+      if (opts.timber) {
+        const c = opts.timber;
+        line(g.at(g.len / 2, 0), g.at(g.len / 2, g.h), c, 1.4);
+        line(g.at(g.len * 0.25, g.h * 0.5), g.at(g.len * 0.75, g.h * 0.5), c, 1.2);
+        line(g.at(0, 0.6), g.at(g.len, 0.6), c, 1.6);
+      }
+      if (opts.boards) boards(g, 0.08);
+      if (opts.vent) {
+        const w = opts.vent;
+        poly('#2e1c0c', rectOn(g, g.len / 2 - w / 2, g.h * 0.22, g.len / 2 + w / 2, g.h * 0.22 + w * 30));
+      }
+    }
+
+    // Gable roof with ridge along u; the visible gable end faces +u (front-right)
+    function roofU(u0, v0, u1, v1, z, rh, col, gable, opts = {}) {
+      const o = 0.09, vm = (v0 + v1) / 2, a = u0 - o, b = u1 + o;
+      poly(shade(col, 0.7), [P(a, v0 - o, z), P(b, v0 - o, z), P(b, vm, z + rh), P(a, vm, z + rh)]);
+      if (gable) {
+        const g = wallR(u1, v0, v1, z, z + rh);
+        poly(gable, [g.at(0, 0), g.at(g.len, 0), g.at(g.len / 2, rh)]);
+        ctx.save();
+        ctx.beginPath();
+        const tri = [g.at(0, 0), g.at(g.len, 0), g.at(g.len / 2, rh)];
+        ctx.moveTo(tri[0].x, tri[0].y); ctx.lineTo(tri[1].x, tri[1].y); ctx.lineTo(tri[2].x, tri[2].y);
+        ctx.clip();
+        gableDeco(g, opts);
+        ctx.restore();
+      }
+      const front = [P(a, v1 + o, z), P(b, v1 + o, z), P(b, vm, z + rh), P(a, vm, z + rh)];
+      poly(shade(col, 0.88), front);
+      roofTexture(front, col, opts.style);
+      const verge = shade(col, 0.45);
+      line(P(b, v0 - o, z), P(b, vm, z + rh), verge, 1.6);
+      line(P(b, vm, z + rh), P(b, v1 + o, z), verge, 1.6);
+      // Surface height at a given v, for placing chimneys
+      return (v) => z + rh * (1 - Math.abs(v - vm) / (vm - v0 + o));
+    }
+
+    // Gable roof with ridge along v; the visible gable end faces +v (front-left)
+    function roofV(u0, v0, u1, v1, z, rh, col, gable, opts = {}) {
+      const o = 0.09, um = (u0 + u1) / 2, a = v0 - o, b = v1 + o;
+      poly(shade(col, 0.7), [P(u0 - o, b, z), P(u0 - o, a, z), P(um, a, z + rh), P(um, b, z + rh)]);
+      if (gable) {
+        const g = wallL(u0, u1, v1, z, z + rh);
+        const tri = [g.at(0, 0), g.at(g.len, 0), g.at(g.len / 2, rh)];
+        poly(shade(gable, 0.78), tri);
+        ctx.save();
+        ctx.beginPath();
+        ctx.moveTo(tri[0].x, tri[0].y); ctx.lineTo(tri[1].x, tri[1].y); ctx.lineTo(tri[2].x, tri[2].y);
+        ctx.clip();
+        gableDeco(g, opts);
+        ctx.restore();
+      }
+      const front = [P(u1 + o, b, z), P(u1 + o, a, z), P(um, a, z + rh), P(um, b, z + rh)];
+      poly(col, front);
+      roofTexture(front, col, opts.style);
+      const verge = shade(col, 0.45);
+      line(P(u0 - o, b, z), P(um, b, z + rh), verge, 1.6);
+      line(P(um, b, z + rh), P(u1 + o, b, z), verge, 1.6);
+      return (u) => z + rh * (1 - Math.abs(u - um) / (um - u0 + o));
+    }
+
+    // --- Props ---
+    function smoke(p, seed = 0) {
+      for (let i = 0; i < 4; i++) {
+        const t = (animTime / 2600 + i / 4 + seed) % 1;
+        ctx.fillStyle = `rgba(225,225,225,${0.5 * (1 - t)})`;
+        ctx.beginPath();
+        ctx.arc(p.x + Math.sin(t * 5 + i) * 2 + t * 8, p.y - 2 - t * 30, 2 + t * 5, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+
+    function chimney(u, v, z0, z1, seed) {
+      const c = walls(u - 0.06, v - 0.06, u + 0.06, v + 0.06, z0, z1, '#9a8a78', '#4a3a2a');
+      stones(c.L); stones(c.R);
+      smoke(P(u, v, z1), seed);
+    }
+
+    function cylinder(u, v, z, r, h, side, top) {
+      const b = P(u, v, z), t = P(u, v, z + h), rx = r * 45, ry = r * 22.6;
+      ctx.fillStyle = side;
+      ctx.beginPath();
+      ctx.ellipse(b.x, b.y, rx, ry, 0, 0, Math.PI);
+      ctx.lineTo(t.x - rx, t.y);
+      ctx.lineTo(t.x + rx, t.y);
+      ctx.closePath();
+      ctx.fill();
+      ctx.strokeStyle = OUTLINE; ctx.lineWidth = 0.8; ctx.stroke();
+      ctx.fillStyle = top;
+      ctx.beginPath();
+      ctx.ellipse(t.x, t.y, rx, ry, 0, 0, Math.PI * 2);
+      ctx.fill(); ctx.stroke();
+      return { b, t, rx, ry };
+    }
+
+    function barrel(u, v, z = 0) {
+      const c = cylinder(u, v, z, 0.085, 11, '#8a5226', '#a8703c');
+      ctx.strokeStyle = '#3a3a3a'; ctx.lineWidth = 1;
+      for (const k of [0.25, 0.75]) {
+        ctx.beginPath();
+        ctx.ellipse(c.b.x, c.b.y - 11 * k, c.rx, c.ry, 0, 0, Math.PI);
+        ctx.stroke();
+      }
+    }
+
+    function crate(u, v, s, z = 0) {
+      const c = walls(u - s, v - s, u + s, v + s, z, z + s * 50, '#a67c44', '#c49a5c');
+      for (const f of [c.L, c.R]) {
+        line(f.at(0, 0), f.at(f.len, f.h), 'rgba(60,35,10,0.6)', 0.9);
+        line(f.at(0, f.h), f.at(f.len, 0), 'rgba(60,35,10,0.6)', 0.9);
+      }
+    }
+
+    function sack(u, v, z = 0) {
+      const p = P(u, v, z + 4);
+      ctx.fillStyle = '#d6c69a';
+      ctx.beginPath();
+      ctx.ellipse(p.x, p.y, 6, 4.5, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = OUTLINE; ctx.lineWidth = 0.8; ctx.stroke();
+      dot({ x: p.x, y: p.y - 4 }, 1.5, '#a8966a');
+    }
+
+    // Stack of logs lying along u; the cut ends face +u
+    function logPile(u0, v0, u1, v1, rows) {
+      const d = (v1 - v0) / rows, rpx = d * TILE_PX * 0.38;
+      const logs = [];
+      for (let r = 0; r < rows; r++) {
+        for (let k = 0; k < rows - r; k++) {
+          logs.push({ vc: v1 - d / 2 - r * d / 2 - k * d, zc: rpx + r * rpx * 1.7 });
+        }
+      }
+      logs.sort((a, b) => a.vc - b.vc || a.zc - b.zc);
+      for (const l of logs) {
+        poly('#6a4422', [P(u0, l.vc, l.zc - rpx), P(u1, l.vc, l.zc - rpx), P(u1, l.vc, l.zc + rpx), P(u0, l.vc, l.zc + rpx)]);
+        const e = P(u1, l.vc, l.zc);
+        dot(e, rpx, '#d8b07a');
+        ctx.strokeStyle = '#8a6030'; ctx.lineWidth = 0.7;
+        ctx.beginPath(); ctx.arc(e.x, e.y, rpx, 0, Math.PI * 2); ctx.stroke();
+        ctx.beginPath(); ctx.arc(e.x, e.y, rpx * 0.5, 0, Math.PI * 2); ctx.stroke();
+      }
+    }
+
+    // Log lying along u (e.g. on a saw bench)
+    function logBand(u0, u1, vc, zc, rpx) {
+      poly('#6a4422', [P(u0, vc, zc - rpx), P(u1, vc, zc - rpx), P(u1, vc, zc + rpx), P(u0, vc, zc + rpx)]);
+      dot(P(u1, vc, zc), rpx, '#d8b07a');
+    }
+
+    function plankStack(u0, v0, u1, v1, n) {
+      for (let i = 0; i < n; i++) {
+        const j = (i % 2) * 0.03;
+        const p = walls(u0 + j, v0, u1 + j, v1, i * 3, i * 3 + 2.6, '#cfa25c', '#e6c27e');
+        boards(p.R, 0.07);
+      }
+    }
+
+    function post(u, v, h, color = '#5a3a1e') {
+      walls(u - 0.03, v - 0.03, u + 0.03, v + 0.03, 0, h, color, shade(color, 1.2));
+    }
+
+    function fence(u0, v0, u1, v1) {
+      const len = Math.hypot(u1 - u0, v1 - v0), n = Math.max(1, Math.round(len / 0.14));
+      line(P(u0, v0, 3), P(u1, v1, 3), '#7a5a32', 1);
+      line(P(u0, v0, 6.5), P(u1, v1, 6.5), '#7a5a32', 1);
+      for (let i = 0; i <= n; i++) {
+        const u = u0 + (u1 - u0) * i / n, v = v0 + (v1 - v0) * i / n;
+        line(P(u, v, 0), P(u, v, 8), '#5a3e20', 1.5);
+      }
+    }
+
+    function bush(u, v, r, color = '#3e7a2e') {
+      const p = P(u, v, r * 14);
+      dot({ x: p.x + 1, y: p.y + 2 }, r * 16, 'rgba(0,0,0,0.2)');
+      dot(p, r * 16, color);
+      dot({ x: p.x - r * 5, y: p.y - r * 5 }, r * 9, shade(color, 1.25));
+    }
+
+    function tree(u, v, s = 1) {
+      const b = P(u, v, 0);
+      ctx.fillStyle = 'rgba(0,0,0,0.2)';
+      ctx.beginPath(); ctx.ellipse(b.x, b.y, 9 * s, 4.5 * s, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#6b4423';
+      ctx.fillRect(b.x - 1.5 * s, b.y - 12 * s, 3 * s, 12 * s);
+      dot({ x: b.x, y: b.y - 16 * s }, 8 * s, '#2e6420');
+      dot({ x: b.x - 3 * s, y: b.y - 22 * s }, 6 * s, '#3a7a2a');
+      dot({ x: b.x + 3 * s, y: b.y - 19 * s }, 5 * s, '#4a8a34');
+    }
+
+    function stumpWithAxe(u, v) {
+      const c = cylinder(u, v, 0, 0.09, 6, '#6a4422', '#d8b07a');
+      ctx.strokeStyle = '#a8804a'; ctx.lineWidth = 0.6;
+      ctx.beginPath(); ctx.ellipse(c.t.x, c.t.y, c.rx * 0.5, c.ry * 0.5, 0, 0, Math.PI * 2); ctx.stroke();
+      const h0 = { x: c.t.x - 1, y: c.t.y }, h1 = { x: c.t.x + 6, y: c.t.y - 11 };
+      line(h0, h1, '#8a6034', 1.6);
+      poly('#b8bcc0', [{ x: h0.x - 3, y: h0.y - 1 }, { x: h0.x + 3, y: h0.y - 3 }, { x: h0.x + 2, y: h0.y + 1 }, { x: h0.x - 3, y: h0.y + 2 }]);
+    }
+
+    function flag(u, v, z, h, color) {
+      const base = P(u, v, z), top = P(u, v, z + h);
+      line(base, top, '#4a3a2a', 1.5);
+      const n = 6, len = 15, fh = 9, pts = [];
+      const wave = (i) => Math.sin(animTime / 260 + i * 0.9) * 2 * (i / n);
+      for (let i = 0; i <= n; i++) pts.push({ x: top.x + len * i / n, y: top.y + 1 + wave(i) });
+      for (let i = n; i >= 0; i--) pts.push({ x: top.x + len * i / n, y: top.y + 1 + fh + wave(i) });
+      poly(color, pts);
+      dot(top, 1.5, '#e8c040');
+    }
+
+    function sawBlade(uc, vc, zc, r) {
+      const rot = animTime / 90, teeth = 14, pts = [];
+      for (let i = 0; i < teeth * 2; i++) {
+        const a = rot + i * Math.PI / teeth, rr = i % 2 ? r : r * 1.14;
+        pts.push(P(uc + rr * Math.cos(a), vc, zc + rr * TILE_PX * Math.sin(a)));
+      }
+      poly('#c8ccd2', pts, '#5a5e64');
+      const hub = [];
+      for (let i = 0; i < 10; i++) {
+        const a = i * Math.PI / 5;
+        hub.push(P(uc + r * 0.28 * Math.cos(a), vc, zc + r * 0.28 * TILE_PX * Math.sin(a)));
+      }
+      poly('#5a5e64', hub, null);
+    }
+
+    // Plot of trodden ground under a building
+    function ground(U, V, W, H, color, rnd, specks = '#6a5a3a') {
+      const i = 0.04;
+      poly(color, [P(U + i, V + i), P(U + W - i, V + i), P(U + W - i, V + H - i), P(U + i, V + H - i)], 'rgba(0,0,0,0.15)');
+      for (let k = 0; k < W * H * 6; k++) dot(P(U + 0.1 + rnd() * (W - 0.2), V + 0.1 + rnd() * (H - 0.2)), 0.9, specks);
+    }
+
+    // Soft contact shadow under a block
+    function ao(u0, v0, u1, v1) {
+      poly('rgba(0,0,0,0.28)', [P(u0 - 0.04, v0 - 0.04), P(u1 + 0.12, v0 - 0.04), P(u1 + 0.12, v1 + 0.12), P(u0 - 0.04, v1 + 0.12)], null);
+    }
+
+    // --- Buildings ---
+    // Pioneer hut: plank walls and a thatched roof
+    function drawHouseSmall(U, V, rnd, vr) {
+      ground(U, V, 1, 1, '#8a7a55', rnd);
+      const u0 = U + 0.24, u1 = U + 0.78, v0 = V + 0.22, v1 = V + 0.76, wh = 12;
+      const wall = ['#9a7048', '#8e6842', '#a47a4e'][vr % 3];
+      ao(u0, v0, u1, v1);
+      const { L, R } = walls(u0, v0, u1, v1, 0, wh, wall);
+      boards(L, 0.07); boards(R, 0.07);
+      door(L, L.len * 0.55, 0.14, 9);
+      win(R, R.len * 0.5, 4, 0.12, 4);
+      roofV(u0, v0, u1, v1, wh, 15, '#c9a24e', wall, { style: 'thatch', boards: true });
+      logPile(U + 0.83, V + 0.28, U + 0.95, V + 0.64, 2);
+    }
+
+    // Settler house: stone plinth, two half-timbered storeys, tiled roof, chimney and garden
+    function drawHouseMedium(U, V, rnd, vr) {
+      ground(U, V, 2, 2, '#8a7a55', rnd);
+      const roof = ['#b0442e', '#9c3a28', '#a85236', '#7e4a3a'][vr % 4];
+      const shutter = ['#3a6a3a', '#2e5a7a', '#7a3a2a'][vr % 3];
+      const plaster = '#ece0c4';
+
+      // Garden in front
+      poly('#6a9a42', [P(U + 0.3, V + 1.45), P(U + 1.75, V + 1.45), P(U + 1.75, V + 1.88), P(U + 0.3, V + 1.88)], null);
+      for (let k = 0; k < 14; k++) {
+        dot(P(U + 0.4 + rnd() * 1.25, V + 1.52 + rnd() * 0.3, 1), 1.2, ['#e05050', '#f0c040', '#e8e8f0', '#c060c0'][k % 4]);
+      }
+
+      const u0 = U + 0.25, u1 = U + 1.55, v0 = V + 0.2, v1 = V + 1.22;
+      ao(u0, v0, u1, v1 + 0.04);
+      const pl = walls(u0, v0, u1, v1, 0, 5, '#8c867a');
+      stones(pl.L); stones(pl.R);
+      const g = walls(u0, v0, u1, v1, 5, 19, plaster);
+      timber(g.L); timber(g.R);
+      // Upper storey juts out slightly, as in real timber-framed houses
+      const f1 = walls(u0, v0, u1 + 0.04, v1 + 0.04, 19, 33, plaster);
+      timber(f1.L); timber(f1.R);
+
+      const dw = wallL(u0, u1, v1, 0, 19);
+      door(dw, 0.72, 0.18, 15);
+      walls(u0 + 0.6, v1, u0 + 0.84, v1 + 0.08, 0, 2, '#8c867a', '#a8a294');
+      for (const s of [0.3, 1.1]) win(g.L, s, 4, 0.14, 7, { shutter });
+      for (const s of [0.28, 0.72, 1.12]) win(f1.L, s, 4, 0.14, 7, { shutter, flowers: s !== 0.72 });
+      for (const s of [0.28, 0.74]) { win(g.R, s, 4, 0.14, 7, { shutter }); win(f1.R, s, 4, 0.14, 7, { shutter }); }
+
+      const surf = roofU(u0, v0, u1 + 0.04, v1 + 0.04, 33, 24, roof, plaster, { style: 'tile', timber: '#4a3020', vent: 0.12 });
+      const cv = (v0 + v1) / 2 + 0.22;
+      chimney(u0 + 0.35, cv, surf(cv + 0.06) - 2, surf(cv) + 16, vr * 0.13);
+
+      barrel(u0 + 0.42, v1 + 0.16);
+      bush(U + 1.8, V + 0.5, 0.35);
+      bush(U + 1.78, V + 1.0, 0.28, '#4a8a36');
+      fence(U + 0.25, V + 1.92, U + 1.82, V + 1.92);
+      fence(U + 1.82, V + 1.4, U + 1.82, V + 1.92);
+    }
+
+    // Lumberjack's hut: log cabin, shingle roof, log pile and chopping block
+    function drawWoodcutter(U, V, rnd) {
+      ground(U, V, 2, 2, '#7a6a48', rnd, '#c8a86a');
+      bush(U + 0.2, V + 1.75, 0.3);
+      const u0 = U + 0.15, u1 = U + 1.05, v0 = V + 0.15, v1 = V + 1.0, wh = 15;
+      ao(u0, v0, u1, v1);
+      const w = walls(u0, v0, u1, v1, 0, wh, '#8a5a30');
+      logCourses(w.L, 5); logCourses(w.R, 5);
+      for (let i = 0; i < 5; i++) dot(w.L.at(w.L.len, (i + 0.5) * wh / 5), 1.7, '#c89a60');
+      door(w.L, 0.5, 0.16, 11, '#4a2a12');
+      win(w.R, 0.42, 5, 0.14, 5, { shutter: '#5a3a1a' });
+      const surf = roofV(u0, v0, u1, v1, wh, 17, '#6e5a48', '#8a5a30', { style: 'shingle', boards: true });
+      const cu = (u0 + u1) / 2 + 0.2;
+      chimney(cu, v0 + 0.3, surf(cu + 0.06) - 2, surf(cu) + 12, 0.4);
+
+      logPile(U + 1.2, V + 0.18, U + 1.85, V + 0.95, 3);
+      stumpWithAxe(U + 0.75, V + 1.4);
+      logBand(U + 0.95, U + 1.35, V + 1.62, 2.5, 2.5);
+      tree(U + 1.65, V + 1.62, 0.8);
+    }
+
+    // Sawmill: timber hall, open saw shed with a spinning blade, plank and log stacks
+    function drawSawmill(U, V, rnd) {
+      ground(U, V, 3, 2, '#7a6a48', rnd, '#d8b878');
+      poly('#c8a86a', [P(U + 1.8, V + 0.5), P(U + 2.9, V + 0.5), P(U + 2.9, V + 1.4), P(U + 1.8, V + 1.4)], null);
+
+      // Main hall
+      const u0 = U + 0.15, u1 = U + 1.65, v0 = V + 0.15, v1 = V + 1.2;
+      ao(u0, v0, u1, v1);
+      const pl = walls(u0, v0, u1, v1, 0, 5, '#8c867a');
+      stones(pl.L); stones(pl.R);
+      const w = walls(u0, v0, u1, v1, 5, 24, '#9a6a3a');
+      boards(w.L, 0.09); boards(w.R, 0.09);
+      line(w.L.at(0, w.h - 0.7), w.L.at(w.L.len, w.h - 0.7), '#4a3020', 1.6);
+      line(w.R.at(0, w.h - 0.7), w.R.at(w.R.len, w.h - 0.7), '#4a3020', 1.6);
+      barnDoor(wallL(u0, u1, v1, 0, 24), 0.5, 0.4, 13);
+      win(w.L, 1.15, 8, 0.16, 7, { shutter: '#5a3a1a' });
+      for (const s of [0.3, 0.75]) win(w.R, s, 8, 0.14, 7, { shutter: '#5a3a1a' });
+      roofU(u0, v0, u1, v1, 24, 20, '#5e4e46', '#9a6a3a', { style: 'shingle', boards: true, vent: 0.14 });
+
+      // Open saw shed
+      // Roof is kept high and the bench near the front so the blade stays visible under the eave
+      const s0 = U + 1.85, s1 = U + 2.85, t0 = V + 0.5, t1 = V + 1.3, ph = 34, bv = t0 + 0.6;
+      logPile(U + 1.9, V + 0.06, U + 2.85, V + 0.44, 2);
+      post(s0, t0, ph); post(s1, t0, ph);
+      walls(s0 + 0.1, bv - 0.12, s1 - 0.1, bv + 0.12, 0, 7, '#7a5030', '#9a7048');
+      logBand(s0 + 0.12, s0 + 0.5, bv, 10, 3);
+      sawBlade(s0 + 0.55, bv, 12, 0.22);
+      poly('#e6c27e', [P(s0 + 0.62, bv - 0.06, 7), P(s1 - 0.12, bv - 0.06, 7), P(s1 - 0.12, bv + 0.06, 7), P(s0 + 0.62, bv + 0.06, 7)]);
+      post(s0, t1, ph); post(s1, t1, ph);
+      roofU(s0 - 0.03, t0 - 0.03, s1 + 0.03, t1 + 0.03, ph, 9, '#5e4e46', null, { style: 'shingle' });
+
+      // Finished planks out front
+      plankStack(U + 0.35, V + 1.4, U + 1.05, V + 1.7, 5);
+      plankStack(U + 1.2, V + 1.45, U + 1.7, V + 1.75, 3);
+      barrel(U + 2.1, V + 1.7);
+      crate(U + 2.4, V + 1.68, 0.1);
+    }
+
+    // Warehouse: stone base, timber barn with a big arched door, goods stacked outside
+    function drawWarehouse(U, V, rnd) {
+      ground(U, V, 2, 2, '#9a9282', rnd, '#7a7266');
+      const u0 = U + 0.12, u1 = U + 1.4, v0 = V + 0.12, v1 = V + 1.35;
+      ao(u0, v0, u1, v1);
+      const base = walls(u0, v0, u1, v1, 0, 11, '#8e887c');
+      stones(base.L); stones(base.R);
+      const w = walls(u0, v0, u1, v1, 11, 27, '#7a5030');
+      boards(w.L, 0.08); boards(w.R, 0.08);
+      for (const f of [w.L, w.R]) {
+        line(f.at(0, 0.7), f.at(f.len, 0.7), '#3e2614', 1.6);
+        line(f.at(0, f.h - 0.7), f.at(f.len, f.h - 0.7), '#3e2614', 1.6);
+      }
+      barnDoor(wallL(u0, u1, v1, 0, 27), (u1 - u0) / 2, 0.44, 15);
+      for (const s of [0.35, 0.9]) win(w.R, s, 5, 0.14, 7, { shutter: '#4a3018' });
+      for (const s of [0.2, 1.08]) win(w.L, s, 5, 0.12, 7, { shutter: '#4a3018' });
+      roofV(u0, v0, u1, v1, 27, 22, '#8a3a2a', '#7a5030', { style: 'tile', boards: true, vent: 0.16 });
+      flag((u0 + u1) / 2, v1 + 0.09, 49, 18, '#2a5aa8');
+
+      // Goods
+      crate(U + 1.62, V + 0.32, 0.1);
+      crate(U + 1.62, V + 0.6, 0.1);
+      crate(U + 1.62, V + 0.46, 0.085, 10);
+      barrel(U + 1.62, V + 0.98);
+      barrel(U + 1.56, V + 1.24);
+      barrel(U + 1.78, V + 1.18);
+      sack(U + 0.45, V + 1.62);
+      sack(U + 0.64, V + 1.68);
+      sack(U + 0.54, V + 1.6, 5);
+    }
+
+    // Irregular grey boulder with a lit top face and a crack or two
+    function boulder(u, v, r, rnd, z = 0) {
+      const c = P(u, v, z);
+      const rx = r * 45, ry = r * 26, hgt = r * 38;
+      ctx.fillStyle = 'rgba(0,0,0,0.22)';
+      ctx.beginPath(); ctx.ellipse(c.x + 2, c.y + 1, rx * 1.05, ry * 0.9, 0, 0, Math.PI * 2); ctx.fill();
+
+      const n = 9, body = [], topFace = [];
+      for (let i = 0; i < n; i++) {
+        const a = (i / n) * Math.PI * 2;
+        const j = 0.8 + rnd() * 0.3;
+        // Lower half of the ring sits on the ground, upper half is lifted to form the dome
+        const lift = Math.sin(a) < 0 ? hgt * (0.55 + rnd() * 0.25) : 0;
+        body.push({ x: c.x + Math.cos(a) * rx * j, y: c.y + Math.sin(a) * ry * j - lift });
+      }
+      for (let i = 0; i < 7; i++) {
+        const a = (i / 7) * Math.PI * 2;
+        topFace.push({ x: c.x - rx * 0.15 + Math.cos(a) * rx * 0.55, y: c.y - hgt * 0.72 + Math.sin(a) * ry * 0.45 });
+      }
+      poly('#86827a', body);
+      poly('#aaa69c', topFace, null);
+      line({ x: c.x - rx * 0.2, y: c.y - hgt * 0.5 }, { x: c.x + rx * 0.1, y: c.y - hgt * 0.15 }, 'rgba(40,36,30,0.5)', 0.8);
+    }
+
+    // Rock terrain tile: one or two boulders, stable per tile
+    function drawRock(x, y, tile) {
+      const rnd = seeded(Math.floor(tile.seed * 1e9) + 7);
+      boulder(x - 0.12 + rnd() * 0.1, y - 0.1 + rnd() * 0.1, 0.26 + rnd() * 0.08, rnd);
+      if (rnd() < 0.6) boulder(x + 0.18, y + 0.15, 0.14 + rnd() * 0.06, rnd);
+    }
+
+    // Stack of cut stone blocks (pyramid, back to front)
+    function stoneBlocks(u0, v0, n) {
+      const s = 0.075, step = s * 2.1, hgt = s * 44;
+      for (let layer = 0; layer < n; layer++) {
+        for (let i = 0; i < n - layer; i++) {
+          for (let j = 0; j < n - layer; j++) {
+            const u = u0 + (i + layer / 2) * step, v = v0 + (j + layer / 2) * step;
+            const b = walls(u - s, v - s, u + s, v + s, layer * hgt, (layer + 1) * hgt, '#b4b0a4', '#d2cec2');
+            line(b.R.at(0, b.R.h * 0.5), b.R.at(b.R.len, b.R.h * 0.5), 'rgba(0,0,0,0.12)', 0.5);
+          }
+        }
+      }
+    }
+
+    function pickaxe(u, v) {
+      const p = P(u, v, 0);
+      line({ x: p.x - 7, y: p.y + 1 }, { x: p.x + 6, y: p.y - 3 }, '#8a6034', 1.6);
+      ctx.strokeStyle = '#8a8e94';
+      ctx.lineWidth = 1.8;
+      ctx.beginPath();
+      ctx.arc(p.x + 6, p.y + 2, 5, Math.PI * 1.05, Math.PI * 1.9);
+      ctx.stroke();
+    }
+
+    // Stonecutter: stone hut with tiled roof, a boulder being worked, cut blocks ready for transport
+    function drawStonecutter(U, V, rnd) {
+      ground(U, V, 2, 2, '#8a8270', rnd, '#b0aa9a');
+      boulder(U + 1.55, V + 0.42, 0.34, rnd);
+      // Chips around the worked boulder
+      for (let k = 0; k < 10; k++) dot(P(U + 1.3 + rnd() * 0.55, V + 0.7 + rnd() * 0.35, 0), 1, '#c8c4b8');
+
+      const u0 = U + 0.15, u1 = U + 1.05, v0 = V + 0.18, v1 = V + 1.02, wh = 14;
+      ao(u0, v0, u1, v1);
+      const w = walls(u0, v0, u1, v1, 0, wh, '#a29e90');
+      stones(w.L); stones(w.R);
+      door(w.L, 0.5, 0.16, 10);
+      win(w.R, 0.42, 5, 0.13, 5, { shutter: '#5a4a3a' });
+      const surf = roofV(u0, v0, u1, v1, wh, 16, '#9c4a30', '#a29e90', { style: 'tile', vent: 0.1 });
+      const cu = (u0 + u1) / 2 + 0.2;
+      chimney(cu, v0 + 0.3, surf(cu + 0.06) - 2, surf(cu) + 11, 0.7);
+
+      stoneBlocks(U + 1.2, V + 1.12, 3);
+      pickaxe(U + 0.75, V + 1.45);
+      barrel(U + 0.35, V + 1.3);
+    }
+
+    const BUILDING_RENDERERS = {
+      stonecutter: drawStonecutter,
+      house_small: drawHouseSmall,
+      house_medium: drawHouseMedium,
+      woodcutter: drawWoodcutter,
+      sawmill: drawSawmill,
+      warehouse: drawWarehouse
+    };
+
+    function drawBuilding(b) {
+      const vr = Math.abs(b.x * 31 + b.y * 17);
+      const rnd = seeded(b.x * 73856093 ^ b.y * 19349663);
+      // Footprint origin corner (tile centres are at integer coords)
+      BUILDING_RENDERERS[b.type](b.x - 0.5, b.y - 0.5, rnd, vr);
+    }
+
+    // ===== ROADS =====
+    const isRoad = (x, y) => GAME.roads.has(`${x},${y}`);
+    const isBuildingTile = (x, y) => {
+      const occ = GAME.occupancy.get(`${x},${y}`);
+      return !!occ && occ !== 'road';
+    };
+    const uvRect = (u0, v0, u1, v1) => [P(u0, v0), P(u1, v0), P(u1, v1), P(u0, v1)];
+
+    // A dirt path that joins up with neighbouring roads and runs into buildings it touches
+    function drawRoad(x, y) {
+      const arms = [
+        [0, -1], [1, 0], [0, 1], [-1, 0]
+      ].filter(([dx, dy]) => isRoad(x + dx, y + dy) || isBuildingTile(x + dx, y + dy));
+
+      const shape = (hw) => {
+        const parts = [uvRect(x - hw, y - hw, x + hw, y + hw)];
+        for (const [dx, dy] of arms) {
+          if (dy === -1) parts.push(uvRect(x - hw, y - 0.5, x + hw, y - hw));
+          if (dy === 1) parts.push(uvRect(x - hw, y + hw, x + hw, y + 0.5));
+          if (dx === -1) parts.push(uvRect(x - 0.5, y - hw, x - hw, y + hw));
+          if (dx === 1) parts.push(uvRect(x + hw, y - hw, x + 0.5, y + hw));
+        }
+        return parts;
+      };
+
+      for (const q of shape(0.36)) poly('#7a6a44', q, null); // verge
+      for (const q of shape(0.3)) poly('#b8a274', q, null);  // path surface
+
+      // Scattered pebbles, stable per tile
+      const rnd = seeded(x * 92821 ^ y * 68917);
+      for (let i = 0; i < 5; i++) {
+        dot(P(x - 0.25 + rnd() * 0.5, y - 0.25 + rnd() * 0.5), 0.9, rnd() < 0.5 ? '#9a865c' : '#d2c092');
+      }
+    }
+
+    function drawNoRoadIcon(b) {
+      const def = DEFS[b.type];
+      const bob = Math.sin(animTime / 300) * 2;
+      const p = P(b.x - 0.5 + def.w / 2, b.y - 0.5 + def.h / 2, 72 + bob);
+      ctx.fillStyle = '#c0392b';
+      ctx.strokeStyle = '#fff';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, 10, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+      // Little road symbol: two converging edges with a dashed centre line
+      line({ x: p.x - 6, y: p.y + 6 }, { x: p.x - 2, y: p.y - 6 }, '#fff', 1.6);
+      line({ x: p.x + 6, y: p.y + 6 }, { x: p.x + 2, y: p.y - 6 }, '#fff', 1.6);
+      line({ x: p.x, y: p.y + 5 }, { x: p.x, y: p.y + 2 }, '#fff', 1.2);
+      line({ x: p.x, y: p.y - 1 }, { x: p.x, y: p.y - 4 }, '#fff', 1.2);
+    }
+
+    function drawTileHighlight(x, y, fill, stroke) {
+      poly(fill, uvRect(x - 0.5, y - 0.5, x + 0.5, y + 0.5), stroke);
+    }
+
+    // L-shaped path between two tiles: first along x, then along y
+    function roadPath(a, b) {
+      const sx = Math.sign(b.tx - a.tx), sy = Math.sign(b.ty - a.ty);
+      let x = a.tx, y = a.ty;
+      const tiles = [{ tx: x, ty: y }];
+      while (x !== b.tx) { x += sx; tiles.push({ tx: x, ty: y }); }
+      while (y !== b.ty) { y += sy; tiles.push({ tx: x, ty: y }); }
+      return tiles;
+    }
+
+    function drawRoadGhost() {
+      const h = GAME.hoveredTile;
+      const tiles = GAME.roadDrag ? roadPath(GAME.roadDrag, h) : [h];
+      for (const t of tiles) {
+        const ok = isRoad(t.tx, t.ty) || canPlaceBuilding(t.tx, t.ty, DEFS.road, true);
+        drawTileHighlight(t.tx, t.ty, ok ? 'rgba(200,180,120,0.55)' : 'rgba(200,80,80,0.45)', ok ? '#e8d8a0' : '#c86464');
+      }
+    }
+
+    function drawDemolishGhost() {
+      const { tx, ty } = GAME.hoveredTile;
+      const occ = GAME.occupancy.get(`${tx},${ty}`);
+      if (occ === 'road' || !occ) {
+        drawTileHighlight(tx, ty, occ ? 'rgba(220,60,60,0.45)' : 'rgba(220,60,60,0.15)', '#e05050');
+        return;
+      }
+      const b = GAME.buildings.find(bb => bb.id === occ);
+      const def = DEFS[b.type];
+      poly('rgba(220,60,60,0.35)', uvRect(b.x - 0.5, b.y - 0.5, b.x + def.w - 0.5, b.y + def.h - 0.5), '#e05050');
+    }
+
+    function drawGhostBuilding(tx, ty, def) {
+      const valid = canPlaceBuilding(tx, ty, def, true);
+      ctx.globalAlpha = 0.5;
+
+      for (let dy = 0; dy < def.h; dy++) {
+        for (let dx = 0; dx < def.w; dx++) {
+          const p = ISO.tileToScreen(tx + dx, ty + dy);
+          const TW = ISO.TW, TH = ISO.TH;
+
+          ctx.fillStyle = valid ? 'rgba(100, 200, 100, 0.3)' : 'rgba(200, 100, 100, 0.3)';
+          ctx.strokeStyle = valid ? '#64c864' : '#c86464';
+          ctx.lineWidth = 2;
+
+          ctx.beginPath();
+          ctx.moveTo(p.x, p.y - TH / 2);
+          ctx.lineTo(p.x + TW / 2, p.y);
+          ctx.lineTo(p.x, p.y + TH / 2);
+          ctx.lineTo(p.x - TW / 2, p.y);
+          ctx.closePath();
+          ctx.fill();
+          ctx.stroke();
+        }
+      }
+
+      // Preview of the actual building on top of the footprint
+      ctx.globalAlpha = valid ? 0.65 : 0.35;
+      drawBuilding({ type: def.id, x: tx, y: ty });
+      ctx.globalAlpha = 1;
+    }
+
+    // quiet = true for per-frame checks (ghost preview) so the log isn't flooded
+    function canPlaceBuilding(tx, ty, def, quiet = false) {
+      const fail = (msg) => {
+        if (!quiet) log(msg, 'err');
+        return false;
+      };
+
+      // Bounds check
+      if (tx < 0 || ty < 0 || tx + def.w > MAP_SIZE || ty + def.h > MAP_SIZE) {
+        return fail(`Bounds fail: ${tx},${ty} size ${def.w}x${def.h}`);
+      }
+
+      // Check each tile
+      for (let dy = 0; dy < def.h; dy++) {
+        for (let dx = 0; dx < def.w; dx++) {
+          const cx = tx + dx;
+          const cy = ty + dy;
+          const key = `${cx},${cy}`;
+
+          // Check if occupied
+          if (GAME.occupancy.has(key)) {
+            return fail(`Occupied at ${key}`);
+          }
+
+          // Check terrain (grass or beach OK)
+          const idx = cy * MAP_SIZE + cx;
+          const terrain = GAME.grid[idx]?.type;
+          if (terrain !== 'grass' && terrain !== 'beach') {
+            return fail(`Bad terrain at ${key}: ${terrain}`);
+          }
+        }
+      }
+
+      // Raw-material buildings need their terrain (forest, rock) nearby
+      if (def.near) {
+        let count = 0;
+        for (let dy = -4; dy <= 4; dy++) {
+          for (let dx = -4; dx <= 4; dx++) {
+            const cy = ty + dy;
+            const cx = tx + dx;
+            if (cy >= 0 && cy < MAP_SIZE && cx >= 0 && cx < MAP_SIZE) {
+              const idx = cy * MAP_SIZE + cx;
+              if (GAME.grid[idx]?.type === def.near.terrain) count++;
+            }
+          }
+        }
+        if (count < 2) {
+          return fail(`Ikke nok ${def.near.label} i nærheden`);
+        }
+      }
+
+      return true;
+    }
+
+    function placeBuilding(tx, ty, type) {
+      const def = DEFS[type];
+      if (!canPlaceBuilding(tx, ty, def)) {
+        log(`❌ Can't place ${type} at ${tx},${ty}`, 'err');
+        return false;
+      }
+
+      // The very first warehouse is free
+      const isFirstWarehouse = GAME.phase === 'setup' && type === 'warehouse';
+      const cost = isFirstWarehouse ? {} : def.cost;
+
+      for (const res in cost) {
+        if ((GAME.resources[res] || 0) < cost[res]) {
+          log(`❌ Not enough ${res}`, 'err');
+          return false;
+        }
+      }
+
+      for (const res in cost) {
+        GAME.resources[res] -= cost[res];
+      }
+
+      const bid = 'b_' + Math.random().toString(36).substr(2, 6);
+      const b = { id: bid, type, x: tx, y: ty };
+      GAME.buildings.push(b);
+
+      for (let dy = 0; dy < def.h; dy++) {
+        for (let dx = 0; dx < def.w; dx++) {
+          GAME.occupancy.set(`${tx + dx},${ty + dy}`, bid);
+        }
+      }
+
+      if (def.capacity) GAME.population.capacity += def.capacity;
+      if (def.storage) {
+        for (const res in GAME.storageCap) GAME.storageCap[res] += def.storage;
+      }
+
+      log(`✓ ${def.name} placed at ${tx},${ty}`, 'ok');
+      selectTool(null);
+      if (isFirstWarehouse) startPlaying();
+      recomputeConnectivity();
+      return true;
+    }
+
+    function placeRoads(tiles) {
+      let built = 0;
+      for (const t of tiles) {
+        if (isRoad(t.tx, t.ty) || !canPlaceBuilding(t.tx, t.ty, DEFS.road, true)) continue;
+        const key = `${t.tx},${t.ty}`;
+        GAME.roads.add(key);
+        GAME.occupancy.set(key, 'road');
+        built++;
+      }
+      if (built) log(`✓ ${built} vejfelt${built > 1 ? 'er' : ''} bygget`, 'ok');
+      else log('Ingen gyldige felter til vej', 'err');
+      recomputeConnectivity();
+    }
+
+    function demolishAt(tx, ty) {
+      const key = `${tx},${ty}`;
+      const occ = GAME.occupancy.get(key);
+      if (!occ) return;
+
+      if (occ === 'road') {
+        GAME.roads.delete(key);
+        GAME.occupancy.delete(key);
+        log(`✓ Vej fjernet ved ${key}`, 'ok');
+        recomputeConnectivity();
+        return;
+      }
+
+      const b = GAME.buildings.find(bb => bb.id === occ);
+      const def = DEFS[b.type];
+      if (b.type === 'warehouse' && GAME.buildings.filter(bb => bb.type === 'warehouse').length === 1) {
+        log('❌ Du kan ikke rive dit sidste lager ned', 'err');
+        return;
+      }
+
+      GAME.buildings.splice(GAME.buildings.indexOf(b), 1);
+      for (let dy = 0; dy < def.h; dy++) {
+        for (let dx = 0; dx < def.w; dx++) GAME.occupancy.delete(`${b.x + dx},${b.y + dy}`);
+      }
+
+      if (def.capacity) {
+        GAME.population.capacity -= def.capacity;
+        GAME.population.total = Math.min(GAME.population.total, GAME.population.capacity);
+      }
+      if (def.storage) {
+        for (const res in GAME.storageCap) {
+          GAME.storageCap[res] -= def.storage;
+          GAME.resources[res] = Math.min(GAME.resources[res], GAME.storageCap[res]);
+        }
+      }
+      for (const res in def.cost) {
+        GAME.resources[res] = Math.min(GAME.storageCap[res], GAME.resources[res] + Math.floor(def.cost[res] / 2));
+      }
+
+      log(`✓ ${def.name} revet ned`, 'ok');
+      recomputeConnectivity();
+    }
+
+    // Tiles orthogonally adjacent to a building's footprint
+    function footprintNeighbors(b) {
+      const def = DEFS[b.type], out = [];
+      for (let dx = 0; dx < def.w; dx++) {
+        out.push([b.x + dx, b.y - 1], [b.x + dx, b.y + def.h]);
+      }
+      for (let dy = 0; dy < def.h; dy++) {
+        out.push([b.x - 1, b.y + dy], [b.x + def.w, b.y + dy]);
+      }
+      return out;
+    }
+
+    // Flood-fill the road network outwards from every warehouse,
+    // then mark each building that touches a reached road tile
+    function recomputeConnectivity() {
+      const reached = new Set();
+      const queue = [];
+      for (const b of GAME.buildings) {
+        if (b.type !== 'warehouse') continue;
+        for (const [x, y] of footprintNeighbors(b)) {
+          const k = `${x},${y}`;
+          if (GAME.roads.has(k) && !reached.has(k)) { reached.add(k); queue.push([x, y]); }
+        }
+      }
+      while (queue.length) {
+        const [x, y] = queue.shift();
+        for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+          const k = `${x + dx},${y + dy}`;
+          if (GAME.roads.has(k) && !reached.has(k)) { reached.add(k); queue.push([x + dx, y + dy]); }
+        }
+      }
+
+      GAME.connected.clear();
+      for (const b of GAME.buildings) {
+        if (b.type === 'warehouse' || footprintNeighbors(b).some(([x, y]) => reached.has(`${x},${y}`))) {
+          GAME.connected.add(b.id);
+        }
+      }
+    }
+
+    function startPlaying() {
+      GAME.phase = 'play';
+      document.getElementById('banner').hidden = true;
+      openBuildCategory('production');
+      log('Lageret er placeret. Byg veje fra lageret til dine bygninger!', 'ok');
+    }
+
+    function selectTool(type) {
+      GAME.selectedBuilding = type;
+      GAME.roadDrag = null;
+      refreshMenuState();
+    }
+
+    // ===== BUILD MENU =====
+    let openCategory = null;
+
+    function canAfford(id) {
+      const def = DEFS[id];
+      if (!def || (GAME.phase === 'setup' && id === 'warehouse')) return true;
+      return Object.entries(def.cost).every(([res, n]) => (GAME.resources[res] || 0) >= n);
+    }
+
+    function costLabel(id) {
+      const def = DEFS[id];
+      if (!def) return '—';
+      if (GAME.phase === 'setup' && id === 'warehouse') return 'Gratis';
+      const parts = Object.entries(def.cost).map(([res, n]) => `${RES_ICONS[res]} ${n}`);
+      return parts.length ? parts.join(' ') : 'Gratis';
+    }
+
+    function buildMenu() {
+      const tabs = document.getElementById('build-tabs');
+      CATEGORIES.forEach((cat, i) => {
+        const t = document.createElement('button');
+        t.className = 'build-tab';
+        t.dataset.cat = cat.id;
+        t.innerHTML = `<span class="tab-icon">${cat.icon}</span>${cat.name}<span class="tab-key">${i + 1}</span>`;
+        t.addEventListener('click', () => openBuildCategory(openCategory === cat.id ? null : cat.id));
+        tabs.appendChild(t);
+      });
+    }
+
+    function openBuildCategory(id) {
+      openCategory = id;
+      const panel = document.getElementById('build-panel');
+      panel.hidden = !id;
+      if (id) {
+        const cat = CATEGORIES.find(c => c.id === id);
+        panel.innerHTML = `<div class="panel-title">${cat.icon} ${cat.name}</div><div class="cards"></div><div class="panel-desc"></div>`;
+        const cards = panel.querySelector('.cards');
+        const desc = panel.querySelector('.panel-desc');
+        for (const itemId of cat.items) {
+          const info = itemInfo(itemId);
+          const def = DEFS[itemId];
+          const card = document.createElement('button');
+          card.className = 'build-card';
+          card.dataset.bid = itemId;
+          card.innerHTML = `<canvas></canvas><div class="card-name">${info.name}</div>` +
+            `<div class="card-meta"><span class="card-cost"></span><span class="card-size">${def ? `${def.w}×${def.h}` : ''}</span></div>`;
+          card.addEventListener('click', () => selectTool(GAME.selectedBuilding === itemId ? null : itemId));
+          card.addEventListener('mouseenter', () => { desc.textContent = info.desc; });
+          card.addEventListener('mouseleave', () => {
+            desc.textContent = GAME.selectedBuilding ? itemInfo(GAME.selectedBuilding).desc : '';
+          });
+          cards.appendChild(card);
+          drawPreview(card.querySelector('canvas'), itemId);
+        }
+      }
+      refreshMenuState();
+    }
+
+    // Sync tabs/cards with phase, selection and affordability (cheap; runs every frame)
+    function refreshMenuState() {
+      const setup = GAME.phase === 'setup';
+      document.querySelectorAll('.build-tab').forEach(t => {
+        t.classList.toggle('active', t.dataset.cat === openCategory);
+        t.disabled = setup && t.dataset.cat !== 'storage';
+      });
+      document.querySelectorAll('.build-card').forEach(card => {
+        const id = card.dataset.bid;
+        card.classList.toggle('active', GAME.selectedBuilding === id);
+        card.classList.toggle('unaffordable', !canAfford(id));
+        card.disabled = setup && id !== 'warehouse';
+        const cost = card.querySelector('.card-cost');
+        const label = costLabel(id);
+        if (cost.textContent !== label) cost.textContent = label;
+      });
+    }
+
+    // Render a building (or tool) into a card canvas by temporarily redirecting `ctx`
+    const PREVIEW_H = { house_small: 36, house_medium: 82, woodcutter: 52, sawmill: 62, warehouse: 74, stonecutter: 52, road: 10 };
+
+    function drawPreview(cv, id) {
+      const dpr = window.devicePixelRatio || 1, cw = 96, ch = 72;
+      cv.width = cw * dpr;
+      cv.height = ch * dpr;
+      cv.style.width = cw + 'px';
+      cv.style.height = ch + 'px';
+
+      const mainCtx = ctx;
+      ctx = cv.getContext('2d');
+      try {
+        ctx.scale(dpr, dpr);
+        if (id === 'demolish') {
+          ctx.font = '38px serif';
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+          ctx.fillText('🔨', cw / 2, ch / 2 + 2);
+          return;
+        }
+
+        // Roads are previewed as a small bend, far away from any real map tiles
+        const isRoadPreview = id === 'road';
+        const ox = isRoadPreview ? -1000 : 0, oy = ox;
+        const w = isRoadPreview ? 2 : DEFS[id].w, h = isRoadPreview ? 2 : DEFS[id].h;
+
+        const left = P(ox - 0.5, oy + h - 0.5).x, right = P(ox + w - 0.5, oy - 0.5).x;
+        const bottom = P(ox + w - 0.5, oy + h - 0.5).y;
+        const s = Math.min(cw / (right - left + 10), ch / ((w + h) * 16 + PREVIEW_H[id]));
+        ctx.translate(cw / 2 - ((left + right) / 2) * s, ch - 3 - bottom * s);
+        ctx.scale(s, s);
+
+        for (let y = 0; y < h; y++) {
+          for (let x = 0; x < w; x++) drawTile(ox + x, oy + y, { type: 'grass' });
+        }
+
+        if (isRoadPreview) {
+          const keys = [`${ox},${oy + 1}`, `${ox + 1},${oy + 1}`, `${ox + 1},${oy}`];
+          keys.forEach(k => GAME.roads.add(k));
+          try {
+            keys.forEach(k => { const [x, y] = k.split(',').map(Number); drawRoad(x, y); });
+          } finally {
+            keys.forEach(k => GAME.roads.delete(k));
+          }
+        } else {
+          drawBuilding({ type: id, x: 0, y: 0 });
+        }
+      } finally {
+        ctx = mainCtx;
+      }
+    }
+
+    function render() {
+      ctx.fillStyle = '#2a3a4a';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+      ctx.save();
+      ctx.translate(canvas.width / 2 - GAME.camera.x * GAME.camera.zoom,
+                    canvas.height / 2 - GAME.camera.y * GAME.camera.zoom);
+      ctx.scale(GAME.camera.zoom, GAME.camera.zoom);
+
+      // Visible world rectangle; objects outside it are skipped (culling).
+      // Generous margins because buildings/trees extend upwards and sideways from their anchor.
+      const cam = GAME.camera;
+      const hw = canvas.width / 2 / cam.zoom, hh = canvas.height / 2 / cam.zoom;
+      // Margins: side = left/right, top = above the top edge, bottom = below the bottom edge
+      // (tall objects anchored below the screen can still reach up into view)
+      const inView = (p, side = 40, top = 24, bottom = 40) =>
+        p.x > cam.x - hw - side && p.x < cam.x + hw + side &&
+        p.y > cam.y - hh - top && p.y < cam.y + hh + bottom;
+
+      // Flat ground first (terrain + roads), then upright objects (trees + buildings) sorted by depth
+      for (const tile of GAME.grid) {
+        if (inView(ISO.tileToScreen(tile.x, tile.y))) drawTile(tile.x, tile.y, tile);
+      }
+      for (const key of GAME.roads) {
+        const [x, y] = key.split(',').map(Number);
+        if (inView(ISO.tileToScreen(x, y))) drawRoad(x, y);
+      }
+
+      const items = [];
+      for (const tile of GAME.grid) {
+        if (tile.type === 'forest' && inView(ISO.tileToScreen(tile.x, tile.y), 40, 24, 60)) {
+          items.push({ depth: tile.x + tile.y, draw: () => drawTree(tile.x, tile.y) });
+        } else if (tile.type === 'rock' && inView(ISO.tileToScreen(tile.x, tile.y), 40, 24, 40)) {
+          items.push({ depth: tile.x + tile.y, draw: () => drawRock(tile.x, tile.y, tile) });
+        }
+      }
+      const visibleBuildings = GAME.buildings.filter(b => {
+        const def = DEFS[b.type];
+        return inView(ISO.tileToScreen(b.x + (def.w - 1) / 2, b.y + (def.h - 1) / 2), 120, 80, 140);
+      });
+      for (const b of visibleBuildings) {
+        const def = DEFS[b.type];
+        const d = (b.x + def.w - 1) + (b.y + def.h - 1);
+        items.push({ depth: d, draw: () => drawBuilding(b) });
+      }
+
+      items.sort((a, b) => a.depth - b.depth);
+      items.forEach(it => it.draw());
+
+      // Warning bubbles over production buildings without a road link
+      for (const b of visibleBuildings) {
+        if (needsRoad(DEFS[b.type]) && !GAME.connected.has(b.id)) drawNoRoadIcon(b);
+      }
+
+      // Placement / tool preview
+      if (GAME.selectedBuilding && GAME.hoveredTile) {
+        if (GAME.selectedBuilding === 'road') drawRoadGhost();
+        else if (GAME.selectedBuilding === 'demolish') drawDemolishGhost();
+        else drawGhostBuilding(GAME.hoveredTile.tx, GAME.hoveredTile.ty, DEFS[GAME.selectedBuilding]);
+      }
+
+      ctx.restore();
+    }
+
+    // ===== CAMERA =====
+    const ZOOM_MIN = 0.35, ZOOM_MAX = 2.5;
+    const mouse = { x: null, y: null }; // last cursor position in canvas pixels (null = off canvas)
+
+    function screenToWorld(px, py) {
+      return {
+        x: (px - canvas.width / 2) / GAME.camera.zoom + GAME.camera.x,
+        y: (py - canvas.height / 2) / GAME.camera.zoom + GAME.camera.y
+      };
+    }
+
+    // Keep the camera centre over the map
+    function clampCamera() {
+      const c = GAME.camera, ext = (MAP_SIZE - 1) * 32;
+      c.x = Math.max(-ext, Math.min(ext, c.x));
+      c.y = Math.max(0, Math.min(ext, c.y));
+    }
+
+    // Zoom by a factor while keeping the world point under (px, py) fixed
+    function zoomAt(factor, px = canvas.width / 2, py = canvas.height / 2) {
+      const before = screenToWorld(px, py);
+      GAME.camera.zoom = Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, GAME.camera.zoom * factor));
+      const after = screenToWorld(px, py);
+      GAME.camera.x += before.x - after.x;
+      GAME.camera.y += before.y - after.y;
+      clampCamera();
+      updateHover();
+    }
+
+    function centerOn(tx, ty) {
+      const p = ISO.tileToScreen(tx, ty);
+      GAME.camera.x = p.x;
+      GAME.camera.y = p.y;
+      clampCamera();
+    }
+
+    function centerHome() {
+      const wh = GAME.buildings.find(b => b.type === 'warehouse');
+      if (wh) centerOn(wh.x + 0.5, wh.y + 0.5);
+      else centerOn(MAP_SIZE / 2, MAP_SIZE / 2);
+    }
+
+    function updateHover() {
+      if (mouse.x === null) { GAME.hoveredTile = null; return; }
+      const w = screenToWorld(mouse.x, mouse.y);
+      GAME.hoveredTile = ISO.screenToTile(w.x, w.y);
+    }
+
+    function setMouse(e) {
+      const rect = canvas.getBoundingClientRect();
+      mouse.x = e.clientX - rect.left;
+      mouse.y = e.clientY - rect.top;
+    }
+
+    // ===== INPUT =====
+    // Left-drag pans the map (a short press without movement counts as a click).
+    // Right/middle-drag always pans. With the road tool, left-drag lays roads instead.
+    const DRAG_THRESHOLD = 5;
+    const drag = { active: false, button: -1, startX: 0, startY: 0, lastX: 0, lastY: 0, moved: false };
+
+    function useToolAtHover() {
+      const tool = GAME.selectedBuilding;
+      if (!tool || !GAME.hoveredTile) return;
+      const { tx, ty } = GAME.hoveredTile;
+      if (tool === 'demolish') demolishAt(tx, ty);
+      else if (tool !== 'road') placeBuilding(tx, ty, tool);
+    }
+
+    canvas.addEventListener('mousedown', (e) => {
+      setMouse(e);
+      updateHover();
+      if (e.button === 1 || e.button === 2) e.preventDefault(); // no autoscroll / context menu
+
+      if (e.button === 0 && GAME.selectedBuilding === 'road') {
+        if (GAME.hoveredTile) GAME.roadDrag = { ...GAME.hoveredTile };
+        return;
+      }
+      Object.assign(drag, {
+        active: true, button: e.button, moved: false,
+        startX: e.clientX, startY: e.clientY, lastX: e.clientX, lastY: e.clientY
+      });
+    });
+
+    // Listen on window so drags continue (and end) even outside the canvas
+    window.addEventListener('mousemove', (e) => {
+      if (e.target === canvas || drag.active || GAME.roadDrag) setMouse(e);
+
+      if (drag.active) {
+        if (!drag.moved && Math.hypot(e.clientX - drag.startX, e.clientY - drag.startY) > DRAG_THRESHOLD) {
+          drag.moved = true;
+          canvas.style.cursor = 'grabbing';
+        }
+        if (drag.moved) {
+          GAME.camera.x -= (e.clientX - drag.lastX) / GAME.camera.zoom;
+          GAME.camera.y -= (e.clientY - drag.lastY) / GAME.camera.zoom;
+          clampCamera();
+        }
+        drag.lastX = e.clientX;
+        drag.lastY = e.clientY;
+      }
+      updateHover();
+    });
+
+    canvas.addEventListener('mouseleave', () => {
+      if (!drag.active && !GAME.roadDrag) { mouse.x = null; updateHover(); }
+    });
+
+    window.addEventListener('mouseup', (e) => {
+      if (e.button === 0 && GAME.roadDrag) {
+        if (GAME.hoveredTile) placeRoads(roadPath(GAME.roadDrag, GAME.hoveredTile));
+        GAME.roadDrag = null;
+        return;
+      }
+      if (!drag.active || e.button !== drag.button) return;
+      const wasClick = !drag.moved;
+      drag.active = false;
+      canvas.style.cursor = '';
+      if (wasClick && e.button === 0 && e.target === canvas) useToolAtHover();
+    });
+
+    canvas.addEventListener('contextmenu', (e) => e.preventDefault());
+
+    canvas.addEventListener('wheel', (e) => {
+      e.preventDefault();
+      // Exponential zoom towards the cursor; works for mouse wheels and trackpads alike
+      const dy = e.deltaMode === 1 ? e.deltaY * 16 : e.deltaY;
+      const factor = Math.max(0.5, Math.min(2, Math.exp(-dy * 0.0015)));
+      setMouse(e);
+      zoomAt(factor, mouse.x, mouse.y);
+    }, { passive: false });
+
+    // Keyboard: WASD / arrows pan, +/- zoom, Esc deselects, H returns home
+    const PAN_KEYS = {
+      w: [0, -1], arrowup: [0, -1], s: [0, 1], arrowdown: [0, 1],
+      a: [-1, 0], arrowleft: [-1, 0], d: [1, 0], arrowright: [1, 0]
+    };
+    const keysDown = new Set();
+
+    window.addEventListener('keydown', (e) => {
+      const k = e.key.toLowerCase();
+      if (k === 'escape' && GAME.phase === 'play') {
+        // First Esc drops the tool, the next one closes the menu panel
+        if (GAME.selectedBuilding) selectTool(null);
+        else openBuildCategory(null);
+      }
+      // 1-4 open build categories
+      const catIdx = Number(k) - 1;
+      if (GAME.phase === 'play' && CATEGORIES[catIdx]) {
+        const id = CATEGORIES[catIdx].id;
+        openBuildCategory(openCategory === id ? null : id);
+      }
+      if (PAN_KEYS[k]) { keysDown.add(k); e.preventDefault(); }
+      if (k === '+' || k === '=') zoomAt(1.2);
+      if (k === '-') zoomAt(1 / 1.2);
+      if (k === 'h') centerHome();
+    });
+    window.addEventListener('keyup', (e) => keysDown.delete(e.key.toLowerCase()));
+    window.addEventListener('blur', () => keysDown.clear());
+
+    function updateKeyboardPan(dt) {
+      let dx = 0, dy = 0;
+      for (const k of keysDown) {
+        const d = PAN_KEYS[k];
+        if (d) { dx += d[0]; dy += d[1]; }
+      }
+      if (!dx && !dy) return;
+      const speed = 800 / GAME.camera.zoom; // world px per second, constant on screen
+      const len = Math.hypot(dx, dy);
+      GAME.camera.x += (dx / len) * speed * dt / 1000;
+      GAME.camera.y += (dy / len) * speed * dt / 1000;
+      clampCamera();
+      updateHover();
+    }
+
+    // On-screen view controls
+    document.querySelectorAll('#view-controls button').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const a = btn.dataset.view;
+        if (a === 'in') zoomAt(1.25);
+        if (a === 'out') zoomAt(1 / 1.25);
+        if (a === 'home') centerHome();
+      });
+    });
+
+
+    // ===== SIMULATION =====
+    function tick() {
+      const R = GAME.resources, cap = GAME.storageCap;
+      const working = GAME.buildings
+        .map(b => DEFS[b.type])
+        .filter((def, i) => def.produces && GAME.connected.has(GAME.buildings[i].id)); // no road, no production
+
+      // Raw producers first (woodcutter, stonecutter), then processors (sawmill),
+      // so this tick's raw output can be processed in the same tick
+      working.sort((a, b) => !!a.consumes - !!b.consumes);
+      for (const def of working) {
+        const amount = def.rate ?? 1;
+        if (R[def.produces] >= cap[def.produces]) continue; // storage full
+        if (def.consumes) {
+          if (R[def.consumes] < amount) continue; // missing input
+          R[def.consumes] -= amount;
+        }
+        R[def.produces] = Math.min(cap[def.produces], R[def.produces] + amount);
+      }
+
+      if (GAME.population.total < GAME.population.capacity && GAME.resources.planks >= 0.2) {
+        GAME.resources.planks -= 0.2;
+        GAME.population.total += 1;
+      }
+
+      GAME.tick++;
+    }
+
+    // ===== MAIN LOOP =====
+    let acc = 0, lastTime = 0;
+    function gameLoop(t) {
+      if (!lastTime) lastTime = t;
+      const dt = Math.min(250, t - lastTime);
+      lastTime = t;
+      animTime = t;
+      updateKeyboardPan(dt);
+
+      acc += dt;
+      while (acc >= 1000) {
+        tick();
+        acc -= 1000;
+      }
+
+      render();
+
+      document.getElementById('wood').textContent = `🌲 ${Math.floor(GAME.resources.wood)}`;
+      document.getElementById('planks').textContent = `📦 ${Math.floor(GAME.resources.planks)}`;
+      document.getElementById('stone').textContent = `🪨 ${Math.floor(GAME.resources.stone)}`;
+      document.getElementById('pop').textContent = `👥 ${GAME.population.total}/${GAME.population.capacity}`;
+      document.getElementById('tick').textContent = `Tick: ${GAME.tick}`;
+      refreshMenuState();
+      const unlinked = GAME.buildings.filter(b => needsRoad(DEFS[b.type]) && !GAME.connected.has(b.id)).length;
+      document.getElementById('status').textContent =
+        unlinked ? `⚠ ${unlinked} bygning${unlinked > 1 ? 'er' : ''} mangler vej til lager` : '';
+
+      requestAnimationFrame(gameLoop);
+    }
+
+    // ===== INIT =====
+    window.addEventListener('DOMContentLoaded', () => {
+      log('Initializing game...', 'info');
+      resizeCanvas();
+      window.addEventListener('resize', resizeCanvas);
+
+      log('Generating terrain...', 'ok');
+      GAME.grid = generateTerrain(MAP_SIZE, MAP_SIZE);
+
+      centerOn(MAP_SIZE / 2, MAP_SIZE / 2);
+
+      // Setup phase: the player picks where the first (free) warehouse goes
+      buildMenu();
+      openBuildCategory('storage');
+      selectTool('warehouse');
+      log('Vælg hvor dit første lager skal stå', 'ok');
+      requestAnimationFrame(gameLoop);
+    });
+  </script>
+</body>
+</html>
