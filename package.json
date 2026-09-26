@@ -1,0 +1,13 @@
+{
+  "name": "anno-online",
+  "private": true,
+  "description": "Anno Online-inspired isometric city builder (open index.html in a browser to play)",
+  "scripts": {
+    "test": "node --test \"tests/*.test.js\"",
+    "test:quick": "node --test tests/smoke.test.js tests/rules.test.js tests/economy.test.js tests/ships.test.js tests/save.test.js",
+    "sim": "node tests/sim-report.js"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
