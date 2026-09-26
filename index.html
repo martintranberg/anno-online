@@ -55,6 +55,7 @@
       color: #f0e2c0;
       font-size: 13px;
       cursor: pointer;
+      white-space: nowrap;
     }
     .build-tab .tab-icon { font-size: 17px; }
     .build-tab .tab-key { font-size: 10px; color: #b09a6a; }
@@ -118,6 +119,90 @@
 
     #status { color: #f0a040; font-size: 12px; }
 
+    #game-controls { display: flex; gap: 4px; margin-top: 8px; }
+    #game-controls button {
+      flex: 1;
+      padding: 4px 6px;
+      background: #4a6fa5;
+      border: none;
+      border-radius: 3px;
+      color: #fff;
+      font-size: 11px;
+      cursor: pointer;
+    }
+    #game-controls button:hover { background: #5a7fb5; }
+    #hud #saved-at { color: #889; font-size: 10px; margin: 4px 0 0; }
+
+    #hud .hint { color: #99a; font-size: 10px; }
+    #food-status { color: #f07050; font-size: 12px; }
+
+    /* ----- Info panel (warehouse / shipyard / ship / building) ----- */
+    #info {
+      position: absolute;
+      top: 10px; right: 10px;
+      width: 300px;
+      max-height: calc(100vh - 130px); /* stays clear of the zoom controls */
+      overflow-y: auto;
+      background: linear-gradient(#f2e7cb, #e0cfa6);
+      border: 2px solid #8a6a3a;
+      border-radius: 8px;
+      box-shadow: 0 4px 16px rgba(0,0,0,0.5);
+      color: #3a2616;
+      z-index: 15;
+      font-size: 12px;
+    }
+    #info[hidden] { display: none; }
+    .info-head {
+      display: flex; justify-content: space-between; align-items: center;
+      background: linear-gradient(#5a4028, #3e2c1a);
+      color: #f0e2c0;
+      padding: 7px 10px;
+      font-weight: bold;
+      font-size: 13px;
+      position: sticky; top: 0;
+    }
+    .info-head button { background: none; border: none; color: #f0e2c0; font-size: 18px; cursor: pointer; line-height: 1; }
+    #info-body { padding: 8px 10px 10px; }
+    #info-body h4 { margin: 10px 0 4px; font-size: 11px; text-transform: uppercase; letter-spacing: 1px; color: #7a5a2a; }
+    #info-body p { margin: 4px 0; line-height: 1.4; }
+    #info-body .muted { color: #7a6448; font-size: 11px; }
+    #info-body .err { color: #b02a2a; font-weight: bold; }
+    #info-body .row { display: flex; justify-content: space-between; gap: 8px; padding: 3px 0; border-bottom: 1px solid rgba(90,64,40,0.15); }
+    #info-body .row b { text-align: right; }
+    #info-body .res { display: grid; grid-template-columns: 1fr auto; gap: 1px 8px; margin: 4px 0; }
+    #info-body .res .bar { grid-column: 1 / -1; }
+    #info-body .bar { height: 5px; background: rgba(90,64,40,0.2); border-radius: 3px; overflow: hidden; margin: 2px 0 4px; }
+    #info-body .bar div { height: 100%; background: linear-gradient(90deg, #6a9a3a, #c9a24e); }
+    #info-body label { display: block; margin: 5px 0; }
+    #info-body select { width: 100%; margin-top: 2px; padding: 3px; font-size: 12px; }
+    #info-body .goods { display: grid; grid-template-columns: 1fr 1fr; gap: 2px 6px; margin: 6px 0; }
+    #info-body .chk { margin: 0; font-size: 11px; cursor: pointer; }
+    #info-body .btns { display: flex; justify-content: space-between; align-items: center; gap: 6px; margin-top: 6px; }
+    #info-body button:not(.link) {
+      padding: 5px 12px; background: #4a6fa5; border: none; border-radius: 4px; color: #fff; cursor: pointer; font-size: 12px;
+    }
+    #info-body button.alt { background: #8a4a3a; }
+    #info-body button:disabled { opacity: 0.4; cursor: not-allowed; }
+    #info-body button.link { background: none; border: none; color: #2a5aa8; cursor: pointer; font-size: 12px; padding: 0; }
+    #info-body .ship-card { border: 1px solid rgba(90,64,40,0.3); border-radius: 5px; padding: 6px; margin: 5px 0; background: rgba(255,255,255,0.3); }
+    #info-body .ship-card.locked { opacity: 0.6; }
+
+    #toast {
+      position: absolute;
+      top: 70px; left: 50%;
+      transform: translateX(-50%);
+      background: rgba(20,30,50,0.94);
+      border: 1px solid #ffd700;
+      border-radius: 5px;
+      padding: 8px 16px;
+      font-size: 13px;
+      z-index: 20;
+      pointer-events: none;
+      opacity: 0;
+      transition: opacity 0.3s;
+    }
+    #toast.show { opacity: 1; }
+
     #view-controls {
       position: absolute;
       bottom: 10px; right: 10px;
@@ -156,6 +241,7 @@
       font-family: monospace;
     }
 
+    #debug[hidden] { display: none; }
     .log { margin: 2px 0; padding: 1px 4px; }
     .log-ok { color: #4a4; }
     .log-err { color: #a44; }
@@ -167,17 +253,29 @@
 
   <div id="hud">
     <strong>Anno</strong>
-    <span id="wood">🌲 0</span>
-    <span id="planks">📦 0</span>
-    <span id="stone">🪨 0</span>
     <span id="pop">👥 0/0</span>
+    <span id="island-name">📍 —</span>
+    <span class="hint">Klik på et lager for at se øens varer</span>
     <span id="status"></span>
+    <span id="food-status"></span>
     <span id="tick" style="color: #888; font-size: 11px;">Tick: 0</span>
+    <div id="game-controls">
+      <button id="btn-save" title="Gem spillet (Ctrl+S)">💾 Gem</button>
+      <button id="btn-new" title="Start et nyt spil">🆕 Nyt spil</button>
+    </div>
+    <span id="saved-at"></span>
+  </div>
+
+  <div id="toast"></div>
+
+  <div id="info" hidden>
+    <div class="info-head"><span id="info-title"></span><button id="info-close" title="Luk (Esc)">×</button></div>
+    <div id="info-body"></div>
   </div>
 
   <div id="banner">
     🏚️ Vælg hvor dit første lager skal stå
-    <small>Det første lager er gratis. Alle produktionsbygninger skal forbindes til et lager med vej.</small>
+    <small>Det første lager er gratis og skal ligge ved kysten. Produktionsbygninger skal forbindes til lageret med vej.</small>
   </div>
 
   <div id="build-menu">
@@ -192,7 +290,7 @@
     <div class="hint">Træk: flyt kort · Scroll: zoom<br>WASD / piletaster: flyt · H: hjem</div>
   </div>
 
-  <div id="debug">DEBUG</div>
+  <div id="debug" hidden>DEBUG</div>
 
   <script>
     'use strict';
@@ -221,31 +319,53 @@
     }
 
     // ===== GAME STATE =====
-    const MAP_SIZE = 80;
+    const MAP_SIZE = 96;
 
     const GAME = {
       grid: [],
       buildings: [],
       occupancy: new Map(),
-      // Enough for woodcutter + sawmill (40) plus a little slack
-      resources: { wood: 0, planks: 50, stone: 0 },
-      storageCap: { wood: 100, planks: 100, stone: 100 },
-      population: { total: 4, capacity: 4 },
+      islands: new Map(),      // island id -> { name, resources, cap, pop, popCap, ... } (one storage per landmass)
+      ships: [],
       roads: new Set(),        // "x,y" keys of road tiles
       connected: new Set(),    // ids of buildings linked to a warehouse by road
       phase: 'setup',          // 'setup' until the first warehouse is placed, then 'play'
-      roadDrag: null,          // start tile while dragging out a road
+      roadDrag: null,          // start tile while dragging out a road or canal
+      shipCounter: 0,
       tick: 0,
       selectedBuilding: null,
       hoveredTile: null,
       camera: { x: 0, y: 0, zoom: 1 }
     };
 
+    const RESOURCES = {
+      wood:   { name: 'Træstammer', icon: '🌲' },
+      planks: { name: 'Planker',    icon: '📦' },
+      stone:  { name: 'Sten',       icon: '🪨' },
+      fish:   { name: 'Fisk',       icon: '🐟', food: true },
+      grain:  { name: 'Korn',       icon: '🌾' },
+      pork:   { name: 'Svinekød',   icon: '🥓', food: true, meat: true },
+      beef:   { name: 'Oksekød',    icon: '🥩', food: true, meat: true }
+    };
+    const RES_KEYS = Object.keys(RESOURCES);
+    const FOOD_KEYS = RES_KEYS.filter(k => RESOURCES[k].food);
+    const RES_ICONS = Object.fromEntries(RES_KEYS.map(k => [k, RESOURCES[k].icon]));
+    const emptyStock = () => Object.fromEntries(RES_KEYS.map(k => [k, 0]));
+
+    // ----- Balance -----
+    const WAREHOUSE_CAP = 100;                         // storage per resource per warehouse
+    const START_STOCK = { planks: 50, fish: 20 };      // delivered with the very first warehouse
+    const FOUNDING_COST = { planks: 30, stone: 10 };   // first warehouse on another island (needs a ship)
+    const EXTRA_WAREHOUSE_POP = 20;                    // island residents needed per existing warehouse
+    const extraWarehouseCost = (count) => ({ planks: 30 + 15 * count, stone: 25 + 15 * count });
+    const FOOD_PER_RESIDENT = 0.02;                    // food units per resident per second
+    const STARVE_TICKS = 5;                            // without food, one resident leaves every N ticks
+
     const DEFS = {
       house_small: { id: 'house_small', name: 'Pionerhytte', w: 1, h: 1, cost: { planks: 10 }, capacity: 4,
-        desc: 'Enkel bolig til 4 pionerer.' },
-      house_medium: { id: 'house_medium', name: 'Borgerhus', w: 2, h: 2, cost: { planks: 20, stone: 15 }, capacity: 12,
-        desc: 'Bindingsværkshus med stensokkel til 12 borgere.' },
+        desc: 'Bolig til 4 pionerer. Beboerne spiser fisk eller kød.' },
+      house_medium: { id: 'house_medium', name: 'Borgerhus', w: 2, h: 2, cost: { planks: 20, stone: 15 }, capacity: 12, capacityNoMeat: 6,
+        desc: 'Bolig til 12 borgere, men kun 6 hvis øen ikke har kød (svin eller okse) på lager.' },
       woodcutter: { id: 'woodcutter', name: 'Skovhugger', w: 2, h: 2, cost: { planks: 15 }, produces: 'wood',
         near: { terrain: 'forest', label: 'skov' },
         desc: 'Fælder træ (+1/s). Kræver skov i nærheden og vej til et lager.' },
@@ -254,13 +374,31 @@
       stonecutter: { id: 'stonecutter', name: 'Stenhugger', w: 2, h: 2, cost: { planks: 20 }, produces: 'stone', rate: 0.5,
         near: { terrain: 'rock', label: 'klipper' },
         desc: 'Hugger sten (+0,5/s). Kræver klipper i nærheden og vej til et lager.' },
-      warehouse: { id: 'warehouse', name: 'Lager', w: 2, h: 2, cost: { planks: 20 }, storage: 200,
-        desc: 'Opbevarer varer (+200 plads). Vejnettet skal forbinde bygninger hertil.' },
+      fisher: { id: 'fisher', name: 'Fisker', w: 2, h: 2, cost: { planks: 15 }, produces: 'fish', rate: 0.6, coastal: true,
+        near: { terrain: 'water', label: 'vand', min: 8, radius: 3 },
+        desc: 'Fanger fisk (+0,6/s). Skal ligge ved kysten og have vej til et lager.' },
+      grainfarm: { id: 'grainfarm', name: 'Kornfarm', w: 3, h: 3, cost: { planks: 20 }, produces: 'grain', rate: 0.6,
+        desc: 'Dyrker korn (+0,6/s) til dyrefoder. Kræver vej til et lager.' },
+      pigfarm: { id: 'pigfarm', name: 'Svinefarm', w: 2, h: 2, cost: { planks: 20, stone: 5 }, consumes: 'grain', produces: 'pork', rate: 0.4,
+        desc: 'Fodrer grise med korn (0,4 korn → 0,4 svinekød/s). Kræver vej til et lager.' },
+      cattlefarm: { id: 'cattlefarm', name: 'Kvægfarm', w: 3, h: 3, cost: { planks: 30, stone: 15 }, consumes: 'grain', inRate: 0.4, produces: 'beef', rate: 0.6,
+        desc: 'Fodrer køer med korn (0,4 korn → 0,6 oksekød/s). Dyrere, men mere effektiv. Kræver vej til et lager.' },
+      shipyard: { id: 'shipyard', name: 'Skibsbygger', w: 3, h: 3, cost: { planks: 40, stone: 20 }, coastal: true, needsRoad: true,
+        desc: 'Bygger skibe. Skal ligge ved kysten og have vej til et lager. Klik på den for at bygge skibe.' },
+      warehouse: { id: 'warehouse', name: 'Lager', w: 2, h: 2, cost: {}, storage: WAREHOUSE_CAP,
+        desc: 'Lageret samler varer for hele øen. Første lager på en ø skal ligge ved kysten; flere lagre øger pladsen, men kræver beboere.' },
       road: { id: 'road', name: 'Vej', w: 1, h: 1, cost: {},
-        desc: 'Forbinder bygninger med lageret. Hold venstre museknap nede og træk.' }
+        desc: 'Forbinder bygninger med lageret. Hold venstre museknap nede og træk. Veje gennem skov fælder træerne.' },
+      canal: { id: 'canal', name: 'Kanal', w: 1, h: 1, cost: { planks: 1, stone: 2 },
+        desc: 'Graver en vandvej for skibe. Skal starte ved vand. Træk for at grave. Kan dele en ø i to!' }
     };
 
-    const RES_ICONS = { wood: '🌲', planks: '📦', stone: '🪨' };
+    // Ship types: bigger ships are unlocked by total population and sail further with more cargo
+    const SHIP_TYPES = {
+      jolle:   { id: 'jolle',   name: 'Jolle',   cost: { planks: 15 },             cargo: 20,  range: 35,  speed: 2.2, buildTime: 15, pop: 0,  size: 0.8 },
+      kogge:   { id: 'kogge',   name: 'Kogge',   cost: { planks: 50, stone: 15 },  cargo: 60,  range: 80,  speed: 2.0, buildTime: 30, pop: 30, size: 1.1 },
+      karavel: { id: 'karavel', name: 'Karavel', cost: { planks: 100, stone: 40 }, cargo: 150, range: 200, speed: 2.6, buildTime: 45, pop: 80, size: 1.4 }
+    };
 
     // Tools that aren't buildings
     const TOOLS = {
@@ -270,14 +408,16 @@
 
     // Build menu grouping
     const CATEGORIES = [
-      { id: 'terrain', name: 'Terræn', icon: '🛤️', items: ['road', 'demolish'] },
+      { id: 'terrain', name: 'Terræn', icon: '🛤️', items: ['road', 'canal', 'demolish'] },
       { id: 'housing', name: 'Boliger', icon: '🏠', items: ['house_small', 'house_medium'] },
       { id: 'production', name: 'Produktion', icon: '🪵', items: ['woodcutter', 'sawmill', 'stonecutter'] },
-      { id: 'storage', name: 'Lager', icon: '🏚️', items: ['warehouse'] }
+      { id: 'food', name: 'Mad', icon: '🌾', items: ['fisher', 'grainfarm', 'pigfarm', 'cattlefarm'] },
+      { id: 'harbor', name: 'Lager & havn', icon: '⚓', items: ['warehouse', 'shipyard'] }
     ];
 
     // Buildings that only work when connected to a warehouse by road
-    const needsRoad = (def) => !!(def.produces || def.consumes);
+    const needsRoad = (def) => !!(def.produces || def.consumes || def.needsRoad);
+    const isLandType = (type) => type === 'grass' || type === 'beach';
 
     const ISO = {
       TW: 64,
@@ -293,97 +433,181 @@
       })
     };
 
-    // ===== TERRAIN GENERATION WITH CLUSTERING =====
+    // ===== TERRAIN GENERATION: ARCHIPELAGO =====
+    // One large home island in the middle, several smaller islands around it, open sea in between.
+    // Forests, rock outcrops and small lakes are then scattered over the land.
     function generateTerrain(w, h) {
       const grid = [];
-      // Start all grass
       for (let y = 0; y < h; y++) {
-        for (let x = 0; x < w; x++) {
-          grid.push({ x, y, type: 'grass', seed: Math.random() });
+        for (let x = 0; x < w; x++) grid.push({ x, y, type: 'water' });
+      }
+      const at = (x, y) => (x >= 0 && y >= 0 && x < w && y < h) ? grid[y * w + x] : null;
+
+      // Island blobs
+      const islands = [{ cx: w / 2, cy: h / 2, r: w * 0.17 }];
+      const target = 6 + Math.floor(Math.random() * 3);
+      for (let tries = 0; islands.length < target && tries < 800; tries++) {
+        const r = 4.5 + Math.random() * w * 0.08;
+        const cx = r + 4 + Math.random() * (w - 2 * r - 8);
+        const cy = r + 4 + Math.random() * (h - 2 * r - 8);
+        if (islands.every(o => Math.hypot(o.cx - cx, o.cy - cy) > o.r + r + 5)) islands.push({ cx, cy, r });
+      }
+      const off = Math.random() * 1000;
+      for (const t of grid) {
+        for (const isl of islands) {
+          // Noise-wobbled radius gives natural, irregular coastlines
+          const wobble = 0.7 + 0.6 * valueNoise((t.x + off) / 5, (t.y + off) / 5);
+          if (Math.hypot(t.x - isl.cx, t.y - isl.cy) / isl.r < wobble) { t.type = 'grass'; break; }
         }
       }
 
-      // Create larger water/forest clusters using blob algorithm
+      // Clusters on land only. Centres are picked on land tiles; the home island is guaranteed forest and rock.
+      const land = grid.filter(t => t.type === 'grass');
+      const home = islands[0];
+      const homeLand = land.filter(t => Math.hypot(t.x - home.cx, t.y - home.cy) < home.r * 0.8);
+      const pick = (arr) => arr[Math.floor(Math.random() * arr.length)];
       const clusters = [];
+      const addClusters = (pool, n, type, rMin, rMax) => {
+        for (let i = 0; i < n && pool.length; i++) {
+          const c = pick(pool);
+          clusters.push({ cx: c.x, cy: c.y, radius: rMin + Math.random() * (rMax - rMin), type });
+        }
+      };
+      addClusters(homeLand, 3, 'forest', 3, 5.5);
+      addClusters(homeLand, 2, 'rock', 1.5, 3);
+      addClusters(land, Math.round(land.length / 140), 'forest', 2.5, 5);
+      addClusters(land, Math.round(land.length / 450), 'rock', 1.5, 3.5);
+      addClusters(land, Math.round(land.length / 700), 'lake', 1.5, 3);
 
-      // Blob counts scale with map area (tuned for 40x40 = 1600 tiles)
-      const areaScale = (w * h) / 1600;
-
-      // Water clusters (2-4 blobs per 40x40)
-      const waterCount = Math.round((1.5 + Math.random() * 2) * areaScale);
-      for (let i = 0; i < waterCount; i++) {
-        clusters.push({
-          cx: 5 + Math.random() * (w - 10),
-          cy: 5 + Math.random() * (h - 10),
-          radius: 5 + Math.random() * 6,
-          type: 'water'
-        });
-      }
-
-      // Forest clusters (4-6 blobs per 40x40)
-      const forestCount = Math.round((4 + Math.random() * 2) * areaScale);
-      for (let i = 0; i < forestCount; i++) {
-        clusters.push({
-          cx: 5 + Math.random() * (w - 10),
-          cy: 5 + Math.random() * (h - 10),
-          radius: 4 + Math.random() * 5,
-          type: 'forest'
-        });
-      }
-
-      // Rock outcrops (1-2.5 small blobs per 40x40) - source of stone
-      const rockCount = Math.round((1 + Math.random() * 1.5) * areaScale);
-      for (let i = 0; i < rockCount; i++) {
-        clusters.push({
-          cx: 4 + Math.random() * (w - 8),
-          cy: 4 + Math.random() * (h - 8),
-          radius: 1.5 + Math.random() * 2.5,
-          type: 'rock'
-        });
-      }
-
-      // Apply clusters to grid
-      for (let idx = 0; idx < grid.length; idx++) {
-        const tile = grid[idx];
-        for (const cluster of clusters) {
-          const dx = tile.x - cluster.cx;
-          const dy = tile.y - cluster.cy;
-          const dist = Math.sqrt(dx * dx + dy * dy);
-
-          // Falloff - gradually transition at edges
-          if (dist < cluster.radius) {
-            tile.type = cluster.type;
-          } else if (dist < cluster.radius + 2) {
-            // Edge blending: 20% chance to be cluster type in transition zone
-            if (Math.random() < 0.3) tile.type = cluster.type;
-          }
+      for (const t of land) {
+        for (const c of clusters) {
+          const d = Math.hypot(t.x - c.cx, t.y - c.cy);
+          const type = c.type === 'lake' ? 'water' : c.type;
+          if (d < c.radius) t.type = type;
+          else if (d < c.radius + 2 && Math.random() < 0.3) t.type = type; // ragged edges
         }
       }
 
-      // Add some beach at water edges
-      const indexed = new Map();
-      for (const tile of grid) {
-        indexed.set(`${tile.x},${tile.y}`, tile);
-      }
-
-      for (const tile of grid) {
-        if (tile.type === 'grass') {
-          let adjacentWater = 0;
-          for (let dy = -1; dy <= 1; dy++) {
-            for (let dx = -1; dx <= 1; dx++) {
-              if (dx === 0 && dy === 0) continue;
-              const adj = indexed.get(`${tile.x + dx},${tile.y + dy}`);
-              if (adj && adj.type === 'water') adjacentWater++;
-            }
-          }
-          if (adjacentWater > 0 && Math.random() < 0.4) {
-            tile.type = 'beach';
+      // Beaches along coasts
+      for (const t of grid) {
+        if (t.type !== 'grass') continue;
+        let water = 0;
+        for (let dy = -1; dy <= 1; dy++) {
+          for (let dx = -1; dx <= 1; dx++) {
+            if ((dx || dy) && at(t.x + dx, t.y + dy)?.type === 'water') water++;
           }
         }
+        if (water > 0 && Math.random() < 0.5) t.type = 'beach';
       }
-
       return grid;
     }
+
+    // ===== ISLANDS =====
+    // Every connected landmass is an island with its own storage (shared by all warehouses on it).
+    const ISLAND_NAMES = ['Mågeø', 'Ravneø', 'Falkeø', 'Tangø', 'Sælø', 'Lyngø', 'Egeø', 'Klippeø', 'Sandø',
+                          'Ørneø', 'Tågeø', 'Stormø', 'Vindø', 'Rævø', 'Hjorteø', 'Birkeø', 'Svaneø', 'Kragø'];
+    const tileAt = (x, y) => (x >= 0 && y >= 0 && x < MAP_SIZE && y < MAP_SIZE) ? GAME.grid[y * MAP_SIZE + x] : null;
+    const isLand = (t) => !!t && t.type !== 'water';
+
+    // Marks water connected to the map edge as open sea (tile.ocean). Lakes stay false until a canal joins them up.
+    function markOcean() {
+      const q = [];
+      for (const t of GAME.grid) {
+        t.ocean = false;
+        const edge = t.x === 0 || t.y === 0 || t.x === MAP_SIZE - 1 || t.y === MAP_SIZE - 1;
+        if (edge && t.type === 'water') { t.ocean = true; q.push(t); }
+      }
+      for (let i = 0; i < q.length; i++) {
+        for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+          const n = tileAt(q[i].x + dx, q[i].y + dy);
+          if (n && n.type === 'water' && !n.ocean) { n.ocean = true; q.push(n); }
+        }
+      }
+    }
+
+    // Labels connected land components (4-neighbour). Sets tile.island; returns the components.
+    function labelIslands() {
+      markOcean();
+      for (const t of GAME.grid) t.island = null;
+      const comps = [];
+      let id = 0;
+      for (const start of GAME.grid) {
+        if (!isLand(start) || start.island !== null) continue;
+        id++;
+        start.island = id;
+        const idx = [start.y * MAP_SIZE + start.x];
+        for (let i = 0; i < idx.length; i++) {
+          const t = GAME.grid[idx[i]];
+          for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+            const n = tileAt(t.x + dx, t.y + dy);
+            if (isLand(n) && n.island === null) { n.island = id; idx.push(n.y * MAP_SIZE + n.x); }
+          }
+        }
+        // Anchor = first tile in row-major order: stable across reloads, used to match saved island data
+        comps.push({ id, size: idx.length, anchor: [start.x, start.y], idx });
+      }
+      return comps;
+    }
+
+    function newIsland(comp) {
+      const used = new Set([...GAME.islands.values()].map(i => i.name));
+      let n = Math.floor(hash2(comp.anchor[0], comp.anchor[1]) * ISLAND_NAMES.length);
+      for (let k = 0; k < ISLAND_NAMES.length && used.has(ISLAND_NAMES[n]); k++) n = (n + 1) % ISLAND_NAMES.length;
+      return { id: comp.id, size: comp.size, anchor: comp.anchor, name: ISLAND_NAMES[n], home: false,
+               resources: emptyStock(), pop: 0, hunger: 0 };
+    }
+
+    // Re-label islands after the terrain changed (e.g. a canal split a landmass), keeping each island's
+    // data with the component that holds most of its old tiles. Bigger components claim first.
+    function recomputeIslands() {
+      const prevLabel = GAME.grid.map(t => t.island ?? null);
+      const prev = GAME.islands;
+      const comps = labelIslands().sort((a, b) => b.size - a.size);
+      const next = new Map();
+      const claimed = new Set();
+      GAME.islands = next; // so newIsland() sees names already taken in this pass
+      for (const c of comps) {
+        const counts = new Map();
+        for (const i of c.idx) {
+          const p = prevLabel[i];
+          if (p !== null) counts.set(p, (counts.get(p) || 0) + 1);
+        }
+        let best = null, bestN = 0;
+        for (const [p, n] of counts) if (!claimed.has(p) && prev.has(p) && n > bestN) { best = p; bestN = n; }
+        if (best !== null) {
+          claimed.add(best);
+          next.set(c.id, { ...prev.get(best), id: c.id, size: c.size, anchor: c.anchor });
+        } else {
+          next.set(c.id, newIsland(c));
+        }
+      }
+      updateIslandStats();
+    }
+
+    const islandOfBuilding = (b) => GAME.islands.get(tileAt(b.x, b.y)?.island);
+
+    // Derived per-island numbers: warehouses, storage cap, housing capacity
+    function updateIslandStats() {
+      for (const isl of GAME.islands.values()) {
+        isl.warehouses = 0;
+        isl.popCap = 0;
+        isl.cap = 0;
+      }
+      for (const b of GAME.buildings) {
+        const isl = islandOfBuilding(b);
+        if (!isl) continue;
+        const def = DEFS[b.type];
+        if (b.type === 'warehouse') { isl.warehouses++; isl.cap += def.storage; }
+        if (def.capacity) {
+          const hasMeat = RES_KEYS.some(k => RESOURCES[k].meat && isl.resources[k] >= 1);
+          isl.popCap += def.capacityNoMeat && !hasMeat ? def.capacityNoMeat : def.capacity;
+        }
+      }
+    }
+
+    const totalPopulation = () => [...GAME.islands.values()].reduce((s, i) => s + i.pop, 0);
+    const totalPopCap = () => [...GAME.islands.values()].reduce((s, i) => s + i.popCap, 0);
+    const homeIsland = () => [...GAME.islands.values()].find(i => i.home);
 
     // ===== RENDERING =====
     const canvas = document.getElementById('canvas');
@@ -391,44 +615,555 @@
     let ctx = canvas.getContext('2d');
     let animTime = 0; // ms, drives smoke, flags and saw blades
 
+    // Fallback colours (used e.g. by build-menu previews whose tiles aren't decorated)
     const TERRAIN_COLORS = {
-      grass: '#5a8a3a',
-      forest: '#3a6a2a',
-      beach: '#d8c48a',
-      water: '#1a5a8a',
-      rock: '#7e7a6e'
+      grass: '#6aa444',
+      forest: '#467e32',
+      beach: '#e0cc92',
+      water: '#2a78b0',
+      rock: '#948f80'
     };
+    const SEA_COLOR = '#1b5487'; // background outside the map
+    const DETAIL_ZOOM = 0.7;     // below this zoom, tiny ground details are skipped
+    const WAVE_ZOOM = 0.6;       // below this zoom, animated wave crests are skipped
 
     function resizeCanvas() {
       canvas.width = window.innerWidth;
       canvas.height = window.innerHeight;
     }
 
+    // ----- Noise & colour helpers -----
+    // Seeds all per-tile decoration; stored in save games so a loaded map looks identical
+    let NOISE_SEED = Math.floor(Math.random() * 100000);
+
+    function hash2(x, y) {
+      let h = Math.imul(x + NOISE_SEED, 374761393) + Math.imul(y, 668265263);
+      h = Math.imul(h ^ (h >>> 13), 1274126177);
+      return ((h ^ (h >>> 16)) >>> 0) / 4294967296;
+    }
+
+    // Smooth value noise in 0..1
+    function valueNoise(x, y) {
+      const xi = Math.floor(x), yi = Math.floor(y);
+      const sm = (t) => t * t * (3 - 2 * t);
+      const u = sm(x - xi), v = sm(y - yi);
+      const a = hash2(xi, yi), b = hash2(xi + 1, yi), c = hash2(xi, yi + 1), d = hash2(xi + 1, yi + 1);
+      return a + (b - a) * u + (c - a) * v + (a - b - c + d) * u * v;
+    }
+    const fbm = (x, y) => valueNoise(x, y) * 0.65 + valueNoise(x * 2.3 + 17, y * 2.3 + 5) * 0.35;
+
+    function mix(a, b, t) {
+      const pa = parseInt(a.slice(1), 16), pb = parseInt(b.slice(1), 16);
+      const ch = (s) => Math.round(((pa >> s) & 255) + (((pb >> s) & 255) - ((pa >> s) & 255)) * t);
+      return `rgb(${ch(16)},${ch(8)},${ch(0)})`;
+    }
+
+    // ----- Per-tile look, computed once after terrain generation -----
+    const FLOWER_COLORS = ['#f4f0e0', '#f2d040', '#e87890', '#b890e0'];
+    const SHORE_EDGES = { '0,-1': [[-0.5, -0.5], [0.5, -0.5]], '1,0': [[0.5, -0.5], [0.5, 0.5]],
+                          '0,1': [[0.5, 0.5], [-0.5, 0.5]], '-1,0': [[-0.5, 0.5], [-0.5, -0.5]] };
+    const DIRS4 = [[0, -1], [1, 0], [0, 1], [-1, 0]];
+
+    const TREE_HUES = 4; // colour variants per tree kind (each becomes one cached sprite)
+
+    function makeTree(rnd, n, u, v) {
+      const bucket = Math.floor(rnd() * TREE_HUES);
+      const hue = (bucket + 0.5) / TREE_HUES;
+      const tree = { u, v, s: 0.75 + rnd() * 0.4 };
+      tree.conifer = rnd() < 0.2 + n * 0.5; // conifers cluster in the darker noise areas
+      const autumn = !tree.conifer && rnd() < 0.06;
+      tree.key = `${tree.conifer ? 'c' : autumn ? 'a' : 'd'}${bucket}`;
+      if (tree.conifer) {
+        tree.dark = mix('#2a5a2e', '#36683a', hue);
+        tree.light = mix('#4a8a46', '#5c9c50', hue);
+      } else if (autumn) {
+        // The odd autumn-coloured tree for a bit of life
+        tree.dark = mix('#9a5a1e', '#8a6a1a', hue);
+        tree.mid = mix('#d08a2a', '#c8a030', hue);
+        tree.light = mix('#f0b848', '#e8c858', hue);
+      } else {
+        tree.dark = mix('#2e6624', '#3c7628', hue);
+        tree.mid = mix('#4a9232', '#5aa03a', hue);
+        tree.light = mix('#7abe50', '#8ccc5c', hue);
+      }
+      return tree;
+    }
+
+    function decorateTerrain(grid) {
+      const at = (x, y) => (x >= 0 && y >= 0 && x < MAP_SIZE && y < MAP_SIZE) ? grid[y * MAP_SIZE + x] : null;
+
+      // Water depth = steps to the nearest land tile (BFS from the shoreline)
+      const queue = [];
+      for (const t of grid) {
+        if (t.type !== 'water') continue;
+        t.landDirs = DIRS4.filter(([dx, dy]) => { const n = at(t.x + dx, t.y + dy); return n && n.type !== 'water'; });
+        t.shore = t.landDirs.map(([dx, dy]) => SHORE_EDGES[`${dx},${dy}`]);
+        t.depth = t.shore.length ? 1 : 99;
+        if (t.shore.length) queue.push(t);
+        else t.shore = null;
+      }
+      while (queue.length) {
+        const t = queue.shift();
+        for (const [dx, dy] of DIRS4) {
+          const n = at(t.x + dx, t.y + dy);
+          if (n && n.type === 'water' && n.depth > t.depth + 1) { n.depth = t.depth + 1; queue.push(n); }
+        }
+      }
+
+      const slots = [[-0.22, -0.2], [0.2, -0.16], [-0.14, 0.2], [0.22, 0.2]];
+      for (const t of grid) {
+        const n = fbm(t.x / 6, t.y / 6);
+        const rnd = seeded(t.x * 7919 + t.y * 104729 + NOISE_SEED);
+        t.decor = null;
+        t.trees = null;
+        t.object = null;
+        const at2 = () => rnd() * 0.8 - 0.4;
+
+        if (t.type === 'grass') {
+          t.color = mix('#5a943a', '#86ba50', n);
+          t.decor = [];
+          for (let i = 0, m = 2 + Math.floor(rnd() * 3); i < m; i++) t.decor.push({ k: 'tuft', u: at2(), v: at2(), s: 0.7 + rnd() * 0.6 });
+          if (valueNoise(t.x / 4 + 50, t.y / 4 + 50) > 0.62) {
+            for (let i = 0, m = 2 + Math.floor(rnd() * 4); i < m; i++) {
+              t.decor.push({ k: 'flower', u: at2(), v: at2(), c: FLOWER_COLORS[Math.floor(rnd() * FLOWER_COLORS.length)] });
+            }
+          }
+          if (rnd() < 0.05) t.decor.push({ k: 'pebble', u: at2(), v: at2() });
+          const r = rnd();
+          if (r < 0.035) t.object = { k: 'bush', u: rnd() * 0.4 - 0.2, v: rnd() * 0.4 - 0.2, s: 0.24 + rnd() * 0.12 };
+          else if (r < 0.05) t.object = { k: 'tree', tree: makeTree(rnd, n, rnd() * 0.3 - 0.15, rnd() * 0.3 - 0.15) };
+        } else if (t.type === 'forest') {
+          t.color = mix('#3a6c2a', '#528a36', n);
+          const count = 2 + (rnd() < 0.45 ? 1 : 0);
+          const start = Math.floor(rnd() * 4);
+          t.trees = [];
+          for (let i = 0; i < count; i++) {
+            const [su, sv] = slots[(start + i) % 4];
+            t.trees.push(makeTree(rnd, n, su + rnd() * 0.12 - 0.06, sv + rnd() * 0.12 - 0.06));
+          }
+          t.trees.sort((a, b) => (a.u + a.v) - (b.u + b.v)); // back to front
+          t.decor = [{ k: 'tuft', u: at2(), v: at2(), s: 1 }];
+        } else if (t.type === 'beach') {
+          t.color = mix('#d4bd84', '#ecdca8', n);
+          t.decor = [];
+          for (let i = 0; i < 6; i++) t.decor.push({ k: 'speck', u: at2(), v: at2(), c: rnd() < 0.5 ? '#bfa872' : '#f6ecc8' });
+          if (rnd() < 0.12) t.decor.push({ k: 'shell', u: at2(), v: at2() });
+        } else if (t.type === 'water') {
+          const d = Math.min(t.depth, 4);
+          t.color = mix('#58b2d2', '#1e5e96', (d - 1) / 3);
+          t.wave = rnd() < 0.45 ? { u: at2() * 0.8, v: at2() * 0.8, ph: rnd() * Math.PI * 2 } : null;
+        } else if (t.type === 'rock') {
+          t.color = mix('#868272', '#a09a88', n);
+          t.decor = [];
+          for (let i = 0; i < 5; i++) t.decor.push({ k: 'speck', u: at2(), v: at2(), c: rnd() < 0.5 ? '#6e6a5e' : '#bcb6a4' });
+        }
+      }
+
+      groupRocks(grid, at);
+    }
+
+    // ----- Mountains: connected rock tiles grouped (max 10) into small faceted peaks -----
+    const MOUNTAIN_MAX = 10;
+    const LIGHT_DIR = (() => { const l = [0.75, -0.25, 0.9]; const m = Math.hypot(...l); return l.map(c => c / m); })();
+    const hexArr = (h) => { const n = parseInt(h.slice(1), 16); return [(n >> 16) & 255, (n >> 8) & 255, n & 255]; };
+    const lerpArr = (a, b, t) => a.map((c, i) => c + (b[i] - c) * t);
+    const rgbArr = (a, f = 1) => `rgb(${a.map(c => Math.min(255, Math.round(c * f))).join(',')})`;
+    const MOSS = hexArr('#7e8662'), STONE = hexArr('#a29c8e'), SNOW = hexArr('#eef1f2'), GRASS = hexArr('#6a9c44');
+    const GRASS_LINE = 5; // px height below which mountain slopes are grassy
+
+    // Part of a 3D triangle below (keepBelow) or above a height level; null if nothing remains
+    function clipZ(tri, level, keepBelow) {
+      const out = [];
+      for (let i = 0; i < 3; i++) {
+        const a = tri[i], b = tri[(i + 1) % 3];
+        const inA = keepBelow ? a[2] <= level : a[2] >= level;
+        const inB = keepBelow ? b[2] <= level : b[2] >= level;
+        if (inA) out.push(a);
+        if (inA !== inB) {
+          const t = (level - a[2]) / (b[2] - a[2]);
+          out.push([a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, level]);
+        }
+      }
+      return out.length >= 3 ? out : null;
+    }
+
+    function groupRocks(grid, at) {
+      const assigned = new Set();
+      let gid = 0;
+      for (const start of grid) {
+        if (start.type !== 'rock' || assigned.has(start)) continue;
+        // Grow a group breadth-first from this tile until it has MOUNTAIN_MAX tiles
+        const group = [start];
+        assigned.add(start);
+        for (let i = 0; i < group.length && group.length < MOUNTAIN_MAX; i++) {
+          for (const [dx, dy] of DIRS4) {
+            const nb = at(group[i].x + dx, group[i].y + dy);
+            if (nb && nb.type === 'rock' && !assigned.has(nb) && group.length < MOUNTAIN_MAX) {
+              assigned.add(nb);
+              group.push(nb);
+            }
+          }
+        }
+        gid++;
+        for (const t of group) t.rockGroup = gid;
+        if (group.length >= 2) buildMountain(group, at);
+        else {
+          // Lone boulders sit on grassy gravel rather than a bare grey tile
+          start.color = mix('#6e8a4c', '#8a9064', fbm(start.x / 6, start.y / 6));
+          start.decor.push({ k: 'tuft', u: 0.3, v: -0.25, s: 1 }, { k: 'tuft', u: -0.3, v: 0.3, s: 0.8 });
+        }
+      }
+    }
+
+    function buildMountain(group, at) {
+      const n = group.length, gid = group[0].rockGroup;
+      const inG = (x, y) => { const t = at(x, y); return t && t.rockGroup === gid ? t : null; };
+      // Jitter keyed on world position, so vertices shared between tiles get the same value
+      const jit = (x, y, amp) => (hash2(Math.round(x * 2) + 5000, Math.round(y * 2) + 9000) - 0.5) * 2 * amp;
+
+      const cx = group.reduce((s, t) => s + t.x, 0) / n, cy = group.reduce((s, t) => s + t.y, 0) / n;
+      const dmax = Math.max(...group.map(t => Math.hypot(t.x - cx, t.y - cy))) + 0.7;
+      const sizeF = Math.sqrt(n / MOUNTAIN_MAX); // bigger groups grow taller
+      for (const t of group) {
+        t.hc = 10 + 6 * sizeF + 38 * sizeF * (1 - Math.hypot(t.x - cx, t.y - cy) / dmax) + jit(t.x, t.y, 4);
+      }
+      const peak = Math.max(...group.map(t => t.hc));
+      const snowLine = n >= 8 ? peak * 0.84 : Infinity; // only the biggest peaks get a snow cap
+
+      for (const t of group) {
+        const { x, y } = t;
+        // Corner raised only when it is surrounded by 3-4 tiles of the same group; otherwise it's at ground level
+        const cornerH = (ox, oy) => {
+          const bx = x + (ox < 0 ? -1 : 0), by = y + (oy < 0 ? -1 : 0);
+          const ts = [inG(bx, by), inG(bx + 1, by), inG(bx, by + 1), inG(bx + 1, by + 1)].filter(Boolean);
+          const f = ts.length === 4 ? 0.95 : ts.length === 3 ? 0.68 : 0;
+          return f ? (ts.reduce((s, q) => s + q.hc, 0) / ts.length) * f + jit(x + ox, y + oy, 3) : 0;
+        };
+        // Edge midpoint raised when the neighbour across it belongs to the group -> continuous ridges
+        const midH = (dx, dy) => {
+          const nb = inG(x + dx, y + dy);
+          return nb ? ((t.hc + nb.hc) / 2) * 0.92 + jit(x + dx / 2, y + dy / 2, 3) : 0;
+        };
+
+        const TL = [x - 0.5, y - 0.5, cornerH(-0.5, -0.5)], TR = [x + 0.5, y - 0.5, cornerH(0.5, -0.5)];
+        const BR = [x + 0.5, y + 0.5, cornerH(0.5, 0.5)], BL = [x - 0.5, y + 0.5, cornerH(-0.5, 0.5)];
+        const Nm = [x, y - 0.5, midH(0, -1)], Em = [x + 0.5, y, midH(1, 0)];
+        const Sm = [x, y + 0.5, midH(0, 1)], Wm = [x - 0.5, y, midH(-1, 0)];
+        const C = [x, y, t.hc];
+        // Back facets (north, west) first, then the front ones (east, south)
+        const tris = [[TL, Nm, C], [Nm, TR, C], [BL, Wm, C], [Wm, TL, C], [TR, Em, C], [Em, BR, C], [BR, Sm, C], [Sm, BL, C]];
+
+        t.mountain = tris.map(tri => {
+          const [a, b, c] = tri, S = 40; // S: horizontal world scale (px per tile) for normals
+          const ab = [(b[0] - a[0]) * S, (b[1] - a[1]) * S, b[2] - a[2]];
+          const ac = [(c[0] - a[0]) * S, (c[1] - a[1]) * S, c[2] - a[2]];
+          let nx = ab[1] * ac[2] - ab[2] * ac[1], ny = ab[2] * ac[0] - ab[0] * ac[2], nz = ab[0] * ac[1] - ab[1] * ac[0];
+          if (nz < 0) { nx = -nx; ny = -ny; nz = -nz; }
+          const len = Math.hypot(nx, ny, nz) || 1;
+          const lit = Math.max(0, (nx * LIGHT_DIR[0] + ny * LIGHT_DIR[1] + nz * LIGHT_DIR[2]) / len);
+          const hAvg = (a[2] + b[2] + c[2]) / 3;
+          const base = lerpArr(MOSS, STONE, Math.min(1, Math.max(0, (hAvg - 4) / 16)));
+          const toScreen = (poly3) => poly3.map(([u, v, z]) => P(u, v, z));
+          // Grass at the foot and snow at the top follow height contours, not facet edges
+          const bands = [];
+          const grass = clipZ(tri, GRASS_LINE, true);
+          if (grass) bands.push({ pts: toScreen(grass), col: rgbArr(GRASS, 0.72 + 0.4 * lit) });
+          const snow = clipZ(tri, snowLine, false);
+          if (snow) bands.push({ pts: toScreen(snow), col: rgbArr(SNOW, 0.82 + 0.22 * lit), snow: true });
+          return { pts: toScreen(tri), col: rgbArr(base, 0.56 + 0.52 * lit), h: hAvg, bands };
+        });
+
+        // Details: grass tufts on the low slopes, loose scree at the foot of the front edges
+        const rnd = seeded(x * 48611 + y * 96769 + NOISE_SEED);
+        t.slopeTufts = [];
+        for (const tri of t.mountain) {
+          if (tri.h < 9 && rnd() < 0.8) {
+            const [a, b, c] = tri.pts, w1 = rnd() * 0.5, w2 = rnd() * (1 - w1);
+            t.slopeTufts.push({ x: a.x + (b.x - a.x) * w1 + (c.x - a.x) * w2, y: a.y + (b.y - a.y) * w1 + (c.y - a.y) * w2 });
+          }
+        }
+        t.scree = [];
+        if (!inG(x + 1, y) && rnd() < 0.6) t.scree.push({ u: x + 0.6, v: y + rnd() * 0.6 - 0.3, r: 0.06 + rnd() * 0.05, seed: Math.floor(rnd() * 1e9) });
+        if (!inG(x, y + 1) && rnd() < 0.6) t.scree.push({ u: x + rnd() * 0.6 - 0.3, v: y + 0.6, r: 0.06 + rnd() * 0.05, seed: Math.floor(rnd() * 1e9) });
+      }
+    }
+
+    // Seamless rock texture (mid-grey = neutral), applied with 'overlay' so it only adds light/dark detail
+    let rockPattern = null;
+    function getRockPattern() {
+      if (rockPattern) return rockPattern;
+      const S = 192, c = document.createElement('canvas');
+      c.width = c.height = S;
+      const g = c.getContext('2d'), rnd = seeded(20240926);
+      g.fillStyle = '#808080';
+      g.fillRect(0, 0, S, S);
+      // Draw each shape at the 9 wrap offsets so the texture tiles without seams
+      const wrapped = (drawFn) => { for (const ox of [-S, 0, S]) for (const oy of [-S, 0, S]) drawFn(ox, oy); };
+
+      // Soft mottling
+      for (let i = 0; i < 150; i++) {
+        const x = rnd() * S, y = rnd() * S, rx = 4 + rnd() * 16, ry = 3 + rnd() * 8, rot = rnd() * Math.PI;
+        const col = rnd() < 0.5 ? 'rgba(0,0,0,0.11)' : 'rgba(255,255,255,0.11)';
+        wrapped((ox, oy) => { g.fillStyle = col; g.beginPath(); g.ellipse(x + ox, y + oy, rx, ry, rot, 0, Math.PI * 2); g.fill(); });
+      }
+      // Cracks / strata: a dark line with a light lip underneath
+      for (let i = 0; i < 16; i++) {
+        const pts = [[rnd() * S, rnd() * S]];
+        for (let k = 0; k < 4; k++) { const [px, py] = pts[pts.length - 1]; pts.push([px + 4 + rnd() * 14, py + (rnd() - 0.5) * 9]); }
+        wrapped((ox, oy) => {
+          for (const [off, col] of [[1, 'rgba(255,255,255,0.28)'], [0, 'rgba(0,0,0,0.4)']]) {
+            g.strokeStyle = col;
+            g.lineWidth = 1.3;
+            g.beginPath();
+            pts.forEach(([px, py], k) => k ? g.lineTo(px + ox, py + oy + off) : g.moveTo(px + ox, py + oy + off));
+            g.stroke();
+          }
+        });
+      }
+      // Fine grain
+      const img = g.getImageData(0, 0, S, S);
+      for (let i = 0; i < img.data.length; i += 4) {
+        const d = (rnd() - 0.5) * 38;
+        img.data[i] += d; img.data[i + 1] += d; img.data[i + 2] += d;
+      }
+      g.putImageData(img, 0, 0);
+
+      rockPattern = ctx.createPattern(c, 'repeat');
+      rockPattern.setTransform(new DOMMatrix().scale(0.5)); // 2 texels per world px -> crisp when zoomed in
+      return rockPattern;
+    }
+
+    function rockTexture(polys, strength = 0.7, mode = 'overlay') {
+      ctx.save();
+      ctx.globalCompositeOperation = mode;
+      ctx.globalAlpha *= strength;
+      ctx.fillStyle = getRockPattern();
+      ctx.beginPath();
+      for (const pts of polys) {
+        ctx.moveTo(pts[0].x, pts[0].y);
+        for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i].x, pts[i].y);
+        ctx.closePath();
+      }
+      ctx.fill();
+      ctx.restore();
+    }
+
+    function drawMountainTile(tile) {
+      // Stroke each facet in its own colour: hides hairline seams without drawing visible edges.
+      // Bands are drawn right after their facet so later (front) facets still cover them correctly.
+      for (const tri of tile.mountain) {
+        poly(tri.col, tri.pts, tri.col);
+        for (const b of tri.bands) poly(b.col, b.pts, b.col);
+      }
+      rockTexture(tile.mountain.map(tri => tri.pts), 0.6);
+      // 'overlay' leaves near-white untouched, so snow gets a faint multiplied texture instead
+      const snowPolys = tile.mountain.flatMap(tri => tri.bands.filter(b => b.snow).map(b => b.pts));
+      if (snowPolys.length) rockTexture(snowPolys, 0.22, 'multiply');
+
+      if (GAME.camera.zoom >= DETAIL_ZOOM && tile.slopeTufts.length) {
+        ctx.lineWidth = 1;
+        ctx.strokeStyle = '#5a7a36';
+        ctx.beginPath();
+        for (const q of tile.slopeTufts) {
+          ctx.moveTo(q.x - 2, q.y); ctx.lineTo(q.x - 3, q.y - 4);
+          ctx.moveTo(q.x, q.y); ctx.lineTo(q.x, q.y - 5);
+          ctx.moveTo(q.x + 2, q.y); ctx.lineTo(q.x + 3.5, q.y - 3.5);
+        }
+        ctx.stroke();
+      }
+      for (const s of tile.scree) boulder(s.u, s.v, s.r, seeded(s.seed));
+    }
+
+    // ----- Ground -----
     function drawTile(x, y, tile) {
       const p = ISO.tileToScreen(x, y);
       const TW = ISO.TW, TH = ISO.TH;
+      const color = tile.color || TERRAIN_COLORS[tile.type];
 
-      ctx.fillStyle = TERRAIN_COLORS[tile.type];
+      // Diamond enlarged by ~half a pixel so neighbouring tiles overlap and no seams show
+      const e = 0.6;
+      ctx.fillStyle = color;
       ctx.beginPath();
-      ctx.moveTo(p.x, p.y - TH / 2);
-      ctx.lineTo(p.x + TW / 2, p.y);
-      ctx.lineTo(p.x, p.y + TH / 2);
-      ctx.lineTo(p.x - TW / 2, p.y);
+      ctx.moveTo(p.x, p.y - TH / 2 - e);
+      ctx.lineTo(p.x + TW / 2 + e * 2, p.y);
+      ctx.lineTo(p.x, p.y + TH / 2 + e);
+      ctx.lineTo(p.x - TW / 2 - e * 2, p.y);
       ctx.closePath();
       ctx.fill();
-      ctx.strokeStyle = 'rgba(0,0,0,0.1)';
-      ctx.lineWidth = 1;
-      ctx.stroke();
+
+      if (tile.type === 'water') { drawWaterDetails(x, y, tile); return; }
+      if (!tile.decor || GAME.camera.zoom < DETAIL_ZOOM) return;
+
+      const at = (d) => ({ x: p.x + (d.u - d.v) * 32, y: p.y + (d.u + d.v) * 16 });
+
+      // Grass tufts: batched into two paths (shadow blades + lit blades)
+      const tufts = tile.decor.filter(d => d.k === 'tuft');
+      if (tufts.length) {
+        const dark = tile.type === 'forest' ? '#2e5a22' : '#44782c';
+        const light = tile.type === 'forest' ? '#5e9a40' : '#9ccc62';
+        ctx.lineWidth = 1;
+        ctx.strokeStyle = dark;
+        ctx.beginPath();
+        for (const d of tufts) {
+          const q = at(d);
+          ctx.moveTo(q.x - 2.5 * d.s, q.y); ctx.lineTo(q.x - 3.5 * d.s, q.y - 4 * d.s);
+          ctx.moveTo(q.x, q.y); ctx.lineTo(q.x - 0.5 * d.s, q.y - 5.5 * d.s);
+        }
+        ctx.stroke();
+        ctx.strokeStyle = light;
+        ctx.beginPath();
+        for (const d of tufts) {
+          const q = at(d);
+          ctx.moveTo(q.x + 1, q.y); ctx.lineTo(q.x + 2.5 * d.s, q.y - 4.5 * d.s);
+          ctx.moveTo(q.x + 2.5 * d.s, q.y); ctx.lineTo(q.x + 4 * d.s, q.y - 3 * d.s);
+        }
+        ctx.stroke();
+      }
+
+      for (const d of tile.decor) {
+        if (d.k === 'tuft') continue;
+        const q = at(d);
+        if (d.k === 'flower') {
+          line(q, { x: q.x, y: q.y - 3 }, '#3e7228', 0.8);
+          dot({ x: q.x, y: q.y - 3.5 }, 1.5, d.c);
+          dot({ x: q.x, y: q.y - 3.5 }, 0.5, '#f8e070');
+        } else if (d.k === 'pebble') {
+          ctx.fillStyle = '#9a968a';
+          ctx.beginPath(); ctx.ellipse(q.x, q.y, 2.2, 1.3, 0, 0, Math.PI * 2); ctx.fill();
+          dot({ x: q.x + 0.6, y: q.y - 0.4 }, 0.8, '#c4c0b4');
+        } else if (d.k === 'speck') {
+          dot(q, 0.8, d.c);
+        } else if (d.k === 'shell') {
+          ctx.fillStyle = '#f8ece0';
+          ctx.beginPath(); ctx.arc(q.x, q.y, 1.8, Math.PI, 0); ctx.fill();
+        }
+      }
     }
 
-    function drawTree(x, y) {
-      const p = ISO.tileToScreen(x, y);
-      ctx.fillStyle = '#6b4423';
-      ctx.fillRect(p.x - 2, p.y - 8, 4, 12);
-      ctx.fillStyle = '#2a5a1a';
+    // Stone quay along the edge of a canal tile that faces direction (dx, dy)
+    function drawQuay(x, y, dx, dy) {
+      const [[u0, v0], [u1, v1]] = SHORE_EDGES[`${dx},${dy}`];
+      const a = P(x + u0, y + v0, 2), b = P(x + u1, y + v1, 2);
+      const a2 = P(x + u0 * 0.78, y + v0 * 0.78, 0), b2 = P(x + u1 * 0.78, y + v1 * 0.78, 0);
+      poly('#aaa496', [a, b, b2, a2], 'rgba(60,54,44,0.5)');
+      for (let i = 1; i < 4; i++) line(lerp(a, b, i / 4), lerp(a2, b2, i / 4), 'rgba(60,54,44,0.35)', 0.6);
+    }
+
+    function drawWaterDetails(x, y, tile) {
+      const t = animTime / 1000;
+      // Canals have stone quays instead of foam
+      if (tile.canal && tile.landDirs) {
+        for (const [dx, dy] of tile.landDirs) drawQuay(x, y, dx, dy);
+      } else if (tile.shore) {
+        // Foam along edges that touch land, gently pulsing
+        const a = 0.45 + 0.2 * Math.sin(t * 2 + x * 0.7 + y * 0.5);
+        ctx.strokeStyle = `rgba(236,248,255,${a.toFixed(2)})`;
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        for (const [[u0, v0], [u1, v1]] of tile.shore) {
+          const a0 = P(x + u0 * 0.86, y + v0 * 0.86), a1 = P(x + u1 * 0.86, y + v1 * 0.86);
+          ctx.moveTo(a0.x, a0.y);
+          ctx.lineTo(a1.x, a1.y);
+        }
+        ctx.stroke();
+      }
+      // Glinting wave crests that fade in and out
+      if (tile.wave && GAME.camera.zoom >= WAVE_ZOOM) {
+        const w = tile.wave, ph = t * 1.3 + w.ph;
+        const alpha = (Math.sin(ph) + 1) / 2 * 0.55;
+        if (alpha > 0.05) {
+          const q = P(x + w.u, y + w.v), off = Math.sin(ph * 0.5) * 2.5;
+          ctx.strokeStyle = `rgba(200,236,252,${alpha.toFixed(2)})`;
+          ctx.lineWidth = 1.2;
+          ctx.beginPath();
+          ctx.moveTo(q.x - 7 + off, q.y);
+          ctx.quadraticCurveTo(q.x + off, q.y - 3, q.x + 7 + off, q.y);
+          ctx.stroke();
+        }
+      }
+    }
+
+    // ----- Trees -----
+    // Deciduous canopy made of overlapping blobs [dx, dy, r] around the crown centre
+    const CANOPY = [[-6, 2, 7], [6, 2, 7], [0, -4, 8.5], [-3.5, -9, 6], [4, -8.5, 6]];
+
+    // Trees are drawn once per variant into an offscreen sprite (vector detail is too costly
+    // for thousands of trees per frame) and then blitted with drawImage.
+    const TREE_SPRITE = { w: 36, h: 48, ax: 18, ay: 42, res: 2.5 }; // size/anchor in tree px, render scale
+    const treeSprites = new Map();
+
+    function treeSprite(tr) {
+      let spr = treeSprites.get(tr.key);
+      if (spr) return spr;
+      spr = document.createElement('canvas');
+      spr.width = TREE_SPRITE.w * TREE_SPRITE.res;
+      spr.height = TREE_SPRITE.h * TREE_SPRITE.res;
+      const mainCtx = ctx;
+      ctx = spr.getContext('2d');
+      try {
+        ctx.scale(TREE_SPRITE.res, TREE_SPRITE.res);
+        drawTreeVector(TREE_SPRITE.ax, TREE_SPRITE.ay, { ...tr, s: 1 });
+      } finally {
+        ctx = mainCtx;
+      }
+      treeSprites.set(tr.key, spr);
+      return spr;
+    }
+
+    function drawTreeAt(u, v, tr) {
+      const b = P(u, v, 0), s = tr.s, spr = treeSprite(tr);
+      ctx.drawImage(spr, b.x - TREE_SPRITE.ax * s, b.y - TREE_SPRITE.ay * s, TREE_SPRITE.w * s, TREE_SPRITE.h * s);
+    }
+
+    // Full vector tree with its base at screen point (bx, by)
+    function drawTreeVector(bx, by, tr) {
+      const b = { x: bx, y: by }, s = tr.s;
+
+      // Shadow falls to the left (light comes from the right)
+      ctx.fillStyle = 'rgba(0,0,0,0.2)';
       ctx.beginPath();
-      ctx.arc(p.x, p.y - 18, 8, 0, Math.PI * 2);
+      ctx.ellipse(b.x - 5 * s, b.y + 1, 11 * s, 4.5 * s, 0, 0, Math.PI * 2);
       ctx.fill();
+
+      if (tr.conifer) {
+        ctx.fillStyle = '#5a3a1e';
+        ctx.fillRect(b.x - 1.3 * s, b.y - 7 * s, 2.6 * s, 7 * s);
+        for (let i = 0; i < 3; i++) {
+          const w = (10 - i * 2.6) * s, yb = b.y - (5 + i * 7.5) * s, yt = yb - 13 * s;
+          const tip = { x: b.x, y: yt };
+          const L = { x: b.x - w, y: yb }, R = { x: b.x + w, y: yb }, M = { x: b.x, y: yb + 2.5 * s };
+          poly(tr.dark, [L, M, tip], null);  // shaded half
+          poly(tr.light, [M, R, tip], null); // lit half
+          poly(null, [L, M, R, tip], 'rgba(20,40,20,0.55)');
+        }
+        return;
+      }
+
+      // Trunk: tapered, lit on the right
+      poly('#5e3c1e', [{ x: b.x - 2.2 * s, y: b.y }, { x: b.x + 2.2 * s, y: b.y }, { x: b.x + 1.2 * s, y: b.y - 13 * s }, { x: b.x - 1.2 * s, y: b.y - 13 * s }], null);
+      poly('#7a5230', [{ x: b.x, y: b.y }, { x: b.x + 2.2 * s, y: b.y }, { x: b.x + 1.2 * s, y: b.y - 13 * s }, { x: b.x, y: b.y - 13 * s }], null);
+
+      const cx = b.x, cy = b.y - 21 * s;
+
+      // Draw each layer as one batched path: outline → shadow tone → mid tone → highlights
+      const blobs = (grow, ox, oy, rs, color, list = CANOPY) => {
+        ctx.fillStyle = color;
+        ctx.beginPath();
+        for (const [dx, dy, r] of list) {
+          const X = cx + (dx + ox) * s, Y = cy + (dy + oy) * s, R = r * s * rs + grow;
+          ctx.moveTo(X + R, Y);
+          ctx.arc(X, Y, R, 0, Math.PI * 2);
+        }
+        ctx.fill();
+      };
+      blobs(1.2, 0, 0, 1, 'rgba(20,40,16,0.6)');
+      blobs(0, 0, 0, 1, tr.dark);
+      blobs(0, 1.6, -1.6, 0.72, tr.mid);
+      blobs(0, 2.6, -2.8, 0.34, tr.light, CANOPY.slice(1, 5));
+    }
+
+    function drawForest(x, y, tile) {
+      for (const tr of tile.trees) drawTreeAt(x + tr.u, y + tr.v, tr);
     }
 
     // ===== BUILDING RENDERING =====
@@ -985,14 +1720,14 @@
         const a = (i / 7) * Math.PI * 2;
         topFace.push({ x: c.x - rx * 0.15 + Math.cos(a) * rx * 0.55, y: c.y - hgt * 0.72 + Math.sin(a) * ry * 0.45 });
       }
-      poly('#86827a', body);
-      poly('#aaa69c', topFace, null);
-      line({ x: c.x - rx * 0.2, y: c.y - hgt * 0.5 }, { x: c.x + rx * 0.1, y: c.y - hgt * 0.15 }, 'rgba(40,36,30,0.5)', 0.8);
+      poly('#8a867c', body, 'rgba(55,50,42,0.45)');
+      poly('#aca89e', topFace, null);
+      rockTexture([body], 0.8);
     }
 
     // Rock terrain tile: one or two boulders, stable per tile
     function drawRock(x, y, tile) {
-      const rnd = seeded(Math.floor(tile.seed * 1e9) + 7);
+      const rnd = seeded(Math.floor(hash2(x, y) * 1e9) + 7);
       boulder(x - 0.12 + rnd() * 0.1, y - 0.1 + rnd() * 0.1, 0.26 + rnd() * 0.08, rnd);
       if (rnd() < 0.6) boulder(x + 0.18, y + 0.15, 0.14 + rnd() * 0.06, rnd);
     }
@@ -1043,7 +1778,234 @@
       barrel(U + 0.35, V + 1.3);
     }
 
+    // Small upturned rowing boat lying on the ground
+    function rowboat(u, v, len = 0.34, wid = 0.12) {
+      const ring = (z, s) => Array.from({ length: 10 }, (_, i) => {
+        const a = (i / 10) * Math.PI * 2;
+        return P(u + Math.cos(a) * len * s, v + Math.sin(a) * wid * s, z);
+      });
+      poly('#6a4424', convexHull([...ring(0, 1), ...ring(4, 0.9)]));
+      poly('#9a6c3c', ring(4, 0.9));
+      line(P(u - len * 0.8, v, 4.2), P(u + len * 0.8, v, 4.2), 'rgba(40,24,10,0.5)', 0.8);
+    }
+
+    // Animals: tiny side-view sprites facing left or right on screen
+    function pig(u, v, face = 1) {
+      const p = P(u, v, 0);
+      ctx.fillStyle = 'rgba(0,0,0,0.2)';
+      ctx.beginPath(); ctx.ellipse(p.x, p.y, 6, 2.2, 0, 0, Math.PI * 2); ctx.fill();
+      line({ x: p.x - 3, y: p.y }, { x: p.x - 3, y: p.y - 2.5 }, '#b87878', 1.2);
+      line({ x: p.x + 3, y: p.y }, { x: p.x + 3, y: p.y - 2.5 }, '#b87878', 1.2);
+      ctx.fillStyle = '#f2aaa2';
+      ctx.beginPath(); ctx.ellipse(p.x, p.y - 4.5, 5.5, 3.4, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.strokeStyle = 'rgba(120,60,50,0.6)'; ctx.lineWidth = 0.7; ctx.stroke();
+      dot({ x: p.x + face * 5.5, y: p.y - 5 }, 2.6, '#f2aaa2');
+      dot({ x: p.x + face * 7.6, y: p.y - 4.6 }, 1.2, '#dc8a82');
+      dot({ x: p.x + face * 4.8, y: p.y - 7.3 }, 1, '#dc8a82');
+    }
+
+    function cow(u, v, face = 1, rnd = Math.random) {
+      const p = P(u, v, 0);
+      ctx.fillStyle = 'rgba(0,0,0,0.2)';
+      ctx.beginPath(); ctx.ellipse(p.x, p.y, 8, 2.8, 0, 0, Math.PI * 2); ctx.fill();
+      for (const lx of [-4.5, -2, 2.5, 5]) line({ x: p.x + lx, y: p.y }, { x: p.x + lx, y: p.y - 4 }, '#5a4a3a', 1.3);
+      ctx.fillStyle = '#f4f0e6';
+      ctx.beginPath(); ctx.ellipse(p.x, p.y - 7, 7, 4, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.strokeStyle = 'rgba(60,50,40,0.6)'; ctx.lineWidth = 0.7; ctx.stroke();
+      for (let i = 0; i < 3; i++) dot({ x: p.x - 4 + rnd() * 7, y: p.y - 9 + rnd() * 4 }, 1.4 + rnd(), '#2a2622');
+      dot({ x: p.x + face * 7.5, y: p.y - 8.5 }, 2.8, '#3a3230');
+      line({ x: p.x + face * 6.5, y: p.y - 11 }, { x: p.x + face * 5.5, y: p.y - 13 }, '#e8e0cc', 1);
+      line({ x: p.x + face * 8.5, y: p.y - 11 }, { x: p.x + face * 9.5, y: p.y - 13 }, '#e8e0cc', 1);
+    }
+
+    function hayBale(u, v, z = 0) {
+      const c = cylinder(u, v, z, 0.09, 7, '#c8a040', '#e0c060');
+      ctx.strokeStyle = '#a07a28'; ctx.lineWidth = 0.6;
+      ctx.beginPath(); ctx.ellipse(c.t.x, c.t.y, c.rx * 0.55, c.ry * 0.55, 0, 0, Math.PI * 2); ctx.stroke();
+    }
+
+    // Field of grain: soil, furrows and many small golden stalks (stable per building)
+    function grainField(u0, v0, u1, v1, rnd) {
+      poly('#8a6a3a', uvRect(u0, v0, u1, v1), 'rgba(60,40,20,0.4)');
+      const rows = Math.round((v1 - v0) / 0.12);
+      for (let r = 0; r <= rows; r++) {
+        const v = v0 + (v1 - v0) * r / rows;
+        line(P(u0, v), P(u1, v), '#b8943e', 1.6);
+      }
+      const sway = Math.sin(animTime / 900) * 0.6;
+      for (const [col, dx] of [['#a8842e', -0.6], ['#f0d070', 0.6]]) {
+        ctx.strokeStyle = col;
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        const n = Math.round((u1 - u0) * (v1 - v0) * 55);
+        for (let i = 0; i < n; i++) {
+          const q = P(u0 + 0.04 + rnd() * (u1 - u0 - 0.08), v0 + 0.04 + rnd() * (v1 - v0 - 0.08));
+          ctx.moveTo(q.x + dx, q.y);
+          ctx.lineTo(q.x + dx + sway, q.y - 5 - rnd() * 2);
+        }
+        ctx.stroke();
+      }
+    }
+
+    // Fisherman's hut: plank hut, net-drying rack, fish rack and an upturned rowing boat
+    function drawFisher(U, V, rnd) {
+      ground(U, V, 2, 2, '#bca874', rnd, '#9a8858');
+      const u0 = U + 0.18, u1 = U + 1.0, v0 = V + 0.18, v1 = V + 0.95, wh = 13;
+      ao(u0, v0, u1, v1);
+      const w = walls(u0, v0, u1, v1, 0, wh, '#8e6c48');
+      boards(w.L, 0.07); boards(w.R, 0.07);
+      door(w.L, 0.45, 0.15, 10);
+      win(w.R, 0.4, 5, 0.13, 5, { shutter: '#3e5a6e' });
+      roofV(u0, v0, u1, v1, wh, 14, '#5e6a78', '#8e6c48', { style: 'shingle', boards: true });
+
+      // Net drying between two posts
+      post(U + 1.2, V + 0.3, 17); post(U + 1.85, V + 0.3, 17);
+      for (let i = 0; i <= 6; i++) {
+        const u = U + 1.2 + i * 0.65 / 6;
+        line(P(u, V + 0.3, 16), P(u, V + 0.3, 6 + Math.sin(i / 6 * Math.PI) * 2), 'rgba(50,40,30,0.6)', 0.6);
+      }
+      for (let j = 0; j < 4; j++) {
+        const z = 15 - j * 2.6;
+        line(P(U + 1.2, V + 0.3, z), P(U + 1.85, V + 0.3, z - 1.5), 'rgba(50,40,30,0.6)', 0.6);
+      }
+      // Drying fish on a pole
+      post(U + 1.3, V + 1.05, 11); post(U + 1.85, V + 1.05, 11);
+      line(P(U + 1.3, V + 1.05, 11), P(U + 1.85, V + 1.05, 11), '#5a3a1e', 1.2);
+      for (let i = 1; i < 6; i++) {
+        const q = P(U + 1.3 + i * 0.09, V + 1.05, 8);
+        ctx.fillStyle = '#b8c4cc';
+        ctx.beginPath(); ctx.ellipse(q.x, q.y, 1.2, 2.8, 0, 0, Math.PI * 2); ctx.fill();
+      }
+      barrel(U + 0.3, V + 1.3);
+      rowboat(U + 0.85, V + 1.6);
+    }
+
+    // Grain farm: small thatched farmhouse and golden fields
+    function drawGrainFarm(U, V, rnd) {
+      ground(U, V, 3, 3, '#8a7a55', rnd);
+      grainField(U + 1.3, V + 0.12, U + 2.88, V + 2.88, rnd);
+      grainField(U + 0.12, V + 1.3, U + 1.22, V + 2.88, rnd);
+
+      const u0 = U + 0.14, u1 = U + 1.1, v0 = V + 0.14, v1 = V + 1.05, wh = 13;
+      ao(u0, v0, u1, v1);
+      const w = walls(u0, v0, u1, v1, 0, wh, '#e8dcc0');
+      timber(w.L); timber(w.R);
+      door(w.L, 0.5, 0.16, 10);
+      win(w.R, 0.45, 4, 0.14, 5, { shutter: '#3a6a3a' });
+      roofV(u0, v0, u1, v1, wh, 16, '#c9a24e', '#e8dcc0', { style: 'thatch', timber: '#4a3020' });
+
+      hayBale(U + 1.2, V + 1.2);
+      hayBale(U + 1.05, V + 1.28, 0);
+      // Scarecrow
+      const sc = P(U + 2.1, V + 1.6, 0);
+      line(sc, { x: sc.x, y: sc.y - 16 }, '#5a3a1e', 1.2);
+      line({ x: sc.x - 6, y: sc.y - 11 }, { x: sc.x + 6, y: sc.y - 12 }, '#5a3a1e', 1.2);
+      dot({ x: sc.x, y: sc.y - 17 }, 2.5, '#e0c080');
+      poly('#6a4a2a', [{ x: sc.x - 4, y: sc.y - 18.5 }, { x: sc.x + 4, y: sc.y - 18.5 }, { x: sc.x, y: sc.y - 23 }]);
+    }
+
+    // Pig farm: sty with a thatched roof, fenced mud pen with pigs and a trough
+    function drawPigFarm(U, V, rnd) {
+      ground(U, V, 2, 2, '#8a7a55', rnd);
+      ctx.fillStyle = '#6a5232';
+      const m = P(U + 1.3, V + 1.35);
+      ctx.beginPath(); ctx.ellipse(m.x, m.y, 30, 13, 0, 0, Math.PI * 2); ctx.fill();
+
+      const u0 = U + 0.12, u1 = U + 0.95, v0 = V + 0.12, v1 = V + 0.85, wh = 10;
+      ao(u0, v0, u1, v1);
+      const w = walls(u0, v0, u1, v1, 0, wh, '#8a6440');
+      boards(w.L, 0.08); boards(w.R, 0.08);
+      door(w.R, 0.36, 0.2, 7, '#4a2a12');
+      roofU(u0, v0, u1, v1, wh, 11, '#c9a24e', '#8a6440', { style: 'thatch', boards: true });
+
+      walls(U + 1.1, V + 0.3, U + 1.7, V + 0.42, 0, 3, '#7a5030', '#5a7a9a'); // water trough
+      pig(U + 1.0, V + 1.3, 1);
+      pig(U + 1.5, V + 1.0, -1);
+      pig(U + 1.35, V + 1.65, 1);
+      fence(U + 0.08, V + 1.94, U + 1.94, V + 1.94);
+      fence(U + 1.94, V + 0.1, U + 1.94, V + 1.94);
+    }
+
+    // Cattle farm: big barn, fenced pasture with cows and hay
+    function drawCattleFarm(U, V, rnd) {
+      ground(U, V, 3, 3, '#7aa04a', rnd, '#5a8a36');
+      const u0 = U + 0.12, u1 = U + 1.6, v0 = V + 0.12, v1 = V + 1.2;
+      ao(u0, v0, u1, v1);
+      const base = walls(u0, v0, u1, v1, 0, 5, '#8c867a');
+      stones(base.L); stones(base.R);
+      const w = walls(u0, v0, u1, v1, 5, 22, '#a8402e');
+      boards(w.L, 0.1); boards(w.R, 0.1);
+      for (const f of [w.L, w.R]) {
+        line(f.at(0, 0.7), f.at(f.len, 0.7), '#f0e8d8', 1.4);
+        line(f.at(0, f.h - 0.7), f.at(f.len, f.h - 0.7), '#f0e8d8', 1.4);
+      }
+      barnDoor(wallL(u0, u1, v1, 0, 22), 0.7, 0.42, 12);
+      win(w.R, 0.5, 7, 0.14, 6, { shutter: '#f0e8d8' });
+      roofU(u0, v0, u1, v1, 22, 18, '#5e4e46', '#a8402e', { style: 'shingle', boards: true, vent: 0.14 });
+
+      hayBale(U + 1.85, V + 0.4);
+      hayBale(U + 2.1, V + 0.5);
+      hayBale(U + 1.95, V + 0.62, 7);
+      cow(U + 0.8, V + 1.9, 1, rnd);
+      cow(U + 1.9, V + 1.5, -1, rnd);
+      cow(U + 2.3, V + 2.3, 1, rnd);
+      fence(U + 0.08, V + 2.94, U + 2.94, V + 2.94);
+      fence(U + 2.94, V + 0.1, U + 2.94, V + 2.94);
+      fence(U + 0.08, V + 1.4, U + 0.08, V + 2.94);
+    }
+
+    // Shipyard: workshop, slipway with a hull under construction, a crane and timber
+    function drawShipyard(U, V, rnd) {
+      ground(U, V, 3, 3, '#a89870', rnd, '#8a7a5a');
+      const u0 = U + 0.12, u1 = U + 1.05, v0 = V + 0.12, v1 = V + 0.95;
+      ao(u0, v0, u1, v1);
+      const w = walls(u0, v0, u1, v1, 0, 15, '#8a6038');
+      boards(w.L, 0.08); boards(w.R, 0.08);
+      door(w.L, 0.45, 0.18, 11);
+      win(w.R, 0.4, 6, 0.14, 6, { shutter: '#4a3018' });
+      roofU(u0, v0, u1, v1, 15, 14, '#5e4e46', '#8a6038', { style: 'shingle', boards: true });
+      logPile(U + 1.3, V + 0.15, U + 2.85, V + 0.75, 3);
+
+      // Slipway ramp
+      const ramp = uvRect(U + 0.35, V + 1.3, U + 2.9, V + 2.4);
+      poly('#8a6a44', ramp, 'rgba(50,30,10,0.5)');
+      for (let i = 1; i < 12; i++) {
+        const u = U + 0.35 + i * 2.55 / 12;
+        line(P(u, V + 1.3), P(u, V + 2.4), 'rgba(50,30,10,0.35)', 0.7);
+      }
+      // Hull skeleton: keel plus U-shaped ribs, lower planks already fitted
+      const kv = V + 1.85, ka = U + 0.75, kb = U + 2.55;
+      line(P(ka, kv, 3), P(kb, kv, 3), '#5a3a1e', 2.2);
+      for (let i = 0; i <= 9; i++) {
+        const t = i / 9, u = ka + (kb - ka) * t, half = 0.08 + 0.3 * Math.sin(Math.PI * (0.1 + 0.8 * t));
+        const pts = [];
+        for (let k = 0; k <= 8; k++) {
+          const a = Math.PI * k / 8;
+          pts.push(P(u, kv - Math.cos(a) * half, 3 + (1 - Math.sin(a)) * 16));
+        }
+        ctx.strokeStyle = '#6a4422';
+        ctx.lineWidth = 1.4;
+        ctx.beginPath();
+        pts.forEach((p, k) => k ? ctx.lineTo(p.x, p.y) : ctx.moveTo(p.x, p.y));
+        ctx.stroke();
+      }
+      for (const z of [5, 8]) line(P(ka + 0.1, kv + 0.25, z), P(kb - 0.1, kv + 0.25, z), '#8a5a2e', 1.8);
+
+      // Crane with a hanging beam
+      post(U + 2.7, V + 1.15, 36);
+      const top = P(U + 2.7, V + 1.15, 36), tip = P(U + 1.9, V + 1.55, 34);
+      line(top, tip, '#5a3a1e', 1.8);
+      line(tip, P(U + 1.9, V + 1.55, 18), 'rgba(40,30,20,0.8)', 0.8);
+      logBand(U + 1.7, U + 2.1, V + 1.55, 16, 2);
+      plankStack(U + 0.2, V + 2.55, U + 0.9, V + 2.85, 3);
+    }
+
     const BUILDING_RENDERERS = {
+      fisher: drawFisher,
+      grainfarm: drawGrainFarm,
+      pigfarm: drawPigFarm,
+      cattlefarm: drawCattleFarm,
+      shipyard: drawShipyard,
       stonecutter: drawStonecutter,
       house_small: drawHouseSmall,
       house_medium: drawHouseMedium,
@@ -1135,6 +2097,14 @@
       }
     }
 
+    function drawCanalGhost() {
+      const h = GAME.hoveredTile;
+      const tiles = GAME.roadDrag ? roadPath(GAME.roadDrag, h) : [h];
+      canalPlan(tiles).forEach((r, i) => {
+        drawTileHighlight(tiles[i].tx, tiles[i].ty, r.ok ? 'rgba(80,170,220,0.55)' : 'rgba(200,80,80,0.45)', r.ok ? '#a8e0f8' : '#c86464');
+      });
+    }
+
     function drawDemolishGhost() {
       const { tx, ty } = GAME.hoveredTile;
       const occ = GAME.occupancy.get(`${tx},${ty}`);
@@ -1177,116 +2147,197 @@
       ctx.globalAlpha = 1;
     }
 
-    // quiet = true for per-frame checks (ghost preview) so the log isn't flooded
-    function canPlaceBuilding(tx, ty, def, quiet = false) {
-      const fail = (msg) => {
-        if (!quiet) log(msg, 'err');
-        return false;
-      };
+    // ----- Placement rules & costs -----
+    const hasCost = (stock, cost) => Object.entries(cost).every(([r, n]) => (stock[r] || 0) >= n);
+    const payCost = (stock, cost) => { for (const r in cost) stock[r] -= cost[r]; };
+    const fmtCost = (cost) => {
+      const parts = Object.entries(cost).map(([r, n]) => `${RES_ICONS[r]} ${n}`);
+      return parts.length ? parts.join(' ') : 'Gratis';
+    };
+    const DIRS = [[1, 0], [-1, 0], [0, 1], [0, -1]];
+    const touchesWater = (x, y) => DIRS.some(([dx, dy]) => tileAt(x + dx, y + dy)?.type === 'water');
 
-      // Bounds check
-      if (tx < 0 || ty < 0 || tx + def.w > MAP_SIZE || ty + def.h > MAP_SIZE) {
-        return fail(`Bounds fail: ${tx},${ty} size ${def.w}x${def.h}`);
+    // What placing `type` on island `isl` costs, which island pays, and whether it's blocked (and why).
+    function placementCost(type, isl) {
+      const def = DEFS[type];
+      if (type === 'warehouse') {
+        if (GAME.phase === 'setup') return { cost: {}, payer: isl, kind: 'start', block: isl ? null : 'Skal bygges på land' };
+        if (!isl) return { cost: FOUNDING_COST, payer: null, kind: 'found', block: 'Skal bygges på land' };
+        if (isl.warehouses > 0) {
+          const need = EXTRA_WAREHOUSE_POP * isl.warehouses;
+          return {
+            cost: extraWarehouseCost(isl.warehouses), payer: isl, kind: 'extra',
+            block: isl.pop < need ? `Kræver ${need} indbyggere på ${isl.name} (har ${isl.pop})` : null
+          };
+        }
+        // Founding a new island: the materials are shipped over from an island that can pay (home first)
+        if (!GAME.ships.length) return { cost: FOUNDING_COST, payer: null, kind: 'found', block: 'Kræver et skib for at grundlægge en ny ø' };
+        const payers = [...GAME.islands.values()].filter(i => i.warehouses > 0);
+        const payer = payers.find(i => i.home && hasCost(i.resources, FOUNDING_COST)) ||
+                      payers.find(i => hasCost(i.resources, FOUNDING_COST)) || homeIsland();
+        return { cost: FOUNDING_COST, payer, kind: 'found', block: null };
       }
+      if (!isl) return { cost: def.cost, payer: null, block: 'Skal bygges på land' };
+      if (isl.warehouses === 0) return { cost: def.cost, payer: isl, block: `Byg først et lager på ${isl.name}` };
+      return { cost: def.cost, payer: isl, block: null };
+    }
 
-      // Check each tile
+    // Full placement check. Returns { ok, reason, cost, payer, kind }.
+    function checkPlacement(tx, ty, type) {
+      const def = DEFS[type];
+      const no = (reason) => ({ ok: false, reason });
+      if (tx < 0 || ty < 0 || tx + def.w > MAP_SIZE || ty + def.h > MAP_SIZE) return no('Uden for kortet');
+
       for (let dy = 0; dy < def.h; dy++) {
         for (let dx = 0; dx < def.w; dx++) {
-          const cx = tx + dx;
-          const cy = ty + dy;
-          const key = `${cx},${cy}`;
-
-          // Check if occupied
-          if (GAME.occupancy.has(key)) {
-            return fail(`Occupied at ${key}`);
-          }
-
-          // Check terrain (grass or beach OK)
-          const idx = cy * MAP_SIZE + cx;
-          const terrain = GAME.grid[idx]?.type;
-          if (terrain !== 'grass' && terrain !== 'beach') {
-            return fail(`Bad terrain at ${key}: ${terrain}`);
-          }
+          const key = `${tx + dx},${ty + dy}`;
+          if (GAME.occupancy.has(key)) return no('Feltet er optaget');
+          const ttype = tileAt(tx + dx, ty + dy)?.type;
+          // Roads may cut through forest (the trees are felled); everything else needs open ground
+          if (!isLandType(ttype) && !(type === 'road' && ttype === 'forest')) return no('Kan kun bygges på græs eller sand');
         }
       }
+      const isl = GAME.islands.get(tileAt(tx, ty).island);
+      const pc = placementCost(type, isl);
 
-      // Raw-material buildings need their terrain (forest, rock) nearby
+      // Ports (shipyard and every island's first warehouse) must face the open sea so ships can reach them;
+      // other coastal buildings (fisher) just need water
+      const around = footprintNeighbors({ type, x: tx, y: ty }).map(([x, y]) => tileAt(x, y));
+      const isPort = type === 'shipyard' || pc.kind === 'start' || pc.kind === 'found';
+      if (isPort && !around.some(t => t?.ocean)) return no(`${def.name} skal ligge ud til havet (ikke en sø)`);
+      if (def.coastal && !around.some(t => t?.type === 'water')) return no(`${def.name} skal ligge ud til vandet`);
+
       if (def.near) {
+        const r = def.near.radius ?? 4, min = def.near.min ?? 2;
         let count = 0;
-        for (let dy = -4; dy <= 4; dy++) {
-          for (let dx = -4; dx <= 4; dx++) {
-            const cy = ty + dy;
-            const cx = tx + dx;
-            if (cy >= 0 && cy < MAP_SIZE && cx >= 0 && cx < MAP_SIZE) {
-              const idx = cy * MAP_SIZE + cx;
-              if (GAME.grid[idx]?.type === def.near.terrain) count++;
-            }
+        for (let dy = -r; dy < def.h + r; dy++) {
+          for (let dx = -r; dx < def.w + r; dx++) {
+            if (tileAt(tx + dx, ty + dy)?.type === def.near.terrain) count++;
           }
         }
-        if (count < 2) {
-          return fail(`Ikke nok ${def.near.label} i nærheden`);
-        }
+        if (count < min) return no(`Ikke nok ${def.near.label} i nærheden`);
       }
 
-      return true;
+      if (pc.block) return no(pc.block);
+      if (pc.payer && !hasCost(pc.payer.resources, pc.cost)) return { ...no(`Ikke nok materialer på ${pc.payer.name}`), afford: false };
+      return { ok: true, ...pc };
+    }
+
+    // quiet = true for per-frame checks (ghost preview) so the log isn't flooded
+    function canPlaceBuilding(tx, ty, def, quiet = false) {
+      const r = checkPlacement(tx, ty, def.id);
+      if (!r.ok && !quiet) log(r.reason, 'err');
+      return r.ok;
     }
 
     function placeBuilding(tx, ty, type) {
       const def = DEFS[type];
-      if (!canPlaceBuilding(tx, ty, def)) {
-        log(`❌ Can't place ${type} at ${tx},${ty}`, 'err');
+      const r = checkPlacement(tx, ty, type);
+      if (!r.ok) {
+        log(`❌ ${r.reason}`, 'err');
+        showToast(`❌ ${r.reason}`);
         return false;
       }
+      if (r.payer) payCost(r.payer.resources, r.cost);
 
-      // The very first warehouse is free
-      const isFirstWarehouse = GAME.phase === 'setup' && type === 'warehouse';
-      const cost = isFirstWarehouse ? {} : def.cost;
-
-      for (const res in cost) {
-        if ((GAME.resources[res] || 0) < cost[res]) {
-          log(`❌ Not enough ${res}`, 'err');
-          return false;
-        }
-      }
-
-      for (const res in cost) {
-        GAME.resources[res] -= cost[res];
-      }
-
-      const bid = 'b_' + Math.random().toString(36).substr(2, 6);
+      const bid = 'b_' + Math.random().toString(36).slice(2, 8);
       const b = { id: bid, type, x: tx, y: ty };
+      if (type === 'shipyard') b.queue = null;
       GAME.buildings.push(b);
-
       for (let dy = 0; dy < def.h; dy++) {
-        for (let dx = 0; dx < def.w; dx++) {
-          GAME.occupancy.set(`${tx + dx},${ty + dy}`, bid);
-        }
+        for (let dx = 0; dx < def.w; dx++) GAME.occupancy.set(`${tx + dx},${ty + dy}`, bid);
       }
 
-      if (def.capacity) GAME.population.capacity += def.capacity;
-      if (def.storage) {
-        for (const res in GAME.storageCap) GAME.storageCap[res] += def.storage;
+      const isl = islandOfBuilding(b);
+      if (r.kind === 'start') {
+        isl.home = true;
+        isl.name = 'Hjemøen';
+        Object.assign(isl.resources, START_STOCK);
       }
+      updateIslandStats();
 
-      log(`✓ ${def.name} placed at ${tx},${ty}`, 'ok');
+      if (r.kind === 'found') {
+        log(`✓ ${isl.name} er grundlagt – materialer sejlet over fra ${r.payer.name}`, 'ok');
+        showToast(`⚓ ${isl.name} er grundlagt!`);
+      } else {
+        log(`✓ ${def.name} bygget på ${isl.name}`, 'ok');
+      }
       selectTool(null);
-      if (isFirstWarehouse) startPlaying();
+      if (r.kind === 'start') startPlaying();
       recomputeConnectivity();
+      saveGame();
       return true;
     }
 
     function placeRoads(tiles) {
-      let built = 0;
+      let built = 0, felled = 0;
       for (const t of tiles) {
         if (isRoad(t.tx, t.ty) || !canPlaceBuilding(t.tx, t.ty, DEFS.road, true)) continue;
         const key = `${t.tx},${t.ty}`;
+        const tile = tileAt(t.tx, t.ty);
+        if (tile.type === 'forest') { tile.type = 'grass'; felled++; }
         GAME.roads.add(key);
         GAME.occupancy.set(key, 'road');
         built++;
       }
-      if (built) log(`✓ ${built} vejfelt${built > 1 ? 'er' : ''} bygget`, 'ok');
+      if (felled) decorateTerrain(GAME.grid); // re-dress the cleared tiles as grass
+      if (built) log(`✓ ${built} vejfelt${built > 1 ? 'er' : ''} bygget${felled ? ` (${felled} træer fældet)` : ''}`, 'ok');
       else log('Ingen gyldige felter til vej', 'err');
       recomputeConnectivity();
+      if (built) saveGame();
+    }
+
+    // Canals are dug in order along the drag path, so each new tile may connect to the previous one.
+    // `water` holds keys that will already be water at that point (for previews).
+    function canalCheck(x, y, water = new Set(), spent = new Map()) {
+      const t = tileAt(x, y);
+      if (!t || !isLandType(t.type)) return { ok: false, reason: 'Kanaler kan kun graves i græs eller sand' };
+      if (GAME.occupancy.has(`${x},${y}`)) return { ok: false, reason: 'Feltet er optaget' };
+      if (!DIRS.some(([dx, dy]) => tileAt(x + dx, y + dy)?.type === 'water' || water.has(`${x + dx},${y + dy}`))) {
+        return { ok: false, reason: 'En kanal skal forbindes til vand' };
+      }
+      const isl = GAME.islands.get(t.island);
+      if (!isl.warehouses) return { ok: false, reason: `Byg først et lager på ${isl.name}` };
+      const n = (spent.get(isl) || 0) + 1;
+      const total = Object.fromEntries(Object.entries(DEFS.canal.cost).map(([r, c]) => [r, c * n]));
+      if (!hasCost(isl.resources, total)) return { ok: false, reason: `Ikke nok materialer på ${isl.name}` };
+      return { ok: true, payer: isl };
+    }
+
+    // Per-tile validity for a canal drag, simulating the tiles dug before it
+    function canalPlan(tiles) {
+      const water = new Set(), spent = new Map();
+      return tiles.map(t => {
+        const r = canalCheck(t.tx, t.ty, water, spent);
+        if (r.ok) { water.add(`${t.tx},${t.ty}`); spent.set(r.payer, (spent.get(r.payer) || 0) + 1); }
+        return r;
+      });
+    }
+
+    function placeCanals(tiles) {
+      const plan = canalPlan(tiles);
+      let dug = 0;
+      plan.forEach((r, i) => {
+        if (!r.ok) return;
+        payCost(r.payer.resources, DEFS.canal.cost);
+        const t = tileAt(tiles[i].tx, tiles[i].ty);
+        t.type = 'water';
+        t.canal = true;
+        dug++;
+      });
+      if (!dug) {
+        const reason = plan.find(r => !r.ok)?.reason || 'Ingen gyldige felter til kanal';
+        log(`❌ ${reason}`, 'err');
+        showToast(`❌ ${reason}`);
+        return;
+      }
+      const before = GAME.islands.size;
+      recomputeIslands();
+      decorateTerrain(GAME.grid);
+      recomputeConnectivity();
+      log(`✓ ${dug} kanalfelt${dug > 1 ? 'er' : ''} gravet`, 'ok');
+      if (GAME.islands.size > before) showToast('🌊 Kanalen har delt øen i to');
+      saveGame();
     }
 
     function demolishAt(tx, ty) {
@@ -1299,37 +2350,41 @@
         GAME.occupancy.delete(key);
         log(`✓ Vej fjernet ved ${key}`, 'ok');
         recomputeConnectivity();
+        saveGame();
         return;
       }
 
       const b = GAME.buildings.find(bb => bb.id === occ);
       const def = DEFS[b.type];
-      if (b.type === 'warehouse' && GAME.buildings.filter(bb => bb.type === 'warehouse').length === 1) {
-        log('❌ Du kan ikke rive dit sidste lager ned', 'err');
-        return;
+      const isl = islandOfBuilding(b);
+      if (b.type === 'warehouse' && isl.warehouses === 1) {
+        const others = GAME.buildings.some(o => o !== b && islandOfBuilding(o) === isl);
+        if (others || isl.home) {
+          log('❌ Du kan ikke rive øens sidste lager ned', 'err');
+          showToast('❌ Du kan ikke rive øens sidste lager ned');
+          return;
+        }
       }
 
       GAME.buildings.splice(GAME.buildings.indexOf(b), 1);
       for (let dy = 0; dy < def.h; dy++) {
         for (let dx = 0; dx < def.w; dx++) GAME.occupancy.delete(`${b.x + dx},${b.y + dy}`);
       }
+      // Ships lose routes that used this warehouse
+      if (b.type === 'warehouse') {
+        for (const s of GAME.ships) if (s.route && (s.route.from === b.id || s.route.to === b.id)) stopRoute(s);
+      }
 
-      if (def.capacity) {
-        GAME.population.capacity -= def.capacity;
-        GAME.population.total = Math.min(GAME.population.total, GAME.population.capacity);
-      }
-      if (def.storage) {
-        for (const res in GAME.storageCap) {
-          GAME.storageCap[res] -= def.storage;
-          GAME.resources[res] = Math.min(GAME.resources[res], GAME.storageCap[res]);
-        }
-      }
-      for (const res in def.cost) {
-        GAME.resources[res] = Math.min(GAME.storageCap[res], GAME.resources[res] + Math.floor(def.cost[res] / 2));
+      updateIslandStats();
+      for (const r of RES_KEYS) isl.resources[r] = Math.min(isl.resources[r], isl.cap);
+      for (const r in def.cost) {
+        isl.resources[r] = Math.min(isl.cap, isl.resources[r] + Math.floor(def.cost[r] / 2));
       }
 
       log(`✓ ${def.name} revet ned`, 'ok');
+      if (GAME.selectedInfo?.id === b.id) closeInfo();
       recomputeConnectivity();
+      saveGame();
     }
 
     // Tiles orthogonally adjacent to a building's footprint
@@ -1343,6 +2398,9 @@
       }
       return out;
     }
+
+    // Water tiles next to a building, where ships dock
+    const dockTiles = (b) => footprintNeighbors(b).filter(([x, y]) => tileAt(x, y)?.type === 'water');
 
     // Flood-fill the road network outwards from every warehouse,
     // then mark each building that touches a reached road tile
@@ -1358,7 +2416,7 @@
       }
       while (queue.length) {
         const [x, y] = queue.shift();
-        for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+        for (const [dx, dy] of DIRS) {
           const k = `${x + dx},${y + dy}`;
           if (GAME.roads.has(k) && !reached.has(k)) { reached.add(k); queue.push([x + dx, y + dy]); }
         }
@@ -1375,8 +2433,8 @@
     function startPlaying() {
       GAME.phase = 'play';
       document.getElementById('banner').hidden = true;
-      openBuildCategory('production');
-      log('Lageret er placeret. Byg veje fra lageret til dine bygninger!', 'ok');
+      openBuildCategory('food');
+      log('Lageret er placeret. Byg en fisker, så beboerne har mad, og forbind den med vej.', 'ok');
     }
 
     function selectTool(type) {
@@ -1385,21 +2443,33 @@
       refreshMenuState();
     }
 
+    // The island the build menu shows prices for: under the cursor while placing, otherwise at screen centre
+    function activeIsland() {
+      const h = GAME.hoveredTile;
+      const ht = GAME.selectedBuilding && h ? tileAt(h.tx, h.ty) : null;
+      if (isLand(ht)) return GAME.islands.get(ht.island);
+      const c = screenToWorld(canvas.width / 2, canvas.height / 2);
+      const ct = ISO.screenToTile(c.x, c.y);
+      const t = tileAt(ct.tx, ct.ty);
+      return (isLand(t) && GAME.islands.get(t.island)) || homeIsland() || null;
+    }
+
     // ===== BUILD MENU =====
     let openCategory = null;
 
+    const menuPlacement = (id) => DEFS[id] ? placementCost(id, activeIsland()) : null;
+
     function canAfford(id) {
-      const def = DEFS[id];
-      if (!def || (GAME.phase === 'setup' && id === 'warehouse')) return true;
-      return Object.entries(def.cost).every(([res, n]) => (GAME.resources[res] || 0) >= n);
+      if (GAME.phase === 'setup' && id === 'warehouse') return true;
+      const r = menuPlacement(id);
+      if (!r) return true;
+      if (r.block) return false;
+      return !r.payer || hasCost(r.payer.resources, r.cost);
     }
 
     function costLabel(id) {
-      const def = DEFS[id];
-      if (!def) return '—';
-      if (GAME.phase === 'setup' && id === 'warehouse') return 'Gratis';
-      const parts = Object.entries(def.cost).map(([res, n]) => `${RES_ICONS[res]} ${n}`);
-      return parts.length ? parts.join(' ') : 'Gratis';
+      const r = menuPlacement(id);
+      return r ? fmtCost(r.cost) : '—';
     }
 
     function buildMenu() {
@@ -1432,7 +2502,10 @@
           card.innerHTML = `<canvas></canvas><div class="card-name">${info.name}</div>` +
             `<div class="card-meta"><span class="card-cost"></span><span class="card-size">${def ? `${def.w}×${def.h}` : ''}</span></div>`;
           card.addEventListener('click', () => selectTool(GAME.selectedBuilding === itemId ? null : itemId));
-          card.addEventListener('mouseenter', () => { desc.textContent = info.desc; });
+          card.addEventListener('mouseenter', () => {
+            const block = menuPlacement(itemId)?.block;
+            desc.textContent = block && !(GAME.phase === 'setup' && itemId === 'warehouse') ? `🔒 ${block}` : info.desc;
+          });
           card.addEventListener('mouseleave', () => {
             desc.textContent = GAME.selectedBuilding ? itemInfo(GAME.selectedBuilding).desc : '';
           });
@@ -1448,7 +2521,7 @@
       const setup = GAME.phase === 'setup';
       document.querySelectorAll('.build-tab').forEach(t => {
         t.classList.toggle('active', t.dataset.cat === openCategory);
-        t.disabled = setup && t.dataset.cat !== 'storage';
+        t.disabled = setup && t.dataset.cat !== 'harbor';
       });
       document.querySelectorAll('.build-card').forEach(card => {
         const id = card.dataset.bid;
@@ -1462,7 +2535,8 @@
     }
 
     // Render a building (or tool) into a card canvas by temporarily redirecting `ctx`
-    const PREVIEW_H = { house_small: 36, house_medium: 82, woodcutter: 52, sawmill: 62, warehouse: 74, stonecutter: 52, road: 10 };
+    const PREVIEW_H = { house_small: 36, house_medium: 82, woodcutter: 52, sawmill: 62, warehouse: 74, stonecutter: 52, road: 10,
+                        canal: 10, fisher: 46, grainfarm: 40, pigfarm: 44, cattlefarm: 50, shipyard: 70 };
 
     function drawPreview(cv, id) {
       const dpr = window.devicePixelRatio || 1, cw = 96, ch = 72;
@@ -1483,8 +2557,8 @@
           return;
         }
 
-        // Roads are previewed as a small bend, far away from any real map tiles
-        const isRoadPreview = id === 'road';
+        // Roads and canals are previewed as a small bend, far away from any real map tiles
+        const isRoadPreview = id === 'road' || id === 'canal';
         const ox = isRoadPreview ? -1000 : 0, oy = ox;
         const w = isRoadPreview ? 2 : DEFS[id].w, h = isRoadPreview ? 2 : DEFS[id].h;
 
@@ -1498,7 +2572,17 @@
           for (let x = 0; x < w; x++) drawTile(ox + x, oy + y, { type: 'grass' });
         }
 
-        if (isRoadPreview) {
+        if (id === 'canal') {
+          const bend = [[ox, oy + 1], [ox + 1, oy + 1], [ox + 1, oy]];
+          for (const [x, y] of bend) {
+            drawTile(x, y, { type: 'water', color: '#4aa8cc' });
+            // Stone quay along the sides facing land
+            for (const [dx, dy] of DIRS) {
+              if (bend.some(([bx, by]) => bx === x + dx && by === y + dy)) continue;
+              drawQuay(x, y, dx, dy);
+            }
+          }
+        } else if (isRoadPreview) {
           const keys = [`${ox},${oy + 1}`, `${ox + 1},${oy + 1}`, `${ox + 1},${oy}`];
           keys.forEach(k => GAME.roads.add(k));
           try {
@@ -1515,7 +2599,7 @@
     }
 
     function render() {
-      ctx.fillStyle = '#2a3a4a';
+      ctx.fillStyle = SEA_COLOR;
       ctx.fillRect(0, 0, canvas.width, canvas.height);
 
       ctx.save();
@@ -1545,19 +2629,42 @@
       const items = [];
       for (const tile of GAME.grid) {
         if (tile.type === 'forest' && inView(ISO.tileToScreen(tile.x, tile.y), 40, 24, 60)) {
-          items.push({ depth: tile.x + tile.y, draw: () => drawTree(tile.x, tile.y) });
-        } else if (tile.type === 'rock' && inView(ISO.tileToScreen(tile.x, tile.y), 40, 24, 40)) {
-          items.push({ depth: tile.x + tile.y, draw: () => drawRock(tile.x, tile.y, tile) });
+          items.push({ depth: tile.x + tile.y, draw: () => drawForest(tile.x, tile.y, tile) });
+        } else if (tile.object && !GAME.occupancy.has(`${tile.x},${tile.y}`) && inView(ISO.tileToScreen(tile.x, tile.y), 40, 24, 60)) {
+          // Lone trees and bushes on open grass (hidden once something is built on the tile)
+          const o = tile.object;
+          items.push({
+            depth: tile.x + tile.y,
+            draw: () => o.k === 'bush'
+              ? bush(tile.x + o.u, tile.y + o.v, o.s)
+              : drawTreeAt(tile.x + o.tree.u, tile.y + o.tree.v, o.tree)
+          });
+        } else if (tile.type === 'rock' && inView(ISO.tileToScreen(tile.x, tile.y), 40, 24, 80)) {
+          // Grouped rock tiles form a mountain (drawn per tile so depth sorting still works); lone ones are boulders
+          items.push({
+            depth: tile.x + tile.y,
+            draw: tile.mountain ? () => drawMountainTile(tile) : () => drawRock(tile.x, tile.y, tile)
+          });
         }
       }
       const visibleBuildings = GAME.buildings.filter(b => {
         const def = DEFS[b.type];
         return inView(ISO.tileToScreen(b.x + (def.w - 1) / 2, b.y + (def.h - 1) / 2), 120, 80, 140);
       });
+      const sel = GAME.selectedInfo;
       for (const b of visibleBuildings) {
         const def = DEFS[b.type];
         const d = (b.x + def.w - 1) + (b.y + def.h - 1);
+        if (sel?.kind === 'building' && sel.id === b.id) {
+          // Gold outline around the inspected building's footprint (flat, so drawn before objects)
+          poly('rgba(255,215,0,0.18)', uvRect(b.x - 0.5, b.y - 0.5, b.x + def.w - 0.5, b.y + def.h - 0.5), '#ffd700');
+        }
         items.push({ depth: d, draw: () => drawBuilding(b) });
+      }
+      for (const s of GAME.ships) {
+        if (inView(P(s.x, s.y), 60, 30, 60)) {
+          items.push({ depth: s.x + s.y, draw: () => drawShip(s, sel?.kind === 'ship' && sel.id === s.id) });
+        }
       }
 
       items.sort((a, b) => a.depth - b.depth);
@@ -1571,6 +2678,7 @@
       // Placement / tool preview
       if (GAME.selectedBuilding && GAME.hoveredTile) {
         if (GAME.selectedBuilding === 'road') drawRoadGhost();
+        else if (GAME.selectedBuilding === 'canal') drawCanalGhost();
         else if (GAME.selectedBuilding === 'demolish') drawDemolishGhost();
         else drawGhostBuilding(GAME.hoveredTile.tx, GAME.hoveredTile.ty, DEFS[GAME.selectedBuilding]);
       }
@@ -1638,12 +2746,16 @@
     const DRAG_THRESHOLD = 5;
     const drag = { active: false, button: -1, startX: 0, startY: 0, lastX: 0, lastY: 0, moved: false };
 
+    // Roads and canals are laid by dragging a path rather than clicking
+    const isDragTool = (tool) => tool === 'road' || tool === 'canal';
+
     function useToolAtHover() {
       const tool = GAME.selectedBuilding;
-      if (!tool || !GAME.hoveredTile) return;
+      if (!tool) { selectAtHover(); return; } // no tool: clicking inspects buildings and ships
+      if (!GAME.hoveredTile) return;
       const { tx, ty } = GAME.hoveredTile;
       if (tool === 'demolish') demolishAt(tx, ty);
-      else if (tool !== 'road') placeBuilding(tx, ty, tool);
+      else if (!isDragTool(tool)) placeBuilding(tx, ty, tool);
     }
 
     canvas.addEventListener('mousedown', (e) => {
@@ -1651,7 +2763,7 @@
       updateHover();
       if (e.button === 1 || e.button === 2) e.preventDefault(); // no autoscroll / context menu
 
-      if (e.button === 0 && GAME.selectedBuilding === 'road') {
+      if (e.button === 0 && isDragTool(GAME.selectedBuilding)) {
         if (GAME.hoveredTile) GAME.roadDrag = { ...GAME.hoveredTile };
         return;
       }
@@ -1687,7 +2799,11 @@
 
     window.addEventListener('mouseup', (e) => {
       if (e.button === 0 && GAME.roadDrag) {
-        if (GAME.hoveredTile) placeRoads(roadPath(GAME.roadDrag, GAME.hoveredTile));
+        if (GAME.hoveredTile) {
+          const path = roadPath(GAME.roadDrag, GAME.hoveredTile);
+          if (GAME.selectedBuilding === 'canal') placeCanals(path);
+          else placeRoads(path);
+        }
         GAME.roadDrag = null;
         return;
       }
@@ -1719,8 +2835,9 @@
     window.addEventListener('keydown', (e) => {
       const k = e.key.toLowerCase();
       if (k === 'escape' && GAME.phase === 'play') {
-        // First Esc drops the tool, the next one closes the menu panel
+        // Esc drops the tool first, then closes the info panel, then the menu panel
         if (GAME.selectedBuilding) selectTool(null);
+        else if (GAME.selectedInfo) closeInfo();
         else openBuildCategory(null);
       }
       // 1-4 open build categories
@@ -1733,6 +2850,11 @@
       if (k === '+' || k === '=') zoomAt(1.2);
       if (k === '-') zoomAt(1 / 1.2);
       if (k === 'h') centerHome();
+      // Developer log, hidden by default
+      if (e.key === '`' || e.key === '§' || e.key === '½') {
+        const dbg = document.getElementById('debug');
+        dbg.hidden = !dbg.hidden;
+      }
     });
     window.addEventListener('keyup', (e) => keysDown.delete(e.key.toLowerCase()));
     window.addEventListener('blur', () => keysDown.clear());
@@ -1763,42 +2885,635 @@
     });
 
 
-    // ===== SIMULATION =====
-    function tick() {
-      const R = GAME.resources, cap = GAME.storageCap;
-      const working = GAME.buildings
-        .map(b => DEFS[b.type])
-        .filter((def, i) => def.produces && GAME.connected.has(GAME.buildings[i].id)); // no road, no production
+    // ===== SHIPS =====
+    const DIRS8 = [[1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [1, -1], [-1, 1], [-1, -1]];
+    const isWater = (x, y) => tileAt(x, y)?.type === 'water';
+    const buildingById = (id) => GAME.buildings.find(b => b.id === id);
+    const cargoTotal = (s) => RES_KEYS.reduce((sum, k) => sum + s.cargo[k], 0);
 
-      // Raw producers first (woodcutter, stonecutter), then processors (sawmill),
-      // so this tick's raw output can be processed in the same tick
-      working.sort((a, b) => !!a.consumes - !!b.consumes);
-      for (const def of working) {
-        const amount = def.rate ?? 1;
-        if (R[def.produces] >= cap[def.produces]) continue; // storage full
-        if (def.consumes) {
-          if (R[def.consumes] < amount) continue; // missing input
-          R[def.consumes] -= amount;
+    // Tiny binary min-heap of [priority, value] pairs for Dijkstra
+    class MinHeap {
+      constructor() { this.a = []; }
+      get size() { return this.a.length; }
+      push(p, v) {
+        const a = this.a;
+        a.push([p, v]);
+        for (let i = a.length - 1; i > 0;) {
+          const j = (i - 1) >> 1;
+          if (a[j][0] <= a[i][0]) break;
+          [a[i], a[j]] = [a[j], a[i]];
+          i = j;
         }
-        R[def.produces] = Math.min(cap[def.produces], R[def.produces] + amount);
+      }
+      pop() {
+        const a = this.a, top = a[0], last = a.pop();
+        if (a.length) {
+          a[0] = last;
+          for (let i = 0; ;) {
+            const l = 2 * i + 1, r = l + 1;
+            let m = i;
+            if (l < a.length && a[l][0] < a[m][0]) m = l;
+            if (r < a.length && a[r][0] < a[m][0]) m = r;
+            if (m === i) break;
+            [a[i], a[m]] = [a[m], a[i]];
+            i = m;
+          }
+        }
+        return top;
+      }
+    }
+
+    // Shortest water route (8-way, no cutting across land corners) from any start tile to any goal tile.
+    // Returns { path: [[x, y], ...], length } or null if the goals can't be reached by sea.
+    function waterPath(starts, goals) {
+      const N = MAP_SIZE * MAP_SIZE;
+      const goalSet = new Set(goals.map(([x, y]) => y * MAP_SIZE + x));
+      // Float64 on purpose: with Float32 the stored distance rounds below the heap priority,
+      // and the `d > dist[i]` staleness check would wrongly skip nodes reached diagonally
+      const dist = new Float64Array(N).fill(Infinity);
+      const prev = new Int32Array(N).fill(-1);
+      const heap = new MinHeap();
+      for (const [x, y] of starts) {
+        if (!isWater(x, y)) continue;
+        dist[y * MAP_SIZE + x] = 0;
+        heap.push(0, y * MAP_SIZE + x);
+      }
+      while (heap.size) {
+        const [d, i] = heap.pop();
+        if (d > dist[i]) continue;
+        if (goalSet.has(i)) {
+          const path = [];
+          for (let k = i; k !== -1; k = prev[k]) path.push([k % MAP_SIZE, Math.floor(k / MAP_SIZE)]);
+          return { path: path.reverse(), length: d };
+        }
+        const x = i % MAP_SIZE, y = Math.floor(i / MAP_SIZE);
+        for (const [dx, dy] of DIRS8) {
+          const nx = x + dx, ny = y + dy;
+          if (!isWater(nx, ny)) continue;
+          if (dx && dy && (!isWater(x + dx, y) || !isWater(x, y + dy))) continue;
+          const nd = d + (dx && dy ? 1.414 : 1), j = ny * MAP_SIZE + nx;
+          if (nd < dist[j]) { dist[j] = nd; prev[j] = i; heap.push(nd, j); }
+        }
+      }
+      return null;
+    }
+
+    function spawnShip(typeId, shipyard) {
+      // Launch on the sea side (a shipyard may also touch a lake)
+      const docks = dockTiles(shipyard);
+      const [dx, dy] = docks.find(([x, y]) => tileAt(x, y).ocean) || docks[0] || [shipyard.x, shipyard.y];
+      const type = SHIP_TYPES[typeId];
+      GAME.shipCounter++;
+      const n = GAME.ships.filter(s => s.type === typeId).length + 1;
+      const ship = { id: `s_${GAME.shipCounter}`, type: typeId, name: `${type.name} ${n}`, x: dx, y: dy, dir: [1, 0],
+                     path: [], state: 'idle', cargo: emptyStock(), route: null, timer: 0, trips: 0 };
+      GAME.ships.push(ship);
+      log(`✓ ${ship.name} er søsat`, 'ok');
+      showToast(`⛵ ${ship.name} er søsat!`);
+      return ship;
+    }
+
+    // Warehouses that ships can use (they need a water tile next to them)
+    const portWarehouses = () => GAME.buildings.filter(b => b.type === 'warehouse' && dockTiles(b).length);
+
+    // Validates and starts a trade route. Returns an error string, or null on success.
+    function setRoute(ship, fromId, toId, res) {
+      const from = buildingById(fromId), to = buildingById(toId);
+      if (!from || !to) return 'Vælg to lagre';
+      if (islandOfBuilding(from) === islandOfBuilding(to)) return 'Lagrene skal ligge på hver sin ø';
+      if (!res.length) return 'Vælg mindst én vare';
+      const leg = waterPath(dockTiles(from), dockTiles(to));
+      if (!leg) return 'Der er ingen sejlrute mellem de to lagre';
+      const range = SHIP_TYPES[ship.type].range;
+      if (leg.length > range) return `Ruten er ${Math.round(leg.length)} felter – ${ship.name} kan kun sejle ${range}`;
+      if (!waterPath([[Math.round(ship.x), Math.round(ship.y)]], dockTiles(from))) {
+        return `${ship.name} kan ikke sejle hen til lageret på ${islandOfBuilding(from).name}`;
+      }
+      ship.route = { from: fromId, to: toId, res: [...res], length: Math.round(leg.length) };
+      sailTo(ship, from, 'toFrom');
+      return null;
+    }
+
+    function stopRoute(ship) {
+      ship.route = null;
+      ship.path = [];
+      ship.timer = 0;
+      ship.state = 'idle';
+    }
+
+    function sailTo(ship, target, state) {
+      const res = waterPath([[Math.round(ship.x), Math.round(ship.y)]], dockTiles(target));
+      if (!res) {
+        log(`${ship.name} kan ikke finde en sejlrute`, 'err');
+        stopRoute(ship);
+        return;
+      }
+      ship.path = res.path;
+      ship.state = state;
+      if (!ship.path.length) arriveShip(ship);
+    }
+
+    function arriveShip(ship) {
+      if (!ship.route) { ship.state = 'idle'; return; }
+      if (ship.state === 'toFrom') { ship.state = 'loading'; ship.timer = 2; }
+      else if (ship.state === 'toTo') { ship.state = 'unloading'; ship.timer = 2; }
+    }
+
+    function finishShipStop(ship) {
+      const r = ship.route;
+      const from = r && buildingById(r.from), to = r && buildingById(r.to);
+      if (!from || !to) { stopRoute(ship); return; }
+      if (ship.state === 'loading') {
+        const isl = islandOfBuilding(from);
+        let free = SHIP_TYPES[ship.type].cargo - cargoTotal(ship);
+        // Share the hold between the chosen goods; a second pass tops up with whatever is left
+        for (let pass = 0; pass < 2 && free >= 1; pass++) {
+          const wanted = r.res.filter(k => isl.resources[k] >= 1);
+          if (!wanted.length) break;
+          const share = Math.max(1, Math.floor(free / wanted.length));
+          for (const k of wanted) {
+            const take = Math.floor(Math.min(share, isl.resources[k], free));
+            isl.resources[k] -= take;
+            ship.cargo[k] += take;
+            free -= take;
+          }
+        }
+        sailTo(ship, to, 'toTo');
+      } else if (ship.state === 'unloading') {
+        const isl = islandOfBuilding(to);
+        for (const k of RES_KEYS) {
+          const put = Math.min(ship.cargo[k], Math.max(0, isl.cap - isl.resources[k]));
+          isl.resources[k] += put;
+          ship.cargo[k] -= put;
+        }
+        ship.trips++;
+        sailTo(ship, from, 'toFrom');
+      }
+    }
+
+    function updateShips(dt) {
+      const sec = dt / 1000;
+      for (const s of GAME.ships) {
+        if (s.timer > 0) {
+          s.timer -= sec;
+          if (s.timer <= 0) finishShipStop(s);
+          continue;
+        }
+        if (!s.path.length) continue;
+        let move = SHIP_TYPES[s.type].speed * sec;
+        while (move > 0 && s.path.length) {
+          const [tx, ty] = s.path[0], dx = tx - s.x, dy = ty - s.y, d = Math.hypot(dx, dy);
+          if (d > 0.001) s.dir = [dx / d, dy / d];
+          if (d <= move) { s.x = tx; s.y = ty; s.path.shift(); move -= d; }
+          else { s.x += dx / d * move; s.y += dy / d * move; move = 0; }
+        }
+        if (!s.path.length) arriveShip(s);
+      }
+    }
+
+    function startShipBuild(yard, typeId) {
+      const type = SHIP_TYPES[typeId], isl = islandOfBuilding(yard);
+      if (yard.queue) return 'Skibsbyggeren er allerede i gang';
+      if (!GAME.connected.has(yard.id)) return 'Skibsbyggeren mangler vej til et lager';
+      if (totalPopulation() < type.pop) return `Kræver ${type.pop} indbyggere i alt`;
+      if (!hasCost(isl.resources, type.cost)) return `Ikke nok materialer på ${isl.name}`;
+      payCost(isl.resources, type.cost);
+      yard.queue = { type: typeId, progress: 0 };
+      saveGame();
+      return null;
+    }
+
+    const SHIP_STATE_TEXT = {
+      idle: 'Ligger stille', toFrom: 'Sejler til afhentning', loading: 'Laster varer',
+      toTo: 'Sejler med last', unloading: 'Losser varer'
+    };
+
+    // Screen-space convex hull (monotone chain), used for ship hulls
+    function convexHull(pts) {
+      const p = [...pts].sort((a, b) => a.x - b.x || a.y - b.y);
+      const cross = (o, a, b) => (a.x - o.x) * (b.y - o.y) - (a.y - o.y) * (b.x - o.x);
+      const lower = [], upper = [];
+      for (const q of p) { while (lower.length >= 2 && cross(lower[lower.length - 2], lower[lower.length - 1], q) <= 0) lower.pop(); lower.push(q); }
+      for (const q of p.reverse()) { while (upper.length >= 2 && cross(upper[upper.length - 2], upper[upper.length - 1], q) <= 0) upper.pop(); upper.push(q); }
+      return lower.slice(0, -1).concat(upper.slice(0, -1));
+    }
+
+    function drawShip(s, selected) {
+      const T = SHIP_TYPES[s.type], k = T.size;
+      const [du, dv] = s.dir, nu = -dv, nv = du;
+      const bob = Math.sin(animTime / 500 + s.x * 1.7) * 0.8;
+      const pt = (a, b, z) => P(s.x + du * a + nu * b, s.y + dv * a + nv * b, z + bob);
+      const L = 0.42 * k, W = 0.15 * k, deckZ = 5 * k;
+
+      if (selected) {
+        const c = P(s.x, s.y, 0);
+        ctx.strokeStyle = '#ffd700';
+        ctx.lineWidth = 2;
+        ctx.beginPath(); ctx.ellipse(c.x, c.y, 26 * k, 13 * k, 0, 0, Math.PI * 2); ctx.stroke();
+      }
+      // Wake while sailing
+      if (s.path.length) {
+        ctx.strokeStyle = 'rgba(240,250,255,0.5)';
+        ctx.lineWidth = 1.2;
+        ctx.beginPath();
+        const st = pt(-L, 0, 0);
+        for (const side of [-1, 1]) { const e = pt(-L - 0.45 * k, side * W * 2.2, 0); ctx.moveTo(st.x, st.y); ctx.lineTo(e.x, e.y); }
+        ctx.stroke();
+      }
+      const water = [pt(L, 0, 0), pt(L * 0.4, W, 0), pt(-L, W * 0.9, 0), pt(-L, -W * 0.9, 0), pt(L * 0.4, -W, 0)];
+      const deck = [pt(L * 1.08, 0, deckZ + 1), pt(L * 0.4, W * 1.1, deckZ), pt(-L, W, deckZ + 1.5), pt(-L, -W, deckZ + 1.5), pt(L * 0.4, -W * 1.1, deckZ)];
+      poly('#5a3a1e', convexHull([...water, ...deck]));
+      poly('#a87c4c', deck);
+      // Cargo on deck
+      if (cargoTotal(s) > 0) {
+        const c = pt(-L * 0.35, 0, deckZ + 1);
+        poly('#c49a5c', [{ x: c.x - 3 * k, y: c.y }, { x: c.x + 3 * k, y: c.y }, { x: c.x + 3 * k, y: c.y - 4 * k }, { x: c.x - 3 * k, y: c.y - 4 * k }]);
+      }
+      const masts = k > 1.2 ? [0.3, -0.35] : [0.05];
+      const mastH = 22 * k;
+      masts.forEach((m, i) => {
+        const a = m * L * 2;
+        line(pt(a, 0, deckZ), pt(a, 0, deckZ + mastH), '#4a3018', 1.4 * k);
+        const sw = W * 2.3, s0 = deckZ + mastH * 0.35, s1 = deckZ + mastH * 0.92, belly = 0.07 * k;
+        poly('#f4ecda', [pt(a, -sw, s1), pt(a, sw, s1), pt(a + belly, sw * 0.95, s0), pt(a + belly, -sw * 0.95, s0)], 'rgba(60,50,40,0.5)');
+        if (i === 0) {
+          const top = pt(a, 0, deckZ + mastH);
+          const wave = Math.sin(animTime / 240 + s.x) * 1.5;
+          poly('#2a5aa8', [top, { x: top.x + 8 * k, y: top.y + 1 + wave }, { x: top.x + 8 * k, y: top.y + 5 + wave }, { x: top.x, y: top.y + 5 }]);
+        }
+      });
+    }
+
+    function shipAtScreen(px, py) {
+      const w = screenToWorld(px, py);
+      let best = null, bestD = 18;
+      for (const s of GAME.ships) {
+        const c = P(s.x, s.y, 10 * SHIP_TYPES[s.type].size);
+        const d = Math.hypot(c.x - w.x, c.y - w.y);
+        if (d < bestD) { best = s; bestD = d; }
+      }
+      return best;
+    }
+
+    // ===== INFO PANEL =====
+    // Clicking a building or ship (with no build tool selected) opens this panel.
+    // It is re-rendered twice a second; route drafts live in GAME.selectedInfo so selections survive.
+    GAME.selectedInfo = null;
+    const STATUS_TEXT = {
+      ok: '✅ Producerer', noroad: '⚠ Mangler vej til et lager', noinput: '⚠ Mangler råvarer',
+      full: '⚠ Lageret er fuldt', idle: 'Ledig', building: '🔨 Bygger skib'
+    };
+    const esc = (s) => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+
+    function openInfo(kind, id) {
+      GAME.selectedInfo = { kind, id, draft: null, error: '' };
+      if (kind === 'ship') {
+        const s = GAME.ships.find(x => x.id === id);
+        const ports = portWarehouses();
+        GAME.selectedInfo.draft = s.route ? { ...s.route, res: [...s.route.res] }
+                                          : { from: ports[0]?.id || '', to: ports[1]?.id || '', res: ['planks'] };
+      }
+      document.getElementById('info').hidden = false;
+      renderInfo();
+    }
+
+    function closeInfo() {
+      GAME.selectedInfo = null;
+      document.getElementById('info').hidden = true;
+    }
+
+    function selectAtHover() {
+      const s = mouse.x !== null && shipAtScreen(mouse.x, mouse.y);
+      if (s) { openInfo('ship', s.id); return; }
+      const h = GAME.hoveredTile;
+      const occ = h && GAME.occupancy.get(`${h.tx},${h.ty}`);
+      if (occ && occ !== 'road') openInfo('building', occ);
+      else closeInfo();
+    }
+
+    const bar = (v, max) => `<div class="bar"><div style="width:${max ? Math.min(100, v / max * 100) : 0}%"></div></div>`;
+    const rate = (v) => (Math.round(v * 10) / 10).toString().replace('.', ',');
+
+    function renderInfo() {
+      const sel = GAME.selectedInfo;
+      if (!sel) return;
+      const panel = document.getElementById('info');
+      // Don't rebuild while the player is using a dropdown
+      if (panel.contains(document.activeElement) && document.activeElement.tagName === 'SELECT') return;
+      const title = document.getElementById('info-title'), body = document.getElementById('info-body');
+
+      if (sel.kind === 'ship') {
+        const s = GAME.ships.find(x => x.id === sel.id);
+        if (!s) { closeInfo(); return; }
+        const T = SHIP_TYPES[s.type], d = sel.draft, ports = portWarehouses();
+        const portOpt = (sel) => ports.map(p => `<option value="${p.id}" ${p.id === sel ? 'selected' : ''}>${esc(islandOfBuilding(p).name)} (${p.x},${p.y})</option>`).join('');
+        const cargo = RES_KEYS.filter(k => s.cargo[k] > 0).map(k => `${RES_ICONS[k]} ${s.cargo[k]}`).join(' ') || 'Tom';
+        const routeTxt = s.route
+          ? `${esc(islandOfBuilding(buildingById(s.route.from))?.name)} → ${esc(islandOfBuilding(buildingById(s.route.to))?.name)} (${s.route.length} felter) · ${s.route.res.map(k => RES_ICONS[k]).join('')}`
+          : 'Ingen rute';
+        title.textContent = `⛵ ${s.name}`;
+        body.innerHTML = `
+          <div class="row"><span>Status</span><b>${SHIP_STATE_TEXT[s.state]}</b></div>
+          <div class="row"><span>Last</span><b>${cargo} <small>/ ${T.cargo}</small></b></div>
+          <div class="row"><span>Rækkevidde</span><b>${T.range} felter</b></div>
+          <div class="row"><span>Rute</span><b>${routeTxt}</b></div>
+          <div class="row"><span>Ture</span><b>${s.trips}</b></div>
+          <h4>Handelsrute</h4>
+          ${ports.length < 2 ? '<p class="muted">Du skal have lagre ved kysten på mindst to øer for at lave en rute.</p>' : `
+          <label>Hent fra <select data-f="from">${portOpt(d.from)}</select></label>
+          <label>Lever til <select data-f="to">${portOpt(d.to)}</select></label>
+          <div class="goods">${RES_KEYS.map(k => `<label class="chk"><input type="checkbox" data-res="${k}" ${d.res.includes(k) ? 'checked' : ''}>${RES_ICONS[k]} ${RESOURCES[k].name}</label>`).join('')}</div>
+          <div class="btns"><button data-act="route">▶ Start rute</button>${s.route ? '<button data-act="stop" class="alt">■ Stop</button>' : ''}</div>`}
+          ${sel.error ? `<p class="err">${esc(sel.error)}</p>` : ''}`;
+        body.querySelectorAll('select').forEach(el => el.addEventListener('change', () => { d[el.dataset.f] = el.value; el.blur(); }));
+        body.querySelectorAll('input[data-res]').forEach(el => el.addEventListener('change', () => {
+          d.res = el.checked ? [...new Set([...d.res, el.dataset.res])] : d.res.filter(k => k !== el.dataset.res);
+        }));
+        body.querySelector('[data-act="route"]')?.addEventListener('click', () => {
+          sel.error = setRoute(s, d.from, d.to, d.res) || '';
+          if (!sel.error) { showToast(`⛵ ${s.name} har fået en rute`); saveGame(); }
+          renderInfo();
+        });
+        body.querySelector('[data-act="stop"]')?.addEventListener('click', () => { stopRoute(s); saveGame(); renderInfo(); });
+        return;
       }
 
-      if (GAME.population.total < GAME.population.capacity && GAME.resources.planks >= 0.2) {
-        GAME.resources.planks -= 0.2;
-        GAME.population.total += 1;
+      const b = buildingById(sel.id);
+      if (!b) { closeInfo(); return; }
+      const def = DEFS[b.type], isl = islandOfBuilding(b);
+
+      if (b.type === 'warehouse') {
+        const need = EXTRA_WAREHOUSE_POP * isl.warehouses;
+        const shipsHere = GAME.ships.filter(s => s.route && [s.route.from, s.route.to].some(id => islandOfBuilding(buildingById(id)) === isl));
+        title.textContent = `🏚️ Lager – ${isl.name}`;
+        body.innerHTML = `
+          <p class="muted">Fælles lager for hele øen · ${isl.warehouses} lager${isl.warehouses > 1 ? 'e' : ''} · plads til ${isl.cap} af hver vare</p>
+          <div class="stock">${RES_KEYS.map(k => `
+            <div class="res"><span>${RES_ICONS[k]} ${RESOURCES[k].name}</span><b>${Math.floor(isl.resources[k])} / ${isl.cap}</b>${bar(isl.resources[k], isl.cap)}</div>`).join('')}
+          </div>
+          <div class="row"><span>👥 Beboere</span><b>${isl.pop} / ${isl.popCap}</b></div>
+          <div class="row"><span>🍽️ Mad</span><b>+${rate(isl.foodIn || 0)}/s · −${rate(isl.foodOut || 0)}/s</b></div>
+          ${isl.hunger ? '<p class="err">Beboerne sulter! Byg fiskere eller farme.</p>' : ''}
+          <div class="row"><span>Næste lager</span><b>${isl.pop >= need ? fmtCost(extraWarehouseCost(isl.warehouses)) : `kræver ${need} beboere`}</b></div>
+          ${shipsHere.length ? `<h4>Skibe på ruter hertil</h4>${shipsHere.map(s => `<div class="row"><span>${esc(s.name)}</span><b>${SHIP_STATE_TEXT[s.state]}</b></div>`).join('')}` : ''}`;
+        return;
+      }
+
+      if (b.type === 'shipyard') {
+        const pop = totalPopulation();
+        const q = b.queue;
+        title.textContent = `⚓ Skibsbygger – ${isl.name}`;
+        body.innerHTML = `
+          <div class="row"><span>Status</span><b>${GAME.connected.has(b.id) ? (q ? `Bygger ${SHIP_TYPES[q.type].name}` : 'Klar') : STATUS_TEXT.noroad}</b></div>
+          ${q ? bar(q.progress, SHIP_TYPES[q.type].buildTime) : ''}
+          <h4>Byg skib</h4>
+          ${Object.values(SHIP_TYPES).map(T => {
+            const locked = pop < T.pop, afford = hasCost(isl.resources, T.cost);
+            return `<div class="ship-card ${locked ? 'locked' : ''}">
+              <div><b>${T.name}</b> <small>${locked ? `🔒 kræver ${T.pop} indbyggere` : `${T.buildTime} s`}</small></div>
+              <div class="muted">Last ${T.cargo} · rækkevidde ${T.range} felter</div>
+              <div class="btns"><span class="${afford ? '' : 'err'}">${fmtCost(T.cost)}</span>
+              <button data-ship="${T.id}" ${locked || q || !afford ? 'disabled' : ''}>Byg</button></div></div>`;
+          }).join('')}
+          ${sel.error ? `<p class="err">${esc(sel.error)}</p>` : ''}
+          <h4>Dine skibe</h4>
+          ${GAME.ships.length ? GAME.ships.map(s => `<div class="row"><span>${esc(s.name)}</span><button class="link" data-pick="${s.id}">${SHIP_STATE_TEXT[s.state]} ›</button></div>`).join('') : '<p class="muted">Ingen skibe endnu.</p>'}`;
+        body.querySelectorAll('[data-ship]').forEach(el => el.addEventListener('click', () => {
+          sel.error = startShipBuild(b, el.dataset.ship) || '';
+          renderInfo();
+        }));
+        body.querySelectorAll('[data-pick]').forEach(el => el.addEventListener('click', () => {
+          const s = GAME.ships.find(x => x.id === el.dataset.pick);
+          centerOn(s.x, s.y);
+          openInfo('ship', s.id);
+        }));
+        return;
+      }
+
+      // Generic building
+      title.textContent = def.name;
+      let details = '';
+      if (def.capacity) {
+        details = `<div class="row"><span>Pladser</span><b>${def.capacityNoMeat && !RES_KEYS.some(k => RESOURCES[k].meat && isl.resources[k] >= 1) ? `${def.capacityNoMeat} (mangler kød)` : def.capacity}</b></div>
+                   <div class="row"><span>👥 Beboere på øen</span><b>${isl.pop} / ${isl.popCap}</b></div>`;
+      } else if (def.produces) {
+        details = `<div class="row"><span>Status</span><b>${STATUS_TEXT[b.status] || STATUS_TEXT.idle}</b></div>
+                   <div class="row"><span>Produktion</span><b>${def.consumes ? `${rate(def.inRate ?? def.rate ?? 1)} ${RES_ICONS[def.consumes]} → ` : ''}${rate(def.rate ?? 1)} ${RES_ICONS[def.produces]} /s</b></div>`;
+      }
+      body.innerHTML = `<p class="muted">${esc(isl.name)}</p>${details}<p>${esc(def.desc)}</p>`;
+    }
+
+    document.getElementById('info-close').addEventListener('click', closeInfo);
+
+    // ===== SAVE / LOAD =====
+    // The game autosaves to localStorage after every action, every 10 s and when the page closes.
+    // The map is stored as one character per tile; decoration is regenerated from NOISE_SEED.
+    const SAVE_KEY = 'anno-online-save';
+    const SAVE_VERSION = 2;
+    const AUTOSAVE_TICKS = 10;
+    const TYPE_CODES = { grass: 'g', forest: 'f', water: 'w', beach: 'b', rock: 'r' };
+    const CODE_TYPES = Object.fromEntries(Object.entries(TYPE_CODES).map(([t, c]) => [c, t]));
+    let lastSavedAt = null;
+    let saveDisabled = false; // set when starting a new game, so the unload handler doesn't re-save
+    let oldSaveIgnored = false;
+
+    function saveGame(manual = false) {
+      if (saveDisabled) return false;
+      const data = {
+        v: SAVE_VERSION,
+        mapSize: MAP_SIZE,
+        noiseSeed: NOISE_SEED,
+        terrain: GAME.grid.map(t => t.canal ? 'c' : TYPE_CODES[t.type]).join(''),
+        buildings: GAME.buildings.map(({ id, type, x, y, queue }) => ({ id, type, x, y, queue })),
+        roads: [...GAME.roads],
+        // Islands are matched on load by their anchor tile, since ids come from re-labelling the map
+        islands: [...GAME.islands.values()].map(i => ({ anchor: i.anchor, name: i.name, home: i.home, resources: i.resources, pop: i.pop })),
+        ships: GAME.ships.map(({ id, type, name, x, y, dir, route, cargo, state, trips }) => ({ id, type, name, x, y, dir, route, cargo, state, trips })),
+        shipCounter: GAME.shipCounter,
+        tick: GAME.tick,
+        phase: GAME.phase,
+        camera: GAME.camera,
+        savedAt: Date.now()
+      };
+      try {
+        localStorage.setItem(SAVE_KEY, JSON.stringify(data));
+        lastSavedAt = new Date(data.savedAt);
+        if (manual) showToast('💾 Spillet er gemt');
+        return true;
+      } catch (err) {
+        if (manual) showToast('⚠ Kunne ikke gemme i denne browser');
+        log(`Kunne ikke gemme: ${err.message}`, 'err');
+        return false;
+      }
+    }
+
+    function initIslands() {
+      GAME.islands = new Map();
+      for (const c of labelIslands()) GAME.islands.set(c.id, newIsland(c));
+      updateIslandStats();
+    }
+
+    // Restores GAME from localStorage. Returns false (and leaves GAME untouched) if there's no usable save.
+    function loadGame() {
+      let data;
+      try {
+        data = JSON.parse(localStorage.getItem(SAVE_KEY));
+      } catch {
+        return false;
+      }
+      if (data && data.v !== SAVE_VERSION) oldSaveIgnored = true;
+      if (!data || data.v !== SAVE_VERSION || data.mapSize !== MAP_SIZE ||
+          typeof data.terrain !== 'string' || data.terrain.length !== MAP_SIZE * MAP_SIZE) {
+        return false;
+      }
+
+      NOISE_SEED = data.noiseSeed;
+      GAME.grid = [...data.terrain].map((c, i) => ({
+        x: i % MAP_SIZE, y: Math.floor(i / MAP_SIZE),
+        type: c === 'c' ? 'water' : (CODE_TYPES[c] || 'grass'), canal: c === 'c'
+      }));
+      GAME.buildings = data.buildings.filter(b => DEFS[b.type]);
+      GAME.roads = new Set(data.roads);
+      GAME.occupancy.clear();
+      for (const key of GAME.roads) GAME.occupancy.set(key, 'road');
+      for (const b of GAME.buildings) {
+        const def = DEFS[b.type];
+        for (let dy = 0; dy < def.h; dy++) {
+          for (let dx = 0; dx < def.w; dx++) GAME.occupancy.set(`${b.x + dx},${b.y + dy}`, b.id);
+        }
+      }
+
+      GAME.islands = new Map();
+      const comps = labelIslands();
+      for (const c of comps) {
+        const saved = data.islands.find(i => tileAt(i.anchor[0], i.anchor[1])?.island === c.id);
+        const isl = newIsland(c);
+        if (saved) {
+          Object.assign(isl, { name: saved.name, home: saved.home, pop: saved.pop });
+          Object.assign(isl.resources, saved.resources); // merge: resources added later keep 0
+        }
+        GAME.islands.set(c.id, isl);
+      }
+      updateIslandStats();
+
+      GAME.ships = (data.ships || []).filter(s => SHIP_TYPES[s.type]).map(s => ({
+        ...s, cargo: { ...emptyStock(), ...s.cargo }, path: [], timer: 0
+      }));
+      GAME.shipCounter = data.shipCounter || GAME.ships.length;
+      Object.assign(GAME.camera, data.camera);
+      GAME.tick = data.tick || 0;
+      GAME.phase = data.phase === 'play' ? 'play' : 'setup';
+      lastSavedAt = new Date(data.savedAt);
+      return true;
+    }
+
+    // Ships resume their route after loading (paths aren't saved)
+    function resumeShips() {
+      for (const s of GAME.ships) {
+        const r = s.route;
+        const from = r && buildingById(r.from), to = r && buildingById(r.to);
+        if (!from || !to) { stopRoute(s); continue; }
+        if (s.state === 'loading' || s.state === 'unloading') s.timer = 1;
+        else sailTo(s, s.state === 'toTo' ? to : from, s.state === 'toTo' ? 'toTo' : 'toFrom');
+      }
+    }
+
+    function newGame() {
+      if (!confirm('Starte et nyt spil? Dit nuværende spil bliver slettet.')) return;
+      saveDisabled = true;
+      try { localStorage.removeItem(SAVE_KEY); } catch { /* storage unavailable: nothing to delete */ }
+      location.reload();
+    }
+
+    let toastTimer = null;
+    function showToast(msg) {
+      const el = document.getElementById('toast');
+      el.textContent = msg;
+      el.classList.add('show');
+      clearTimeout(toastTimer);
+      toastTimer = setTimeout(() => el.classList.remove('show'), 2200);
+    }
+
+    document.getElementById('btn-save').addEventListener('click', () => saveGame(true));
+    document.getElementById('btn-new').addEventListener('click', newGame);
+    window.addEventListener('keydown', (e) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') {
+        e.preventDefault();
+        saveGame(true);
+      }
+    });
+    window.addEventListener('beforeunload', () => saveGame());
+
+    // ===== SIMULATION =====
+    function tick() {
+      updateIslandStats();
+
+      // Production. Raw producers first, then processors, so this tick's raw output can be processed.
+      const producers = GAME.buildings.filter(b => DEFS[b.type].produces);
+      producers.sort((a, b) => !!DEFS[a.type].consumes - !!DEFS[b.type].consumes);
+      for (const isl of GAME.islands.values()) isl.foodIn = 0;
+      for (const b of producers) {
+        const def = DEFS[b.type], isl = islandOfBuilding(b);
+        if (!GAME.connected.has(b.id)) { b.status = 'noroad'; continue; }
+        const R = isl.resources, out = def.rate ?? 1, inp = def.inRate ?? out;
+        if (R[def.produces] >= isl.cap) { b.status = 'full'; continue; }
+        if (def.consumes) {
+          if (R[def.consumes] < inp) { b.status = 'noinput'; continue; }
+          R[def.consumes] -= inp;
+        }
+        R[def.produces] = Math.min(isl.cap, R[def.produces] + out);
+        if (RESOURCES[def.produces].food) isl.foodIn += out;
+        b.status = 'ok';
+      }
+
+      // Shipyards
+      for (const b of GAME.buildings) {
+        if (b.type !== 'shipyard') continue;
+        const linked = GAME.connected.has(b.id);
+        b.status = !linked ? 'noroad' : b.queue ? 'building' : 'idle';
+        if (b.queue && linked && ++b.queue.progress >= SHIP_TYPES[b.queue.type].buildTime) {
+          spawnShip(b.queue.type, b);
+          b.queue = null;
+        }
+      }
+
+      // Food and population, per island
+      for (const isl of GAME.islands.values()) {
+        const need = isl.pop * FOOD_PER_RESIDENT;
+        let eaten = 0;
+        // Spread the meal over whatever kinds of food are in stock
+        for (let pass = 0; pass < 2 && eaten < need - 1e-9; pass++) {
+          const avail = FOOD_KEYS.filter(k => isl.resources[k] > 0);
+          if (!avail.length) break;
+          const share = (need - eaten) / avail.length;
+          for (const k of avail) {
+            const take = Math.min(share, isl.resources[k]);
+            isl.resources[k] -= take;
+            eaten += take;
+          }
+        }
+        isl.foodOut = need;
+        const fed = eaten >= need - 1e-6;
+        const hasFood = FOOD_KEYS.some(k => isl.resources[k] > 0);
+        if (fed) isl.hunger = 0;
+        else if (++isl.hunger % STARVE_TICKS === 0 && isl.pop > 0) isl.pop--;
+        if (isl.pop > isl.popCap) isl.pop--;
+        else if (fed && hasFood && isl.pop < isl.popCap) isl.pop++;
       }
 
       GAME.tick++;
+      if (GAME.tick % AUTOSAVE_TICKS === 0) saveGame();
     }
 
     // ===== MAIN LOOP =====
-    let acc = 0, lastTime = 0;
+    let acc = 0, lastTime = 0, infoTimer = 0;
     function gameLoop(t) {
       if (!lastTime) lastTime = t;
       const dt = Math.min(250, t - lastTime);
       lastTime = t;
       animTime = t;
       updateKeyboardPan(dt);
+      updateShips(dt);
 
       acc += dt;
       while (acc >= 1000) {
@@ -1807,18 +3522,26 @@
       }
 
       render();
-
-      document.getElementById('wood').textContent = `🌲 ${Math.floor(GAME.resources.wood)}`;
-      document.getElementById('planks').textContent = `📦 ${Math.floor(GAME.resources.planks)}`;
-      document.getElementById('stone').textContent = `🪨 ${Math.floor(GAME.resources.stone)}`;
-      document.getElementById('pop').textContent = `👥 ${GAME.population.total}/${GAME.population.capacity}`;
-      document.getElementById('tick').textContent = `Tick: ${GAME.tick}`;
+      updateHud();
       refreshMenuState();
+      infoTimer += dt;
+      if (infoTimer > 500) { infoTimer = 0; renderInfo(); }
+
+      requestAnimationFrame(gameLoop);
+    }
+
+    function updateHud() {
+      const isl = activeIsland();
+      document.getElementById('pop').textContent = `👥 ${totalPopulation()} / ${totalPopCap()}`;
+      document.getElementById('island-name').textContent = `📍 ${isl ? isl.name : 'Havet'}${isl && !isl.warehouses ? ' (intet lager)' : ''}`;
+      document.getElementById('tick').textContent = `Tick: ${GAME.tick}`;
       const unlinked = GAME.buildings.filter(b => needsRoad(DEFS[b.type]) && !GAME.connected.has(b.id)).length;
       document.getElementById('status').textContent =
         unlinked ? `⚠ ${unlinked} bygning${unlinked > 1 ? 'er' : ''} mangler vej til lager` : '';
-
-      requestAnimationFrame(gameLoop);
+      const hungry = [...GAME.islands.values()].filter(i => i.hunger > 0 && i.pop > 0).map(i => i.name);
+      document.getElementById('food-status').textContent = hungry.length ? `🍽️ Sult på ${hungry.join(', ')}` : '';
+      document.getElementById('saved-at').textContent =
+        lastSavedAt ? `Gemt ${lastSavedAt.toLocaleTimeString('da-DK')}` : 'Ikke gemt endnu';
     }
 
     // ===== INIT =====
@@ -1827,16 +3550,32 @@
       resizeCanvas();
       window.addEventListener('resize', resizeCanvas);
 
-      log('Generating terrain...', 'ok');
-      GAME.grid = generateTerrain(MAP_SIZE, MAP_SIZE);
-
-      centerOn(MAP_SIZE / 2, MAP_SIZE / 2);
-
-      // Setup phase: the player picks where the first (free) warehouse goes
+      const loaded = loadGame();
+      if (!loaded) {
+        log('Generating terrain...', 'ok');
+        GAME.grid = generateTerrain(MAP_SIZE, MAP_SIZE);
+        initIslands();
+        centerOn(MAP_SIZE / 2, MAP_SIZE / 2);
+      }
+      decorateTerrain(GAME.grid);
       buildMenu();
-      openBuildCategory('storage');
-      selectTool('warehouse');
-      log('Vælg hvor dit første lager skal stå', 'ok');
+
+      if (GAME.phase === 'play') {
+        document.getElementById('banner').hidden = true;
+        recomputeConnectivity();
+        resumeShips();
+        refreshMenuState();
+        log('Gemt spil indlæst', 'ok');
+        showToast('📂 Dit gemte spil er indlæst');
+      } else {
+        // Setup phase: the player picks where the first (free) warehouse goes
+        openBuildCategory('harbor');
+        selectTool('warehouse');
+        log('Vælg hvor dit første lager skal stå', 'ok');
+        if (oldSaveIgnored) showToast('Dit gemte spil var fra en ældre version – et nyt kort er lavet');
+      }
+      // Save right away so even the freshly generated map survives a reload
+      if (!loaded) saveGame();
       requestAnimationFrame(gameLoop);
     });
   </script>
