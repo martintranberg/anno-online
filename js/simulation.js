@@ -461,11 +461,7 @@ function updateHud() {
     !isl.warehouses ? ' (intet lager)' : isl.pop ? ` ${moodIcon(isl.mood ?? MOOD_START)}` : '';
   document.getElementById('island-name').textContent = `📍 ${isl ? (known ? isl.name : 'Ukendt ø') : 'Havet'} ${fert}${extra}`;
   document.getElementById('tick').textContent = `Tick: ${GAME.tick}${GAME.speed === 0 ? ' · ⏸ Pause' : ''}`;
-  const unlinked = GAME.buildings.filter(b => needsRoad(DEFS[b.type]) && !GAME.connected.has(b.id) && !b.roadExempt).length;
-  document.getElementById('status').textContent =
-    unlinked ? `⚠ ${unlinked} bygning${unlinked > 1 ? 'er' : ''} mangler vej til lager` : '';
-  const hungry = [...GAME.islands.values()].filter(i => i.hunger > 0 && i.pop > 0).map(i => i.name);
-  document.getElementById('food-status').textContent = hungry.length ? `🍽️ Sult på ${hungry.join(', ')}` : '';
+  renderAlertsButton();
   document.getElementById('saved-at').textContent =
     lastSavedAt ? `Gemt ${lastSavedAt.toLocaleTimeString('da-DK')}` : 'Ikke gemt endnu';
 }
@@ -521,7 +517,7 @@ function finishInit(loaded) {
     if (oldSaveIgnored) showToast('Dit gemte spil var fra en ældre version – et nyt kort er lavet');
   }
   // Save right away so even the freshly generated map survives a reload
-  if (!loaded) saveGame();
+  if (!loaded) { saveGame(); pendingNotices.push('❓ Tryk F1 (eller ?) for hjælp til spillets systemer og taster'); }
   renderQuest();
   for (const msg of pendingNotices) notify(msg, false);
   requestAnimationFrame(gameLoop);

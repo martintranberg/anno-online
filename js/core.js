@@ -213,7 +213,7 @@ const FESTIVAL_MOOD = 20;
 const festivalCost = (isl) => ({ coins: 150 + 3 * Math.round(isl.pop) });
 
 // Contracts: the trader (and the rival, when on good terms) ask for goods by a deadline, for a good price
-const CONTRACT_EVERY = 240;        // ticks between new offers
+const CONTRACT_EVERY = 360;        // ticks between new offers
 const CONTRACT_MAX_OFFERS = 3;
 const CONTRACT_TIME = 900;         // ticks to deliver after accepting
 const CONTRACT_OFFER_TIME = 300;   // an offer disappears if not accepted in time

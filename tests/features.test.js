@@ -262,3 +262,60 @@ test('version 4 saves load: houses exempt from roads, no contracts yet', () => {
   assert.equal(L.GAME.contracts.length, 0);
   assert.equal(L.rivalRelation(), L.RIVAL_RELATION_START);
 });
+
+test('messages are ranked: alerts first and kept longest, minor news without a pop-up', () => {
+  const { game, G } = setup();
+  assert.equal(G.messageLevel('🍽️ Beboerne på X sulter!', true), 'alert');
+  assert.equal(G.messageLevel('🔥 Brand i bolig', true), 'alert');
+  assert.equal(G.messageLevel('⛵ Jolle 1 er søsat!', true), 'info');
+  assert.equal(G.messageLevel('🛒 Handelsmanden solgte', false), 'minor');
+  G.GAME.messages.length = 0;
+  G.notify('🛒 lille nyhed', false);
+  for (let i = 0; i < 6; i++) G.notify(`⛵ nyhed ${i}`);
+  G.notify('🔥 Brand!');
+  G.renderMessages();
+  const html = game.el('messages').innerHTML;
+  assert.ok(html.indexOf('🔥 Brand!') < html.indexOf('nyhed 5'), 'alert shown first');
+  assert.equal((html.match(/msg-info/g) || []).length, G.MESSAGE_LEVELS.info.max, 'news capped');
+  assert.ok(G.GAME.messageLog.length >= 8, 'everything kept in the log');
+});
+
+test('the status bar lists what needs attention and each warning leads to it', () => {
+  const { game, G, wh, home } = setup();
+  const mill = build(G, 'sawmill', wh.x, wh.y, { maxDist: 30 });
+  for (let i = 0; i < 3; i++) build(G, 'house', wh.x, wh.y, { maxDist: 6 });
+  home.pop = 18;
+  home.resources.wood = 0;
+  G.tick();
+  let alerts = G.collectAlerts();
+  assert.ok(alerts.some(a => /mangler råvarer/.test(a.text)), 'sawmill without wood is listed');
+  home.hunger = 3;
+  alerts = G.collectAlerts();
+  assert.equal(alerts[0].level, 0, 'hunger is urgent and comes first');
+  G.alertsCheckedAt = 0;
+  G.renderAlertsButton();
+  const btn = game.el('alerts');
+  assert.equal(btn.hidden, false);
+  assert.match(btn.textContent, /Sult/);
+  btn.click();
+  assert.equal(G.GAME.selectedInfo.kind, 'alerts');
+  const body = game.el('info-body');
+  assert.match(body.innerHTML, /Haster/);
+  const production = alerts.findIndex(a => /mangler råvarer/.test(a.text));
+  body.querySelectorAll(`[data-alert="${production}"]`)[0].click();
+  assert.equal(G.GAME.selectedInfo.kind, 'economy');
+  assert.equal(G.GAME.selectedInfo.tab, 'production', 'leads to the production overview');
+  void mill;
+});
+
+test('help opens with F1 and every topic renders', () => {
+  const { game, G } = setup();
+  game.fireWindow('keydown', { key: 'F1', target: G.document.body });
+  assert.equal(G.GAME.selectedInfo.kind, 'help');
+  const body = game.el('info-body');
+  for (const t of G.HELP_TOPICS) {
+    body.querySelectorAll(`[data-topic="${t.id}"]`)[0].click();
+    assert.equal(G.GAME.selectedInfo.topic, t.id);
+    assert.ok(body.innerHTML.length > 200, `${t.name} has content`);
+  }
+});

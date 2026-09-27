@@ -3,13 +3,31 @@
 // ===== NOTIFICATIONS =====
 // Messages appear as a toast and stay in the message list (bottom left) for a while.
 GAME.messages = [];
-const MESSAGE_TTL = 30000;
+
 const warnedAt = new Map();
 
-function notify(msg, toast = true) {
-  GAME.messages.unshift({ msg, at: Date.now() });
-  GAME.messages.length = Math.min(GAME.messages.length, 6);
-  if (toast) showToast(msg);
+// Messages have three levels: alerts (something needs you now, shown longest and first, in red),
+// normal news, and minor news (trade results and the like: short-lived, no pop-up). The level is taken
+// from the message's leading icon unless given.
+const ALERT_ICONS = ['🔥', '🍽️', '💸', '🏴‍☠️', '😠', '⚠', '💥', '⌛', '👷'];
+const MESSAGE_LEVELS = {
+  alert: { ttl: 60000, max: 4 },
+  info:  { ttl: 30000, max: 4 },
+  minor: { ttl: 15000, max: 2 }
+};
+function messageLevel(msg, toast) {
+  if (ALERT_ICONS.some(i => msg.startsWith(i)) || /⚑ .*(sender et skib|fjendtlig)/.test(msg)) return 'alert';
+  return toast ? 'info' : 'minor';
+}
+GAME.messageLog = [];
+
+function notify(msg, toast = true, level = null) {
+  level = level || messageLevel(msg, toast);
+  const m = { msg, at: Date.now(), level, tick: GAME.tick };
+  GAME.messages.unshift(m);
+  GAME.messageLog.unshift(m);
+  GAME.messageLog.length = Math.min(GAME.messageLog.length, 80);
+  if (toast || level === 'alert') showToast(msg);
   log(msg, 'ok');
   renderMessages();
 }
@@ -24,9 +42,83 @@ function warnOnce(key, msg, cooldown = 120) {
 
 function renderMessages() {
   const now = Date.now();
-  GAME.messages = GAME.messages.filter(m => now - m.at < MESSAGE_TTL);
-  document.getElementById('messages').innerHTML =
-    GAME.messages.map(m => `<div style="opacity:${Math.max(0.35, 1 - (now - m.at) / MESSAGE_TTL)}">${esc(m.msg)}</div>`).join('');
+  const ttl = (m) => MESSAGE_LEVELS[m.level || 'info'].ttl;
+  GAME.messages = GAME.messages.filter(m => now - m.at < ttl(m));
+  // Alerts first, then news, newest first within each; each level has a limit so alerts can't be pushed out
+  const shown = ['alert', 'info', 'minor'].flatMap(l => GAME.messages.filter(m => (m.level || 'info') === l).slice(0, MESSAGE_LEVELS[l].max));
+  const html = shown.map(m => `<div class="msg-${m.level || 'info'}" style="opacity:${Math.max(0.4, 1 - (now - m.at) / ttl(m))}">${esc(m.msg)}</div>`).join('');
+  const el = document.getElementById('messages');
+  if (el.innerHTML !== html) el.innerHTML = html;
+}
+
+// ----- Warnings in the status bar -----
+// Everything that currently needs attention, most urgent first. Each has an action that shows the problem.
+function collectAlerts() {
+  const out = [];
+  const add = (level, icon, text, action) => out.push({ level, icon, text, action });
+  const mine = [...GAME.islands.values()].filter(i => i.warehouses && i.owner !== 'rival');
+  const showBuilding = (b) => () => { const d = DEFS[b.type]; centerOn(b.x + (d.w - 1) / 2, b.y + (d.h - 1) / 2); openInfo('building', b.id); };
+  const production = (isl) => () => { openInfo('economy'); GAME.selectedInfo.tab = 'production'; GAME.selectedInfo.island = isl.id; renderInfo(); };
+  if (GAME.bankrupt) add(0, '💸', 'Du er gået fallit – produktionen står stille', () => openInfo('economy'));
+  for (const isl of mine) {
+    const wh = GAME.buildings.find(b => b.type === 'warehouse' && islandOfBuilding(b) === isl);
+    if (isl.hunger > 0 && isl.pop > 0) add(0, '🍽️', `Sult på ${isl.name}`, wh ? showBuilding(wh) : null);
+    if (isl.pop > 0 && (isl.mood ?? MOOD_START) < 30) add(0, '😠', `Beboerne på ${isl.name} flytter (tilfredshed ${Math.round(isl.mood)} %)`, wh ? showBuilding(wh) : null);
+  }
+  for (const b of GAME.buildings) if (b.fire) add(0, '🔥', `${DEFS[b.type].name} brænder på ${islandOfBuilding(b).name}`, showBuilding(b));
+  if (GAME.pirates?.ship?.state === 'hunting') add(0, '🏴‍☠️', 'Piratskibet er på jagt efter dine skibe', () => openInfo('pirates'));
+  const plan = GAME.rival && planIsland(GAME.rival.plan);
+  if (plan) add(0, '⚑', `${RIVAL_NAME} grundlægger en koloni på ${plan.name} om ${Math.max(0, GAME.rival.plan.at - GAME.tick)} s`, () => centerOn(plan.anchor[0], plan.anchor[1]));
+  for (const c of (GAME.contracts || []).filter(c => c.accepted && c.deadline - GAME.tick < 120)) {
+    add(0, '⌛', `Kontrakt om ${c.amount} ${RES_ICONS[c.good]} udløber om ${Math.max(0, c.deadline - GAME.tick)} s`, () => openInfo('contracts'));
+  }
+  // Buildings that aren't working, per island and reason
+  const REASONS = { noroad: 'mangler vej', noworkers: 'mangler arbejdere', noinput: 'mangler råvarer', noresource: 'har intet at høste', full: 'står stille – lageret er fuldt', nocoins: 'står stille (fallit)' };
+  for (const isl of mine) {
+    const counts = {};
+    for (const b of GAME.buildings) {
+      if (islandOfBuilding(b) !== isl || !DEFS[b.type].produces || b.paused) continue;
+      if (REASONS[b.status] && !(b.status === 'nocoins' && GAME.bankrupt)) counts[b.status] = (counts[b.status] || 0) + 1;
+    }
+    for (const [st, n] of Object.entries(counts)) add(1, PROD_STATUS[st]?.icon || '⚠', `${n} bygning${n > 1 ? 'er' : ''} på ${isl.name} ${REASONS[st]}`, production(isl));
+    const houses = GAME.buildings.filter(b => DEFS[b.type].house && islandOfBuilding(b) === isl && !houseLinked(b)).length;
+    if (houses) add(1, '🛤️', `${houses} bolig${houses > 1 ? 'er' : ''} på ${isl.name} mangler vej`, production(isl));
+  }
+  const idle = GAME.ships.filter(s => s.state === 'idle' && !isWarship(s));
+  if (idle.length) add(2, '⛵', `${idle.length} skib${idle.length > 1 ? 'e' : ''} ligger stille`, () => openInfo('ship', idle[0].id));
+  const offers = (GAME.contracts || []).filter(c => !c.accepted).length;
+  if (offers) add(2, '📜', `${offers} nye kontrakttilbud`, () => openInfo('contracts'));
+  return out.sort((a, b) => a.level - b.level);
+}
+
+let alertsCheckedAt = 0;
+function renderAlertsButton() {
+  const el = document.getElementById('alerts');
+  if (!el || GAME.phase !== 'play') return;
+  // Twice a second is plenty (this runs from the frame loop)
+  const now = performance.now();
+  if (now - alertsCheckedAt < 500) return;
+  alertsCheckedAt = now;
+  const list = collectAlerts();
+  const urgent = list.filter(a => a.level === 0).length, problems = list.filter(a => a.level === 1).length;
+  const text = urgent ? `🚨 ${list.find(a => a.level === 0).text}${urgent > 1 ? ` (+${urgent - 1})` : ''}`
+    : problems ? `⚠ ${problems} problem${problems > 1 ? 'er' : ''}` : list.length ? `ℹ️ ${list[0].text}` : '';
+  if (el.textContent !== text) el.textContent = text;
+  el.hidden = !text;
+  el.className = urgent ? 'urgent' : problems ? 'warn' : 'note';
+  el.title = list.map(a => `${a.icon} ${a.text}`).join('\n');
+}
+
+function renderAlerts(title, body) {
+  title.textContent = '⚠ Advarsler';
+  const list = collectAlerts();
+  const levels = ['Haster', 'Problemer', 'Til orientering'];
+  body.innerHTML = list.length ? [0, 1, 2].map(l => {
+    const items = list.map((a, i) => ({ ...a, i })).filter(a => a.level === l);
+    return items.length ? `<h4>${levels[l]}</h4>${items.map(a => `<div class="tip"><span>${a.icon}</span><span>${esc(a.text)}</span>${a.action ? `<button class="link" data-alert="${a.i}">Vis ›</button>` : ''}</div>`).join('')}` : '';
+  }).join('') : '<p class="muted">Alt kører – intet kræver din opmærksomhed.</p>';
+  body.innerHTML += `<h4>Seneste beskeder</h4>${GAME.messageLog.slice(0, 25).map(m => `<div class="log-line msg-${m.level || 'info'}"><small class="muted">${Math.floor((m.tick || 0) / 60)}:${String((m.tick || 0) % 60).padStart(2, '0')}</small> ${esc(m.msg)}</div>`).join('') || '<p class="muted">Ingen endnu.</p>'}`;
+  body.querySelectorAll('[data-alert]').forEach(el => el.addEventListener('click', () => list[Number(el.dataset.alert)].action()));
 }
 
 // ===== QUESTS =====
@@ -151,6 +243,7 @@ function renderInfo() {
       document.activeElement.type !== 'checkbox') return;
   const title = document.getElementById('info-title'), body = document.getElementById('info-body');
   panel.classList.toggle('wide', sel.kind === 'economy' && sel.tab === 'production');
+  panel.classList.toggle('help-wide', sel.kind === 'help' || sel.kind === 'alerts');
 
   if (sel.kind === 'economy') { renderEconomy(title, body, sel); return; }
 
@@ -160,6 +253,8 @@ function renderInfo() {
   if (sel.kind === 'contracts') { renderContracts(title, body, sel); return; }
   if (sel.kind === 'good') { renderGood(title, body, sel); return; }
   if (sel.kind === 'score') { renderScore(title, body); return; }
+  if (sel.kind === 'alerts') { renderAlerts(title, body); return; }
+  if (sel.kind === 'help') { renderHelp(title, body, sel); return; }
   if (sel.kind === 'pirates') { renderPirates(title, body); return; }
   if (sel.kind === 'route') { renderRoute(title, body, sel); return; }
 

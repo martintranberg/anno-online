@@ -418,6 +418,10 @@ document.getElementById('victory-close').addEventListener('click', () => { docum
 document.addEventListener('click', (e) => { if (!gameMenu.contains(e.target)) gameMenu.hidden = true; });
 document.getElementById('btn-save').addEventListener('click', () => { saveGame(true); gameMenu.hidden = true; });
 document.getElementById('btn-score').addEventListener('click', () => { gameMenu.hidden = true; openInfo('score'); });
+document.getElementById('btn-help').addEventListener('click', () => { gameMenu.hidden = true; openInfo('help'); });
+document.getElementById('alerts').addEventListener('click', () => {
+  if (GAME.selectedInfo?.kind === 'alerts') closeInfo(); else openInfo('alerts');
+});
 document.getElementById('btn-new').addEventListener('click', () => { gameMenu.hidden = true; newGame(); });
 document.getElementById('btn-islands').addEventListener('click', () => {
   if (GAME.selectedInfo?.kind === 'islands') closeInfo(); else openInfo('islands');
@@ -432,6 +436,10 @@ document.getElementById('btn-economy').addEventListener('click', () => {
 document.querySelectorAll('#speed button').forEach(b => b.addEventListener('click', () => setSpeed(Number(b.dataset.speed))));
 let speedBeforePause = 1;
 window.addEventListener('keydown', (e) => {
+  if (e.key === 'F1' || (e.key === '?' && e.target === document.body)) {
+    e.preventDefault();
+    if (GAME.selectedInfo?.kind === 'help') closeInfo(); else openInfo('help');
+  }
   if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z' && e.target === document.body) {
     e.preventDefault();
     undoDemolition();

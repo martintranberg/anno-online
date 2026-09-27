@@ -14,7 +14,7 @@
     <span class="stat" id="coins" title="Mønter og balance (skat minus drift)">🪙 0</span>
     <span class="stat" id="pop" title="Beboere i alt / pladser · højeste niveau">👥 0/0</span>
     <span class="stat" id="island-name" title="Øen du kigger på · frugtbarhed. Klik på et lager for at se øens varer.">📍 —</span>
-    <span class="grow"><span id="status"></span> <span id="food-status"></span></span>
+    <span class="grow"><button id="alerts" hidden title="Advarsler"></button></span>
     <span id="speed" title="Spilhastighed (mellemrum = pause)">
       <button data-speed="0">⏸</button><button data-speed="1">1×</button><button data-speed="2">2×</button><button data-speed="3">3×</button>
     </span>
@@ -28,6 +28,7 @@
     <div id="game-menu" hidden>
       <button id="btn-save">💾 Gem spil <small>Ctrl+S</small></button>
       <button id="btn-score">🏆 Point og rekorder</button>
+      <button id="btn-help">❓ Hjælp <small>F1</small></button>
       <div id="saved-at"></div>
       <div class="menu-title">Gemmepladser</div>
       <div id="save-slots"></div>
@@ -106,6 +107,7 @@
   <script src="js/routes.js"></script>
   <script src="js/contracts.js"></script>
   <script src="js/life.js"></script>
+  <script src="js/help.js"></script>
   <script src="js/panels.js"></script>
   <script src="js/minimap-sound.js"></script>
   <script src="js/save.js"></script>

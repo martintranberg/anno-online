@@ -20,7 +20,7 @@ function offerContract() {
   GAME.contractCounter = (GAME.contractCounter || 0) + 1;
   const c = {
     id: `c_${GAME.contractCounter}`, from: rivalOffers ? 'rival' : 'trader', good, amount,
-    reward: Math.round(amount * PRICES[good] * (rivalOffers ? 2.6 : 2.2) + 100),
+    reward: Math.round(amount * PRICES[good] * (rivalOffers ? 1.9 : 1.6) + 50),
     offeredAt: GAME.tick, accepted: false, deadline: null
   };
   GAME.contracts.push(c);

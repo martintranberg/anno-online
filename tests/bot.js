@@ -11,7 +11,7 @@ const RESERVE = 60; // coins the bot keeps for upkeep
 function createBot(G) {
   const wh = placeFirstWarehouse(G);
   layMainRoads(G, wh);
-  return { G, wh, colony: null, log: [], lastAction: '' };
+  return { G, wh, colony: null, log: [], lastAction: '', stats: { festivals: 0, contracts: 0, gifts: 0, parks: 0 } };
 }
 
 // Four straight roads out from the warehouse keep corridors open between the houses (roads are free)
@@ -115,7 +115,24 @@ function step(bot) {
   if (count(bot, 'grainfarm') >= 1 && count(bot, 'pigfarm') < 1 && act('pigfarm')) return true;
   if (home.pop >= 50 && count(bot, 'firestation') < 1 && act('firestation')) return true;
 
-  // 6. Ships and a sheep colony for cloth
+  // 6. Spend spare coins like a player would: contracts it can fill at once, festivals when the mood
+  //    sags, parks between the houses, gifts when the rival turns cold, and some defence
+  for (const c of G.GAME.contracts.filter(c => !c.accepted)) {
+    if (R[c.good] >= c.amount + 20 && G.acceptContract(c) === null && G.deliverContract(c, home) === null) { bot.stats.contracts++; return true; }
+  }
+  if (G.GAME.coins > 1500 && home.pop >= 30 && (home.mood ?? 60) < 65 && !home.festival && !home.festivalCooldown && G.holdFestival(home) === null) {
+    bot.stats.festivals++;
+    return true;
+  }
+  const nearHouses = (x, y) => G.GAME.buildings.some(h => G.DEFS[h.type].house && Math.hypot(h.x - x, h.y - y) < 5);
+  if (G.GAME.coins > 1500 && houses >= 8 && count(bot, 'park') < Math.floor(houses / 8) && act('park', null, { ok: nearHouses })) {
+    bot.stats.parks++;
+    return true;
+  }
+  if (G.GAME.rival && G.rivalRelation() < 40 && G.GAME.coins > 3000 && G.sendGift() === null) { bot.stats.gifts++; return true; }
+  if (G.QUESTS[G.GAME.questIndex]?.id === 'defence' && count(bot, 'watchtower') < 1 && act('watchtower', null, { maxDist: 40 })) return true;
+
+  // 7. Ships and a sheep colony for cloth
   if (home.pop >= 35 && count(bot, 'shipyard') < 1 && act('shipyard', null, { maxDist: 70 })) return true;
   const yard = G.GAME.buildings.find(b => b.type === 'shipyard');
   if (yard && !yard.queue && G.GAME.ships.length < 1 && G.GAME.coins > 300) { G.startShipBuild(yard, 'jolle'); return true; }
@@ -190,9 +207,10 @@ function colonyStep(bot) {
   if (cisl.pop >= cisl.popCap - 1 && count(bot, 'house', cisl) < 6 && act('house', { ok: houseSpotOk(G, cisl) })) return true;
   // Wool that reaches home is woven there if the colony has no weaver yet
   if (home.resources.wool > 10 && count(bot, 'weaver') < 1 && tryBuild(bot, 'weaver')) return true;
-  if (count(bot, 'chapel') < 1 && G.hasCost(home.resources, G.DEFS.chapel.cost)) return tryBuild(bot, 'chapel', null, { ok: houseSpotOk(G, home) });
-  if (count(bot, 'chapel') >= 1 && count(bot, 'chapel') < 1 + Math.floor(count(bot, 'house') / 12)) {
-    return tryBuild(bot, 'chapel', null, { ok: houseSpotOk(G, home) });
+  // Chapels go among the houses (their reach is 10 tiles)
+  const amongHouses = (x, y) => G.GAME.buildings.filter(h => G.DEFS[h.type].house && G.islandOfBuilding(h) === home && Math.hypot(h.x - x, h.y - y) < 7).length >= 3;
+  if (count(bot, 'chapel') < 1 + Math.floor(count(bot, 'house') / 12) && G.hasCost(home.resources, G.DEFS.chapel.cost)) {
+    return tryBuild(bot, 'chapel', null, { ok: amongHouses, maxDist: 50 });
   }
   return false;
 }
@@ -232,7 +250,12 @@ function snapshot(G, bot) {
     ships: G.GAME.ships.length,
     rival: G.rivalIslands().length,
     hunger: home.hunger > 0 ? 'ja' : '',
-    bankrupt: G.GAME.bankrupt ? 'ja' : ''
+    bankrupt: G.GAME.bankrupt ? 'ja' : '',
+    fest: bot.stats.festivals,
+    kontrakt: bot.stats.contracts,
+    parker: bot.stats.parks,
+    rivalForhold: Math.round(G.rivalRelation()),
+    point: G.computeScore().total
   };
 }
 
