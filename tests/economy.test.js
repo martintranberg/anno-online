@@ -221,3 +221,40 @@ test('quests complete in order and pay out', () => {
   assert.equal(new Set(G.QUESTS.map(q => q.id)).size, G.QUESTS.length, 'quest ids are unique');
   assert.equal(G.QUESTS[G.QUESTS.length - 1].id, 'monument');
 });
+
+test('production overview shows every building, its output and the island resources used', () => {
+  const { G, wh, home } = setup();
+  for (let i = 0; i < 3; i++) build(G, 'house', wh.x, wh.y, { maxDist: 6 });
+  const wc = build(G, 'woodcutter', wh.x, wh.y, { maxDist: 30, ok: (x, y) => G.harvestLeft({ type: 'woodcutter', x, y }) > 50 });
+  const mill = build(G, 'sawmill', wh.x, wh.y, { maxDist: 30 });
+  const wc2 = build(G, 'woodcutter', wh.x, wh.y, { maxDist: 30, ok: (x, y) => G.harvestLeft({ type: 'woodcutter', x, y }) > 50 });
+  wc2.paused = true;
+  home.pop = 18;
+  stock(home, { fish: 100, wood: 0 });
+  const start = G.natureTotals(home).wood;
+  assert.equal(Math.round(home.natureStart.wood), Math.round(start), 'start amount recorded when the game began');
+  runTicks(G, 10);
+  const o = G.productionOverview(home);
+  const wcRow = o.rows.find(r => r.type === 'woodcutter');
+  assert.equal(wcRow.count, 2);
+  assert.equal(wcRow.status.ok, 1);
+  assert.equal(wcRow.status.paused, 1);
+  assert.equal(wcRow.buildings.length, 2);
+  assert.equal(wcRow.buildings[0].status, 'paused', 'problems listed first');
+  assert.ok(Math.abs(wcRow.made - G.DEFS.woodcutter.rate) < 1e-9, 'output of the working woodcutter');
+  assert.ok(wcRow.max > wcRow.made);
+  assert.ok(o.util > 0 && o.util < 1);
+  // Harvested wood and what is left add up
+  const wood = o.nature.find(n => n.key === 'wood');
+  assert.ok(wood.harvested >= 7, `harvested ${wood.harvested}`);
+  assert.ok(wood.left <= wood.start - wood.harvested + 2, 'left = start - harvested (+ a little regrowth)');
+  // Goods table splits buildings and residents
+  const planks = o.goods.find(g => g.key === 'planks');
+  assert.ok(planks.made > 0 || mill.status !== 'ok');
+  const fish = o.goods.find(g => g.key === 'fish');
+  assert.ok(fish.eaten > 0, 'residents eat fish');
+  // Unused resources are pointed out
+  assert.ok(o.tips.some(t => t.type === 'forester'), 'hint: more woodcutters than foresters');
+  // Survives a save and reload
+  G.saveGame();
+});

@@ -116,6 +116,10 @@ test('every info panel renders', () => {
     G.openInfo(kind, id);
     assert.ok(G.document.getElementById('info-body').innerHTML.length > 50, `${kind} panel has content`);
   }
+  G.openInfo('economy');
+  G.GAME.selectedInfo.tab = 'production';
+  G.renderInfo();
+  assert.match(G.document.getElementById('info-body').innerHTML, /naturressourcer/);
   G.renderQuest();
   G.updateHud();
   G.refreshMenuState();

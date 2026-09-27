@@ -328,6 +328,17 @@ const totalPopulation = () => [...GAME.islands.values()].reduce((s, i) => s + i.
 const totalPopCap = () => [...GAME.islands.values()].reduce((s, i) => s + i.popCap, 0);
 const homeIsland = () => [...GAME.islands.values()].find(i => i.home);
 
+// Natural resources left on an island: wood in its forests, stone, iron ore and gold in its rock
+function natureTotals(isl) {
+  const out = { wood: 0, stone: 0, ore: 0, gold: 0 };
+  for (const t of GAME.grid) {
+    if (t.island !== isl.id) continue;
+    if (t.type === 'forest') out.wood += t.wood ?? t.woodMax ?? 0;
+    else if (t.type === 'rock') { out.stone += t.stone ?? ROCK_STONE; out.ore += t.ore || 0; out.gold += t.gold || 0; }
+  }
+  return out;
+}
+
 // ----- Fog of war -----
 // Unexplored tiles are hidden under clouds. Ships and buildings reveal the map around them.
 const SHIP_SIGHT = 7, BUILDING_SIGHT = 6, WAREHOUSE_SIGHT = 9;

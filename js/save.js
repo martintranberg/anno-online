@@ -34,7 +34,8 @@ function saveGame(manual = false) {
     islands: [...GAME.islands.values()].map(i => ({ anchor: i.anchor, name: i.name, home: i.home, start: i.start,
                                                      resources: i.resources, pop: i.pop, fertility: i.fertility, supplied: i.supplied,
                                                      ore: i.ore, gold: i.gold, trade: i.trade, allowUpgrade: i.allowUpgrade,
-                                                     owner: i.owner, pirate: i.pirate, mood: i.mood, tax: i.tax })),
+                                                     owner: i.owner, pirate: i.pirate, mood: i.mood, tax: i.tax,
+                                                     natureStart: i.natureStart, natureFromLoad: i.natureFromLoad, harvested: i.harvested })),
     ore: GAME.grid.flatMap((t, i) => t.ore > 0 ? [[i, t.ore]] : []),
     gold: GAME.grid.flatMap((t, i) => t.gold > 0 ? [[i, t.gold]] : []),
     oreAssigned: true,
@@ -149,7 +150,8 @@ function loadGame() {
     if (saved) {
       Object.assign(isl, { name: saved.name, home: saved.home, start: saved.start, pop: saved.pop, fertility: saved.fertility || [], supplied: saved.supplied,
                            ore: saved.ore, gold: saved.gold, trade: saved.trade, allowUpgrade: saved.allowUpgrade,
-                           owner: saved.owner || null, pirate: saved.pirate, mood: saved.mood ?? MOOD_START, tax: saved.tax || 'normal' });
+                           owner: saved.owner || null, pirate: saved.pirate, mood: saved.mood ?? MOOD_START, tax: saved.tax || 'normal',
+                           natureStart: saved.natureStart, natureFromLoad: saved.natureFromLoad, harvested: saved.harvested });
       Object.assign(isl.resources, saved.resources); // merge: resources added later keep 0
     }
     GAME.islands.set(c.id, isl);
@@ -408,6 +410,7 @@ document.getElementById('btn-islands').addEventListener('click', () => {
 document.getElementById('btn-routes').addEventListener('click', () => {
   if (GAME.selectedInfo?.kind === 'routes') closeInfo(); else openInfo('routes');
 });
+
 document.getElementById('btn-economy').addEventListener('click', () => {
   if (GAME.selectedInfo?.kind === 'economy') closeInfo(); else openInfo('economy');
 });

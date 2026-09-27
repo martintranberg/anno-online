@@ -137,8 +137,9 @@ function renderInfo() {
   if (panel.contains(document.activeElement) && ['SELECT', 'INPUT'].includes(document.activeElement.tagName) &&
       document.activeElement.type !== 'checkbox') return;
   const title = document.getElementById('info-title'), body = document.getElementById('info-body');
+  panel.classList.toggle('wide', sel.kind === 'economy' && sel.tab === 'production');
 
-  if (sel.kind === 'economy') { renderEconomy(title, body); return; }
+  if (sel.kind === 'economy') { renderEconomy(title, body, sel); return; }
 
   if (sel.kind === 'routes') { renderRoutes(title, body); return; }
   if (sel.kind === 'islands') { renderIslands(title, body); return; }
@@ -584,11 +585,24 @@ function renderRoute(title, body, sel) {
   body.querySelector('[data-act="all"]').addEventListener('click', () => openInfo('routes'));
 }
 
-function renderEconomy(title, body) {
+function renderEconomy(title, body, sel) {
   title.textContent = '📊 Økonomi';
+  // Two tabs: money and goods overall, and production down to each building
+  const tabs = `<div class="tabs"><button data-tab="overview" class="${sel.tab !== 'production' ? 'current' : ''}">💰 Overblik</button>` +
+               `<button data-tab="production" class="${sel.tab === 'production' ? 'current' : ''}">🏭 Produktion og ressourcer</button></div>`;
+  const bindTabs = () => body.querySelectorAll('[data-tab]').forEach(el => el.addEventListener('click', () => {
+    sel.tab = el.dataset.tab;
+    renderInfo();
+  }));
+  if (sel.tab === 'production') {
+    body.innerHTML = tabs;
+    renderProduction(body, sel);
+    bindTabs();
+    return;
+  }
   const net = (GAME.lastTax || 0) - (GAME.lastUpkeep || 0);
   const islands = [...GAME.islands.values()].filter(i => i.warehouses);
-  body.innerHTML = `
+  body.innerHTML = tabs + `
     <div class="row"><span>🪙 Mønter</span><b>${Math.floor(GAME.coins)}</b></div>
     <div class="row"><span>Skat</span><b>+${rate(GAME.lastTax || 0)}/s</b></div>
     <div class="row"><span>Drift</span><b>−${rate(GAME.lastUpkeep || 0)}/s</b></div>
@@ -607,6 +621,193 @@ function renderEconomy(title, body) {
       return `<h4>${esc(isl.name)} · 👥 ${isl.pop}/${isl.popCap}</h4>${rows || '<p class="muted">Ingen varer</p>'}`;
     }).join('')}
     <p class="muted">Tallene i parentes er produktion minus forbrug (uden skibe).</p>`;
+}
+
+// ----- Production overview (the "Produktion" tab of the economy panel) -----
+// Every production building on an island: is it producing, and how much compared with what it could;
+// the island's natural resources from the start, what is left and what has been used; and hints about
+// resources the island has but doesn't use.
+const PROD_STATUS = {
+  ok:         { icon: '✅', text: 'Producerer' },
+  noworkers:  { icon: '👷', text: 'Mangler arbejdere' },
+  noroad:     { icon: '🛤️', text: 'Mangler vej' },
+  noinput:    { icon: '📦', text: 'Mangler råvarer' },
+  full:       { icon: '🏚️', text: 'Lageret er fuldt' },
+  noresource: { icon: '🪓', text: 'Intet at høste i nærheden' },
+  paused:     { icon: '⏸', text: 'På pause' },
+  fire:       { icon: '🔥', text: 'Brænder' },
+  nocoins:    { icon: '💸', text: 'Fallit' },
+  idle:       { icon: '…', text: 'Ikke startet endnu' }
+};
+// Which building uses a fertility on an island
+const FERTILITY_BUILDING = { grain: 'grainfarm', sheep: 'sheepfarm', hops: 'hopfarm', grapes: 'vineyard' };
+const NATURE = {
+  wood:  { name: 'Træ',      icon: '🌲', renews: true },
+  stone: { name: 'Sten',     icon: '🪨' },
+  ore:   { name: 'Jernmalm', icon: '⛏️' },
+  gold:  { name: 'Guld',     icon: '🥇' }
+};
+
+// Plain numbers for one island (also used by the tests)
+function productionOverview(isl) {
+  const own = GAME.buildings.filter(b => islandOfBuilding(b) === isl);
+  const rows = new Map();
+  let made = 0, max = 0;
+  for (const b of own) {
+    const def = DEFS[b.type];
+    if (!def.produces) continue;
+    const mult = PROD_LEVELS[prodLevel(b)].mult, cap = (def.rate ?? 1) * mult;
+    const row = rows.get(b.type) || { type: b.type, good: def.produces, count: 0, made: 0, max: 0, status: {}, buildings: [] };
+    rows.set(b.type, row);
+    const st = b.status || 'idle';
+    const missing = st === 'noinput' ? Object.entries(def.consumes || {}).filter(([r, n]) => isl.resources[r] < n * mult).map(([r]) => r) : [];
+    row.count++;
+    row.made += b.made || 0;
+    row.max += cap;
+    row.status[st] = (row.status[st] || 0) + 1;
+    row.buildings.push({ b, status: st, made: b.made || 0, max: cap, level: prodLevel(b), missing,
+                         left: def.harvest ? harvestLeft(b) : null });
+    made += b.made || 0;
+    max += cap;
+  }
+  for (const row of rows.values()) row.buildings.sort((p, q) => (p.status === 'ok') - (q.status === 'ok') || p.made / p.max - q.made / q.max);
+
+  // Goods: made and used per second (last tick), split into buildings and residents
+  const goods = RES_KEYS.map(k => {
+    const inFlow = isl.flowIn?.[k] || 0, people = isl.flowPeople?.[k] || 0, used = Math.max(0, (isl.flowOut?.[k] || 0) - people);
+    return { key: k, made: inFlow, usedBy: used, eaten: people, net: inFlow - used - people, stock: isl.resources[k], cap: isl.cap };
+  }).filter(g => g.made > 1e-9 || g.usedBy > 1e-9 || g.eaten > 1e-9 || g.stock >= 1);
+
+  // Natural resources: from the start (or since this was first measured), what is left and what was harvested
+  if (!isl.natureStart) { isl.natureStart = natureTotals(isl); isl.natureFromLoad = true; }
+  const now = natureTotals(isl);
+  const count = (type) => own.filter(b => b.type === type).length;
+  const nature = Object.keys(NATURE).map(k => ({
+    key: k, start: Math.round(isl.natureStart[k] || 0), left: Math.round(now[k]),
+    harvested: Math.round(isl.harvested?.[k] || 0)
+  })).filter(n => n.start > 0 || n.left > 0 || n.harvested > 0);
+  const forestTiles = GAME.grid.filter(t => t.island === isl.id && t.type === 'forest').length;
+
+  // Hints: fertility, veins and workers the island has but doesn't use
+  const tips = [];
+  for (const f of isl.fertility) {
+    const type = FERTILITY_BUILDING[f];
+    if (type && !count(type)) tips.push({ icon: FERTILITY[f].icon, text: `${FERTILITY[f].name} kan dyrkes her, men der er ingen ${DEFS[type].name.toLowerCase()}`, type });
+  }
+  if (now.ore > 0 && !count('mine')) tips.push({ icon: '⛏️', text: `${Math.round(now.ore)} jernmalm i klipperne, men ingen jernmine`, type: 'mine' });
+  if (now.gold > 0 && !count('goldmine')) tips.push({ icon: '🥇', text: `${Math.round(now.gold)} guld i klipperne, men ingen guldmine`, type: 'goldmine' });
+  if (now.stone > 0 && !count('stonecutter')) tips.push({ icon: '🪨', text: `${Math.round(now.stone)} sten i klipperne, men ingen stenhugger`, type: 'stonecutter' });
+  if (count('woodcutter') > count('forester')) tips.push({ icon: '🌱', text: `${count('woodcutter')} skovhugger${count('woodcutter') > 1 ? 'e' : ''}, men ${count('forester') || 'ingen'} skovfoged${count('forester') === 1 ? '' : 'er'} – skoven svinder`, type: 'forester' });
+  for (const row of rows.values()) {
+    const empty = row.buildings.filter(x => x.status === 'noresource').length;
+    if (empty) tips.push({ icon: '🪓', text: `${empty} ${DEFS[row.type].name.toLowerCase()}${empty > 1 ? 'e' : ''} har intet tilbage at høste – flyt ${empty > 1 ? 'dem' : 'den'} (↔ Flyt)` });
+  }
+  if ((isl.workersFree ?? 0) >= 6) tips.push({ icon: '👷', text: `${isl.workersFree} ledige arbejdere – plads til flere produktionsbygninger` });
+  if (isl.popCap && isl.pop >= isl.popCap && own.some(b => DEFS[b.type].workers && !b.staffed && !b.paused)) {
+    tips.push({ icon: '🏠', text: 'Bygninger mangler arbejdere, og alle boliger er fulde – byg flere boliger', type: 'house' });
+  }
+  for (const g of goods) {
+    if (g.cap && g.stock >= g.cap && g.made > 0) tips.push({ icon: '📦', text: `Lageret er fuldt af ${RESOURCES[g.key].name.toLowerCase()} – produktionen spildes. Sælg, send det videre eller byg et lager mere` });
+  }
+
+  return { rows: [...rows.values()], goods, nature, forestTiles, fromLoad: !!isl.natureFromLoad, tips, made, max, util: max ? made / max : 0 };
+}
+
+const pct = (v) => `${Math.round(v * 100)}%`;
+const utilClass = (u) => u >= 0.8 ? 'good' : u >= 0.4 ? 'mid' : 'bad';
+
+function renderProduction(body, sel) {
+  const islands = [...GAME.islands.values()].filter(i => i.warehouses);
+  if (!islands.length) { body.innerHTML += '<p class="muted">Ingen øer med lager endnu.</p>'; return; }
+  const chosen = GAME.islands.get(sel.island);
+  const cur = chosen?.warehouses ? chosen : (homeIsland() || islands[0]);
+  sel.island = cur.id;
+  sel.open = sel.open || {};
+
+  // Island picker with a quick status for each
+  const picker = islands.map(isl => {
+    const o = productionOverview(isl);
+    const total = o.rows.reduce((s, r) => s + r.count, 0), ok = o.rows.reduce((s, r) => s + (r.status.ok || 0), 0);
+    return `<button data-isl="${isl.id}" class="isl-pick ${isl === cur ? 'current' : ''}">${esc(isl.name)}<small class="${utilClass(o.util)}">${total ? `${ok}/${total} · ${pct(o.util)}` : '–'}</small></button>`;
+  }).join('');
+
+  const o = productionOverview(cur);
+  const chips = (status) => Object.entries(status).map(([st, n]) =>
+    `<span class="chip ${st === 'ok' ? 'ok' : 'warn'}" title="${PROD_STATUS[st]?.text || st}">${PROD_STATUS[st]?.icon || '?'} ${n}</span>`).join('');
+  // One header row per building type (click to fold out), then a row per building
+  const rows = o.rows.sort((a, b) => a.made / a.max - b.made / b.max).map(r => {
+    const def = DEFS[r.type], u = r.max ? r.made / r.max : 0;
+    const open = sel.open[r.type] ?? (r.status.ok || 0) < r.count; // types with problems start folded out
+    const head = `<tr class="type-row" data-fold="${r.type}">
+      <td>${open ? '▾' : '▸'} <b>${esc(def.name)}</b> <small class="muted">×${r.count}</small></td>
+      <td>${chips(r.status)}</td>
+      <td class="num">${rate(r.made)} / ${rate(r.max)} ${RES_ICONS[r.good]}</td>
+      <td class="num ${utilClass(u)}">${pct(u)}</td><td></td></tr>`;
+    if (!open) return head;
+    return head + r.buildings.map((x, i) => {
+      const st = PROD_STATUS[x.status] || PROD_STATUS.idle;
+      const extra = x.missing.length ? ` – mangler ${x.missing.map(k => RES_ICONS[k]).join('')}`
+        : x.left !== null ? ` · ${x.left} ${RES_ICONS[def.harvest.key]} tilbage` : '';
+      return `<tr class="bld-row">
+        <td>${esc(def.name)} ${i + 1}${x.level > 1 ? ` <span class="stars">${'★'.repeat(x.level - 1)}</span>` : ''}</td>
+        <td colspan="1"><small>${st.icon} ${st.text}${extra}</small></td>
+        <td class="num">${rate(x.made)} / ${rate(x.max)}</td>
+        <td class="num ${utilClass(x.max ? x.made / x.max : 0)}">${pct(x.max ? x.made / x.max : 0)}</td>
+        <td><button class="link" data-show="${x.b.id}" title="Vis på kortet">›</button></td></tr>`;
+    }).join('');
+  }).join('');
+
+  const goods = o.goods.map(g => `<tr>
+      <td>${RES_ICONS[g.key]} ${RESOURCES[g.key].name}</td>
+      <td class="num">${g.made ? '+' + rate(g.made) : ''}</td>
+      <td class="num">${g.usedBy ? '−' + rate(g.usedBy) : ''}</td>
+      <td class="num">${g.eaten ? '−' + rate(g.eaten) : ''}</td>
+      <td class="num ${g.net < -1e-9 ? 'bad' : g.net > 1e-9 ? 'good' : ''}">${g.net >= 0 ? '+' : ''}${rate(g.net)}</td>
+      <td class="num">${Math.floor(g.stock)}/${g.cap}</td></tr>`).join('');
+
+  const nature = o.nature.map(n => {
+    const info = NATURE[n.key];
+    const usedShare = n.start ? Math.max(0, Math.min(1, (n.start - n.left) / n.start)) : 0;
+    return `<tr>
+      <td>${info.icon} ${info.name}${info.renews ? ' <small class="muted">(gror igen)</small>' : ''}</td>
+      <td class="num">${n.start}</td><td class="num">${n.left}</td><td class="num">${n.harvested}</td>
+      <td class="usebar"><div class="bar"><div style="width:${usedShare * 100}%"></div></div><small>${pct(usedShare)} brugt</small></td></tr>`;
+  }).join('');
+
+  body.innerHTML += `
+    <div class="isl-picks">${picker}</div>
+    <p class="muted">Tallene er for det seneste sekund. Udnyttelse = produktion nu i forhold til bygningernes maksimum.</p>
+    <h4>${esc(cur.name)} · produktionsbygninger · ${pct(o.util)} udnyttet</h4>
+    ${o.rows.length ? `<table class="prod"><tr><th>Bygning</th><th>Status</th><th>Nu / maks pr. s</th><th></th><th></th></tr>${rows}</table>`
+      : '<p class="muted">Ingen produktionsbygninger endnu.</p>'}
+    <h4>Øens naturressourcer</h4>
+    ${nature ? `<table class="prod"><tr><th>Ressource</th><th>Fra start</th><th>Tilbage</th><th>Høstet</th><th>Forbrug</th></tr>${nature}</table>` : '<p class="muted">Ingen skov, klipper eller malm.</p>'}
+    <p class="muted">${o.forestTiles} skovfelter. Sten, malm og guld kommer aldrig igen; træ gror langsomt tilbage (hurtigere med skovfoged).${o.fromLoad ? ' "Fra start" er målt fra, da denne oversigt kom til – ældre forbrug kendes ikke.' : ''}</p>
+    <div class="row"><span>🌱 Frugtbarhed</span><b>${fertTxt(cur)}</b></div>
+    <h4>Varer pr. sekund</h4>
+    ${goods ? `<table class="prod"><tr><th>Vare</th><th>Laves</th><th>Bygninger</th><th>Beboere</th><th>Netto</th><th>Lager</th></tr>${goods}</table>` : '<p class="muted">Ingen varer.</p>'}
+    <p class="muted">Skibe og handel er ikke med i tallene.</p>
+    <h4>Uudnyttet og forslag</h4>
+    ${o.tips.length ? o.tips.map(t => `<div class="tip"><span>${t.icon}</span><span>${esc(t.text)}</span>${t.type && DEFS[t.type] ? `<button class="link" data-build="${t.type}">Byg ›</button>` : ''}</div>`).join('')
+      : '<p class="muted">Øen udnyttes godt – intet at bemærke.</p>'}`;
+
+  body.querySelectorAll('[data-isl]').forEach(el => el.addEventListener('click', () => { sel.island = Number(el.dataset.isl); sel.focus = null; renderInfo(); }));
+  body.querySelectorAll('[data-fold]').forEach(el => el.addEventListener('click', () => {
+    const r = o.rows.find(x => x.type === el.dataset.fold);
+    sel.open[r.type] = !(sel.open[r.type] ?? (r.status.ok || 0) < r.count);
+    renderInfo();
+  }));
+  body.querySelectorAll('[data-show]').forEach(el => el.addEventListener('click', () => {
+    const b = buildingById(el.dataset.show), def = DEFS[b.type];
+    sel.focus = b.id;
+    centerOn(b.x + (def.w - 1) / 2, b.y + (def.h - 1) / 2);
+  }));
+  body.querySelectorAll('[data-build]').forEach(el => el.addEventListener('click', () => {
+    const w = GAME.buildings.find(b => b.type === 'warehouse' && islandOfBuilding(b) === cur);
+    if (w) centerOn(w.x + 0.5, w.y + 0.5);
+    closeInfo();
+    selectTool(el.dataset.build);
+  }));
 }
 
 document.getElementById('info-close').addEventListener('click', closeInfo);

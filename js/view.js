@@ -225,7 +225,7 @@ function render() {
   for (const b of visibleBuildings) {
     const def = DEFS[b.type];
     const d = (b.x + def.w - 1) + (b.y + def.h - 1);
-    if (sel?.kind === 'building' && sel.id === b.id) {
+    if ((sel?.kind === 'building' && sel.id === b.id) || (sel?.kind === 'economy' && sel.focus === b.id)) {
       // Gold outline around the inspected building's footprint (flat, so drawn before objects)
       poly('rgba(255,215,0,0.18)', uvRect(b.x - 0.5, b.y - 0.5, b.x + def.w - 0.5, b.y + def.h - 0.5), '#ffd700');
     }

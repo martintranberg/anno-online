@@ -45,6 +45,7 @@ function snapshot(G) {
     rival: G.GAME.rival.buildings.map(b => [b.type, b.x, b.y]).sort(),
     rivalIslands: G.rivalIslands().map(i => i.name).sort(),
     pirates: [G.GAME.pirates.fort, G.GAME.pirates.fortHp],
+    nature: [home.natureStart, home.harvested],
     quest: G.GAME.questIndex, tier: G.GAME.tierReached, won: G.GAME.won
   });
 }

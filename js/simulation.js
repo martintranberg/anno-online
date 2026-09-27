@@ -12,6 +12,7 @@ function consume(isl, keys, amount) {
       const t = Math.min(share, isl.resources[k]);
       isl.resources[k] -= t;
       isl.flowOut[k] += t;
+      if (isl.flowPeople) isl.flowPeople[k] += t; // the residents' share, for the production overview
       taken += t;
     }
   }
@@ -186,6 +187,7 @@ function tick() {
   for (const isl of islands) {
     isl.flowIn = emptyStock();
     isl.flowOut = emptyStock();
+    isl.flowPeople = emptyStock();
     isl.workersFree = Math.floor(isl.pop);
   }
 
@@ -207,6 +209,7 @@ function tick() {
   for (const b of producers) {
     const def = DEFS[b.type], isl = islandOfBuilding(b), R = isl.resources;
     const mult = PROD_LEVELS[prodLevel(b)].mult, out = (def.rate ?? 1) * mult;
+    b.made = 0; // actual output this tick (the overview compares it with the maximum)
     if (b.paused) { b.status = 'paused'; continue; }
     if (b.fire) { b.status = 'fire'; continue; }
     if (GAME.bankrupt && !def.food) { b.status = 'nocoins'; continue; }
@@ -226,11 +229,14 @@ function tick() {
       }
       made = Math.min(out, src[def.harvest.key]);
       src[def.harvest.key] -= made;
+      isl.harvested = isl.harvested || {};
+      isl.harvested[def.harvest.key] = (isl.harvested[def.harvest.key] || 0) + made;
       depleteTile(src);
     }
     for (const [r, n] of inputs) { R[r] -= n; isl.flowOut[r] += n; }
     R[def.produces] = Math.min(isl.cap, R[def.produces] + made);
     isl.flowIn[def.produces] += made;
+    b.made = made;
     b.status = 'ok';
   }
 
@@ -467,6 +473,10 @@ window.addEventListener('DOMContentLoaded', () => {
 function finishInit(loaded) {
   gameStarted = true;
   decorateTerrain(GAME.grid);
+  // Natural resources at the start, for the production overview (saves from before it are measured from now)
+  for (const isl of GAME.islands.values()) {
+    if (!isl.natureStart) { isl.natureStart = natureTotals(isl); isl.natureFromLoad = loaded; }
+  }
   document.getElementById('opt-events').checked = GAME.events;
   minimapDirty = true;
   fogLayer.dirty = true;
