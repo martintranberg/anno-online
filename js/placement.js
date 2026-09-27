@@ -180,10 +180,19 @@ function drawCanalGhost() {
 }
 
 function drawDemolishGhost() {
+  // Dragging clears forest and roads along the path
+  if (GAME.roadDrag) {
+    for (const t of roadPath(GAME.roadDrag, GAME.hoveredTile)) {
+      const ok = GAME.occupancy.get(`${t.tx},${t.ty}`) === 'road' || canClearForest(t.tx, t.ty);
+      drawTileHighlight(t.tx, t.ty, ok ? 'rgba(220,60,60,0.45)' : 'rgba(220,60,60,0.12)', '#e05050');
+    }
+    return;
+  }
   const { tx, ty } = GAME.hoveredTile;
   const occ = GAME.occupancy.get(`${tx},${ty}`);
   if (occ === 'road' || !occ) {
-    const target = occ || tileAt(tx, ty)?.canal; // roads, bridges and canals (filled in) can be removed
+    // Roads, bridges, canals (filled in) and forest (felled) can be removed
+    const target = occ || tileAt(tx, ty)?.canal || canClearForest(tx, ty);
     drawTileHighlight(tx, ty, target ? 'rgba(220,60,60,0.45)' : 'rgba(220,60,60,0.15)', '#e05050');
     return;
   }
@@ -535,10 +544,64 @@ function placeCanals(tiles) {
   saveGame();
 }
 
+// Forest on explored land that isn't the rival's or the pirates' can be felled to make room
+function canClearForest(tx, ty) {
+  const t = tileAt(tx, ty);
+  if (!t || t.type !== 'forest' || !isSeen(tx, ty) || GAME.occupancy.has(`${tx},${ty}`)) return false;
+  const isl = GAME.islands.get(t.island);
+  return !!isl && isl.owner !== 'rival' && !(isl.pirate && GAME.pirates?.fortHp > 0);
+}
+
+// Fells the trees on a tile; the wood goes to the island's warehouse if it has one. Returns the wood gained.
+function clearForest(tx, ty) {
+  if (!canClearForest(tx, ty)) return 0;
+  const t = tileAt(tx, ty), isl = GAME.islands.get(t.island);
+  const wood = Math.floor(t.wood ?? t.woodMax ?? 0);
+  if (isl.warehouses) isl.resources.wood = Math.min(isl.cap, isl.resources.wood + wood);
+  t.type = 'grass';
+  t.stumps = true;
+  t.wood = 0;
+  decorateTile(t);
+  return wood;
+}
+
+// Dragging the demolish tool: clears forest and removes roads along the path, never buildings
+function demolishPath(tiles) {
+  if (tiles.length === 1) { demolishAt(tiles[0].tx, tiles[0].ty); return; }
+  let felled = 0, wood = 0, roads = 0;
+  for (const t of tiles) {
+    const key = `${t.tx},${t.ty}`;
+    if (GAME.occupancy.get(key) === 'road') {
+      const bridge = isBridge(tileAt(t.tx, t.ty));
+      GAME.roads.delete(key);
+      GAME.occupancy.delete(key);
+      if (bridge) recomputeIslands();
+      roads++;
+    } else if (canClearForest(t.tx, t.ty)) {
+      wood += clearForest(t.tx, t.ty);
+      felled++;
+    }
+  }
+  if (!felled && !roads) return;
+  recomputeConnectivity();
+  sfx('demolish');
+  showToast(`🪓 ${felled ? `${felled} skovfelt${felled > 1 ? 'er' : ''} ryddet (+${wood} 🌲)` : ''}${felled && roads ? ' · ' : ''}${roads ? `${roads} vejfelt${roads > 1 ? 'er' : ''} fjernet` : ''}`);
+  saveGame();
+}
+
 function demolishAt(tx, ty) {
   const key = `${tx},${ty}`;
   const occ = GAME.occupancy.get(key);
   const tile = tileAt(tx, ty);
+
+  // Felling a forest tile makes room to build
+  if (!occ && canClearForest(tx, ty)) {
+    const wood = clearForest(tx, ty);
+    sfx('demolish');
+    showToast(`🪓 Skoven er fældet${wood ? ` (+${wood} 🌲)` : ''}`);
+    saveGame();
+    return;
+  }
 
   // Demolishing an empty canal tile fills it back in
   if (!occ && tile?.canal) {

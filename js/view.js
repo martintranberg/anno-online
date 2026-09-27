@@ -439,7 +439,7 @@ const DRAG_THRESHOLD = 5;
 const drag = { active: false, button: -1, startX: 0, startY: 0, lastX: 0, lastY: 0, moved: false };
 
 // Roads and canals are laid by dragging a path rather than clicking
-const isDragTool = (tool) => tool === 'road' || tool === 'canal';
+const isDragTool = (tool) => tool === 'road' || tool === 'canal' || tool === 'demolish';
 
 function useToolAtHover() {
   if (GAME.routeDraw) { if (GAME.hoveredTile) handleRouteClick(GAME.hoveredTile.tx, GAME.hoveredTile.ty); return; }
@@ -497,6 +497,7 @@ window.addEventListener('mouseup', (e) => {
     if (GAME.hoveredTile) {
       const path = roadPath(GAME.roadDrag, GAME.hoveredTile);
       if (GAME.selectedBuilding === 'canal') placeCanals(path);
+      else if (GAME.selectedBuilding === 'demolish') demolishPath(path);
       else placeRoads(path);
     }
     GAME.roadDrag = null;

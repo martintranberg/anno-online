@@ -1,7 +1,8 @@
 'use strict';
-// A simple scripted player for balance simulations. It plays the home island like a careful beginner:
-// food first, houses when people run out of room, wood and stone, markets for more houses, meat,
-// then a shipyard, exploring, a sheep colony with a route, cloth, a chapel and Borgere.
+// A simple scripted player for balance simulations. It plays like a careful beginner: food first, houses
+// when people run out of room, wood and stone, markets, meat, then a shipyard, exploring and colonies with
+// trade routes (sheep, hops, iron ore, grapes, gold), and the services and chains of every tier up to the
+// monument.
 // It makes at most one decision every few seconds and never spends its last coins.
 
 const { newGame, placeFirstWarehouse, build, connect, findSpot, runTicks, islandTiles, centre } = require('./helpers');
@@ -11,7 +12,7 @@ const RESERVE = 60; // coins the bot keeps for upkeep
 function createBot(G) {
   const wh = placeFirstWarehouse(G);
   layMainRoads(G, wh);
-  return { G, wh, colony: null, log: [], lastAction: '', stats: { festivals: 0, contracts: 0, gifts: 0, parks: 0 } };
+  return { G, wh, colony: null, colonies: {}, nextColonyTry: {}, log: [], lastAction: '', stats: { festivals: 0, contracts: 0, gifts: 0, parks: 0 } };
 }
 
 // Four straight roads out from the warehouse keep corridors open between the houses (roads are free)
@@ -97,7 +98,7 @@ function step(bot) {
 
   // 3. Room for more people
   const full = home.pop >= home.popCap - 1;
-  if (full && houses < 40 && act('house', null, { ok: houseSpotOk(G, home) })) return true;
+  if (full && houses < 70 && act('house', null, { ok: houseSpotOk(G, home) })) return true;
   // No room for houses near a market any more (or enough houses for one): open a new market
   if ((full || houses >= 5) && houses >= 3 && count(bot, 'marketplace') < 1 + Math.floor(houses / 14)) {
     // A new market a little away from the warehouse opens room for more houses
@@ -132,14 +133,157 @@ function step(bot) {
   if (G.GAME.rival && G.rivalRelation() < 40 && G.GAME.coins > 3000 && G.sendGift() === null) { bot.stats.gifts++; return true; }
   if (G.QUESTS[G.GAME.questIndex]?.id === 'defence' && count(bot, 'watchtower') < 1 && act('watchtower', null, { maxDist: 40 })) return true;
 
-  // 7. Ships and a sheep colony for cloth
-  if (home.pop >= 35 && count(bot, 'shipyard') < 1 && act('shipyard', null, { maxDist: 70 })) return true;
+  // 7. Ships and colonies: sheep for cloth first, later hops, iron ore, grapes and gold
+  if (home.pop >= 25 && count(bot, 'shipyard') < 1) {
+    if (act('shipyard', null, { maxDist: 70 })) return true;
+    // No free coast: fell coastal forest near the warehouse to make room
+    if (clearRoom(bot, bot.wh, (t) => G.touchesWater(t.x, t.y), 14)) return true;
+  }
+  if (shipsStep(bot)) return true;
+  for (const plan of COLONY_PLANS) {
+    if (G.GAME.tierReached < plan.tier) continue;
+    const col = bot.colonies[plan.key];
+    if (!col) {
+      if (G.GAME.tick >= (bot.nextColonyTry[plan.key] || 0)) {
+        bot.nextColonyTry[plan.key] = G.GAME.tick + 30;
+        if (foundColony(bot, plan)) return true;
+      }
+      break; // one new colony at a time
+    }
+    if (colonyStep(bot, plan, col)) return true;
+  }
+
+  // 8. The towns grow up: services and chains for Borgere, Købmænd and Adelige on the home island
+  return lateGameStep(bot);
+}
+
+// Colonies the bot founds, in order. `builds` are placed on the colony, `back` is shipped home.
+const COLONY_PLANS = [
+  { key: 'sheep',  tier: 1, pick: (i) => i.fertility.includes('sheep'),  builds: ['sheepfarm', 'weaver'], back: ['wool', 'cloth'] },
+  { key: 'hops',   tier: 2, pick: (i) => i.fertility.includes('hops'),   builds: ['hopfarm'], back: ['hops'] },
+  { key: 'ore',    tier: 2, pick: (i) => i.ore,                          builds: ['mine', 'woodcutter', 'charcoal'], back: ['ore', 'coal'] },
+  { key: 'grapes', tier: 3, pick: (i) => i.fertility.includes('grapes'), builds: ['vineyard', 'winery'], back: ['grapes', 'wine'] },
+  { key: 'gold',   tier: 3, pick: (i) => i.gold,                         builds: ['goldmine'], back: ['gold'] }
+];
+
+// Builds ships: one per colony route, the smallest type that reaches it
+function shipsStep(bot) {
+  const { G } = bot;
   const yard = G.GAME.buildings.find(b => b.type === 'shipyard');
-  if (yard && !yard.queue && G.GAME.ships.length < 1 && G.GAME.coins > 300) { G.startShipBuild(yard, 'jolle'); return true; }
-  const ship = G.GAME.ships[0];
-  if (ship && !bot.colony && ship.state === 'idle' && !bot.explored) { ship.state = 'autoExplore'; G.autoExplore(ship); bot.explored = true; return true; }
-  if (ship && !bot.colony && G.GAME.tick >= (bot.nextColonyTry || 0)) { bot.nextColonyTry = G.GAME.tick + 30; if (foundSheepColony(bot)) return true; }
-  if (bot.colony) return colonyStep(bot);
+  if (!yard) return false;
+  const first = G.GAME.ships[0];
+  if (first && !bot.explored && first.state === 'idle') { first.state = 'autoExplore'; G.autoExplore(first); bot.explored = true; return true; }
+  assignShips(bot);
+  if (yard.queue || G.GAME.coins < 400) return false;
+  const unserved = G.GAME.routes.filter(r => !G.GAME.ships.some(s => s.routeId === r.id));
+  if (G.GAME.ships.length && !unserved.length) return false;
+  const len = unserved[0] ? (G.routePath(unserved[0])?.length ?? 999) : 0;
+  const type = ['jolle', 'kogge', 'karavel'].find(t => G.SHIP_TYPES[t].range >= len && G.SHIP_TYPES[t].tier <= G.GAME.tierReached &&
+    G.hasCost(G.homeIsland().resources, G.SHIP_TYPES[t].cost));
+  if (!type || G.startShipBuild(yard, type) !== null) return false;
+  bot.log.push(`${G.GAME.tick}: ship ${type}`);
+  return true;
+}
+
+// Idle ships that aren't exploring take unserved routes they can reach
+function assignShips(bot) {
+  const { G } = bot;
+  for (const r of G.GAME.routes) {
+    if (G.GAME.ships.some(s => s.routeId === r.id)) continue;
+    const s = G.GAME.ships.find(x => (x.state === 'idle' || x.state === 'autoExplore') && !x.routeId && !G.isWarship(x) && G.assignShip(x, r.id) === null);
+    if (s) bot.log.push(`${G.GAME.tick}: ${s.name} sails ${G.routeName(r)}`);
+  }
+}
+
+function foundColony(bot, plan) {
+  const { G } = bot;
+  const home = G.homeIsland();
+  const isl = [...G.GAME.islands.values()]
+    .filter(i => i.discovered && !i.home && i.owner !== 'rival' && !i.pirate && !i.warehouses && i.size >= 30 && plan.pick(i))
+    .sort((a, b) => Math.hypot(a.anchor[0] - bot.wh.x, a.anchor[1] - bot.wh.y) - Math.hypot(b.anchor[0] - bot.wh.x, b.anchor[1] - bot.wh.y))[0];
+  if (!isl) {
+    // Nothing suitable known yet: send an idle ship exploring
+    const s = G.GAME.ships.find(x => x.state === 'idle' && !x.routeId);
+    if (s) { s.state = 'autoExplore'; G.autoExplore(s); }
+    return false;
+  }
+  const pc = G.placementCost('warehouse', isl);
+  if (pc.block || G.GAME.coins < 400 || !G.hasCost(home.resources, G.FOUNDING_COST)) return false;
+  // The coast facing home keeps the route short
+  const spot = findSpot(G, 'warehouse', bot.wh.x, bot.wh.y, { island: isl, maxDist: 999 });
+  if (!spot || !G.placeBuilding(spot[0], spot[1], 'warehouse')) return false;
+  const wh = G.GAME.buildings[G.GAME.buildings.length - 1];
+  bot.log.push(`${G.GAME.tick}: colony (${plan.key}) on ${isl.name}`);
+  // Building materials and food out, the colony's goods back
+  const r = G.createRoute(bot.wh.id, wh.id, []);
+  r.res = ['planks', 'fish', 'stone', 'tools'];
+  r.keepRes = { planks: 40, fish: 30, stone: 20, tools: 10 };
+  r.back = plan.back;
+  bot.colonies[plan.key] = { wh, route: r };
+  if (plan.key === 'sheep') bot.colony = wh;
+  assignShips(bot);
+  return true;
+}
+
+function colonyStep(bot, plan, col) {
+  const { G } = bot;
+  const cisl = G.islandOfBuilding(col.wh);
+  const act = (type, opts = {}) => tryBuild(bot, type, [col.wh.x, col.wh.y], { island: cisl, maxDist: 40, ...opts });
+  if (count(bot, 'house', cisl) < 2) return act('house', { ok: houseSpotOk(G, cisl) }) || clearRoom(bot, col.wh);
+  if (count(bot, 'fisher', cisl) < 1 + Math.floor(cisl.pop / 30) && act('fisher')) return true;
+  for (const type of plan.builds) {
+    if (count(bot, type, cisl) >= 1) continue;
+    const ok = G.DEFS[type].harvest ? (x, y) => G.harvestLeft({ type, x, y }) > 50 : undefined;
+    if (act(type, { ok })) return true;
+  }
+  if (cisl.pop >= cisl.popCap - 1 && count(bot, 'house', cisl) < 8 && act('house', { ok: houseSpotOk(G, cisl) })) return true;
+  // Wooded islands: fell some forest near the warehouse to make room (at most every few minutes)
+  return clearRoom(bot, col.wh);
+}
+
+function clearRoom(bot, wh, where = () => true, radius = 7) {
+  const { G } = bot;
+  if (G.GAME.tick < (bot.nextClear?.[wh.id] || 0)) return false;
+  (bot.nextClear ||= {})[wh.id] = G.GAME.tick + 180;
+  const isl = G.islandOfBuilding(wh);
+  const forest = G.GAME.grid.filter(t => t.island === isl.id && G.canClearForest(t.x, t.y) && Math.hypot(t.x - wh.x, t.y - wh.y) < radius && where(t))
+    .sort((a, b) => Math.hypot(a.x - wh.x, a.y - wh.y) - Math.hypot(b.x - wh.x, b.y - wh.y)).slice(0, 12);
+  for (const t of forest) G.clearForest(t.x, t.y);
+  if (forest.length) bot.log.push(`${G.GAME.tick}: cleared ${forest.length} forest on ${isl.name}`);
+  return forest.length > 0;
+}
+
+// Services and processing chains on the home island, as the tiers allow
+function lateGameStep(bot) {
+  const { G } = bot;
+  const home = G.homeIsland();
+  const R = home.resources;
+  const houses = count(bot, 'house');
+  const amongHouses = (x, y) => G.GAME.buildings.filter(h => G.DEFS[h.type].house && G.islandOfBuilding(h) === home && Math.hypot(h.x - x, h.y - y) < 7).length >= 3;
+  const act = (type, opts) => tryBuild(bot, type, null, { maxDist: 50, ...opts });
+  const want = (type, n, opts) => count(bot, type) < n && act(type, opts);
+  // Wool that reaches home is woven here if the colony has no weaver
+  if (R.wool > 10 && want('weaver', 1)) return true;
+  if (G.hasCost(R, G.DEFS.chapel.cost) && want('chapel', 1 + Math.floor(houses / 12), { ok: amongHouses })) return true;
+  if (G.GAME.tierReached >= 2) {
+    if (want('grainfarm', 2, { maxDist: 70 })) return true;
+    if (R.hops > 5 && want('brewery', 1)) return true;
+    if (want('tavern', 1 + Math.floor(houses / 12), { ok: amongHouses })) return true;
+    if (want('claypit', 1, { maxDist: 70 })) return true;
+    if (count(bot, 'claypit') && want('brickworks', 1)) return true;
+    if ((R.ore > 5 || R.coal > 5) && want('smithy', 1)) return true;
+    if (R.ore > 5 && R.coal < 5 && want('charcoal', 1)) return true;
+    if (want('pigfarm', 2)) return true;
+  }
+  if (G.GAME.tierReached >= 3) {
+    if (want('theater', 1 + Math.floor(houses / 15), { ok: amongHouses })) return true;
+    if (R.grapes > 5 && want('winery', 1)) return true;
+    if (R.gold > 5 && want('goldsmith', 1)) return true;
+    if (R.gold > 5 && R.coal < 5 && want('charcoal', 2)) return true;
+  }
+  if (G.GAME.tierReached >= 4 && G.totalNobles() >= G.MONUMENT_POP && want('monument', 1, { maxDist: 70 })) return true;
+  // More room once the houses are full
+  if (home.pop >= home.popCap - 1 && houses < 70 && act('house', { ok: houseSpotOk(G, home) })) return true;
   return false;
 }
 
@@ -167,52 +311,6 @@ function FOOD(G, home) {
   const made = G.FOOD_KEYS.reduce((s, k) => s + (home.flowIn?.[k] || 0), 0);
   const eaten = Math.max(0, home.pop - G.FREE_SETTLERS) * G.NEED_RATES.food;
   return { ok: made >= eaten * 1.15 || stockFood > 60, made, eaten, stock: stockFood };
-}
-
-function foundSheepColony(bot) {
-  const { G } = bot;
-  const isl = [...G.GAME.islands.values()]
-    .filter(i => i.discovered && !i.home && i.owner !== 'rival' && !i.pirate && i.fertility.includes('sheep') && i.size >= 30)
-    .sort((a, b) => Math.hypot(a.anchor[0] - bot.wh.x, a.anchor[1] - bot.wh.y) - Math.hypot(b.anchor[0] - bot.wh.x, b.anchor[1] - bot.wh.y))[0];
-  if (!isl) return false;
-  const pc = G.placementCost('warehouse', isl);
-  if (pc.block || G.GAME.coins < 400 || !G.hasCost(G.homeIsland().resources, G.FOUNDING_COST)) return false;
-  // The coast facing home keeps the route short
-  const spot = findSpot(G, 'warehouse', bot.wh.x, bot.wh.y, { island: isl, maxDist: 999 });
-  if (!spot || !G.placeBuilding(spot[0], spot[1], 'warehouse')) return false;
-  bot.colony = G.GAME.buildings[G.GAME.buildings.length - 1];
-  bot.log.push(`${G.GAME.tick}: colony on ${isl.name}`);
-  // A route: planks and fish out, wool and cloth back
-  const r = G.createRoute(bot.wh.id, bot.colony.id, []);
-  r.res = ['planks', 'fish', 'stone'];
-  r.keepRes = { planks: 40, fish: 30, stone: 20 };
-  r.back = ['wool', 'cloth'];
-  const ship = G.GAME.ships[0];
-  if (G.assignShip(ship, r.id)) {
-    // Too far for the jolle: build a kogge later
-    bot.needBiggerShip = true;
-  }
-  return true;
-}
-
-function colonyStep(bot) {
-  const { G } = bot;
-  const cisl = G.islandOfBuilding(bot.colony);
-  const home = G.homeIsland();
-  const act = (type, opts = {}) => tryBuild(bot, type, [bot.colony.x, bot.colony.y], { island: cisl, ...opts });
-  if (count(bot, 'house', cisl) < 2) return act('house', { ok: houseSpotOk(G, cisl) });
-  if (count(bot, 'fisher', cisl) < 1) return act('fisher');
-  if (count(bot, 'sheepfarm', cisl) < 1) return act('sheepfarm');
-  if (count(bot, 'weaver', cisl) < 1) return act('weaver');
-  if (cisl.pop >= cisl.popCap - 1 && count(bot, 'house', cisl) < 6 && act('house', { ok: houseSpotOk(G, cisl) })) return true;
-  // Wool that reaches home is woven there if the colony has no weaver yet
-  if (home.resources.wool > 10 && count(bot, 'weaver') < 1 && tryBuild(bot, 'weaver')) return true;
-  // Chapels go among the houses (their reach is 10 tiles)
-  const amongHouses = (x, y) => G.GAME.buildings.filter(h => G.DEFS[h.type].house && G.islandOfBuilding(h) === home && Math.hypot(h.x - x, h.y - y) < 7).length >= 3;
-  if (count(bot, 'chapel') < 1 + Math.floor(count(bot, 'house') / 12) && G.hasCost(home.resources, G.DEFS.chapel.cost)) {
-    return tryBuild(bot, 'chapel', null, { ok: amongHouses, maxDist: 50 });
-  }
-  return false;
 }
 
 // Plays `seconds` of game time and returns snapshots every `every` seconds
@@ -244,6 +342,9 @@ function snapshot(G, bot) {
     net: +(G.GAME.lastTax - G.GAME.lastUpkeep).toFixed(2),
     mood: Math.round(home.mood ?? 0),
     tier: G.GAME.tierReached,
+    borg: Math.round([...G.GAME.islands.values()].reduce((t, i) => t + G.popByLevel(i)[2], 0)),
+    købm: Math.round(G.totalMerchants()),
+    adel: Math.round(G.totalNobles()),
     quest: G.GAME.questIndex,
     buildings: G.GAME.buildings.length,
     islands: all.length,

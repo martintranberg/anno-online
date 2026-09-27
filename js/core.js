@@ -391,7 +391,7 @@ const tierName = (t) => HOUSE_LEVELS[t].name;
 
 // Tools that aren't buildings
 const TOOLS = {
-  demolish: { id: 'demolish', name: 'Riv ned', desc: 'Fjerner veje, broer og bygninger (50% af materialerne retur). På en kanal fyldes den op igen.' }
+  demolish: { id: 'demolish', name: 'Riv ned', desc: 'Fjerner veje, broer og bygninger (50% af materialerne retur), fylder kanaler op og fælder skov (træet kommer på lager). Træk for at rydde skov og veje over et større område.' }
 };
 const itemInfo = (id) => DEFS[id] || TOOLS[id];
 

@@ -67,6 +67,7 @@ test('contracts are offered, accepted, delivered for a good price or expire', ()
   G.contractsTick();
   assert.equal(G.GAME.contracts.length, 1, 'an offer arrives');
   const c = G.GAME.contracts[0];
+  if (c.rewardGoods) { c.rewardGoods = null; c.reward = Math.round(c.amount * G.PRICES[c.good] * 1.6 + 50); } // this test is about coins
   assert.ok(c.reward > c.amount * G.PRICES[c.good], 'pays more than the trader');
   assert.equal(G.acceptContract(c), null);
   home.resources[c.good] = 0;
@@ -318,4 +319,118 @@ test('help opens with F1 and every topic renders', () => {
     assert.equal(G.GAME.selectedInfo.topic, t.id);
     assert.ok(body.innerHTML.length > 200, `${t.name} has content`);
   }
+});
+
+test('the demolish tool fells forest (click or drag) and the wood goes to the warehouse', () => {
+  const { G, home } = setup();
+  revealAll(G);
+  home.resources.wood = 0;
+  const forest = G.GAME.grid.filter(t => t.island === home.id && G.canClearForest(t.x, t.y));
+  const t = forest[0];
+  const wood = Math.floor(t.wood);
+  G.demolishAt(t.x, t.y);
+  assert.equal(t.type, 'grass');
+  assert.ok(t.stumps, 'stumps left behind (it can grow back)');
+  assert.equal(home.resources.wood, Math.min(home.cap, wood));
+  // Dragging clears a row of forest but never touches buildings
+  const row = forest.slice(1).find(f => G.canClearForest(f.x + 1, f.y) && G.canClearForest(f.x + 2, f.y));
+  const buildings = G.GAME.buildings.length;
+  G.demolishPath([{ tx: row.x, ty: row.y }, { tx: row.x + 1, ty: row.y }, { tx: row.x + 2, ty: row.y }]);
+  assert.ok([0, 1, 2].every(d => G.tileAt(row.x + d, row.y).type === 'grass'));
+  assert.equal(G.GAME.buildings.length, buildings);
+  // Not on the rival's islands
+  const rt = G.GAME.grid.find(q => q.type === 'forest' && G.GAME.islands.get(q.island)?.owner === 'rival');
+  if (rt) assert.equal(G.canClearForest(rt.x, rt.y), false);
+});
+
+test('ships only load what the other end has room for, and say why they sail empty', () => {
+  const { G, wh, home } = setup();
+  G.spawnShip('jolle', wh);
+  revealAll(G);
+  const isl = [...G.GAME.islands.values()].find(i => !i.home && !i.pirate && i.owner !== 'rival' && i.size >= 40 &&
+    G.GAME.grid.some(t => t.island === i.id && G.checkPlacement(t.x, t.y, 'warehouse').ok));
+  const spot = G.GAME.grid.find(t => t.island === isl.id && G.checkPlacement(t.x, t.y, 'warehouse').ok);
+  G.placeBuilding(spot.x, spot.y, 'warehouse');
+  const colony = G.GAME.buildings[G.GAME.buildings.length - 1];
+  const cisl = G.islandOfBuilding(colony);
+  const ship = G.spawnShip('karavel', wh);
+  const r = G.createRoute(wh.id, colony.id, []);
+  r.res = ['planks', 'stone'];
+  home.resources.planks = 150;
+  home.resources.stone = 150;
+  cisl.resources.planks = cisl.cap - 10; // room for only 10 planks
+  cisl.resources.stone = cisl.cap;       // no room for stone
+  G.loadLeg(ship, r, home, r.res, {}, 'out', cisl);
+  assert.equal(ship.cargo.planks, 10, 'only what fits');
+  assert.equal(ship.cargo.stone, 0);
+  // A full hold that can't be unloaded anywhere is reported as such
+  const s2 = G.spawnShip('jolle', wh);
+  s2.cargo.stone = G.SHIP_TYPES.jolle.cargo;
+  G.loadLeg(s2, r, home, ['planks'], {}, 'out', cisl);
+  assert.match(r.lastLoad.out.note, /lastrummet er fuldt/);
+});
+
+test('the worker warning says what is missing and disappears once there are enough workers', () => {
+  const { game, G, wh, home } = setup();
+  for (let i = 0; i < 3; i++) build(G, 'house', wh.x, wh.y, { maxDist: 6 });
+  const mill = build(G, 'sawmill', wh.x, wh.y, { maxDist: 30 });
+  const fisher = build(G, 'fisher', wh.x, wh.y);
+  home.pop = 2; // enough for the fisher (food first), not for the sawmill (3)
+  G.tick();
+  assert.ok(fisher.staffed && !mill.staffed);
+  const warning = () => G.GAME.messages.find(m => m.key === `workers-${home.name}`);
+  assert.ok(warning(), 'warning shown');
+  assert.match(warning().msg, /mangler \d+ arbejder/);
+  assert.match(warning().msg, /savværk/);
+  assert.ok(home.workerShortage && home.workerShortage.missing >= 1);
+  G.openInfo('building', wh.id);
+  assert.match(game.el('info-body').innerHTML, /Mangler \d+ arbejder/);
+  // Enough people: the warning goes away on the next tick, without waiting for it to expire
+  home.pop = 18;
+  G.tick();
+  assert.ok(mill.staffed);
+  assert.equal(warning(), undefined, 'warning removed');
+  assert.equal(home.workerShortage, null);
+  assert.ok(G.GAME.messageLog.some(m => m.key === `workers-${home.name}`), 'still in the log');
+  // Hunger clears the same way
+  home.hunger = 0;
+  G.warnOnce(`hunger-${home.name}`, '🍽️ test sult', 60);
+  home.resources.fish = 150;
+  G.tick();
+  assert.ok(!G.GAME.messages.some(m => m.key === `hunger-${home.name}`));
+});
+
+test('contracts can pay in goods, delivered to the island that fills them', () => {
+  const { G, home } = setup();
+  // Offers over time: some pay in coins, some in goods (never the good that is delivered)
+  for (let i = 0; i < 40; i++) G.offerContract();
+  const inGoods = G.GAME.contracts.filter(c => c.rewardGoods);
+  assert.ok(inGoods.length > 5 && inGoods.length < 35, `a mix (${inGoods.length}/40 in goods)`);
+  for (const c of inGoods) {
+    const [k, n] = Object.entries(c.rewardGoods)[0];
+    assert.notEqual(k, c.good);
+    assert.ok(n >= 5);
+    assert.equal(c.reward, 0);
+  }
+  const c = inGoods[0];
+  const [k, n] = Object.entries(c.rewardGoods)[0];
+  G.acceptContract(c);
+  home.resources[c.good] = c.amount;
+  home.resources[k] = 0;
+  const coins = G.GAME.coins;
+  assert.equal(G.deliverContract(c, home), null);
+  assert.equal(home.resources[k], Math.min(n, home.cap));
+  assert.equal(G.GAME.coins, coins, 'no coins for a goods contract');
+  // Storage full: the rest is lost (and the message says so)
+  const d = inGoods[1];
+  const [k2] = Object.entries(d.rewardGoods)[0];
+  G.acceptContract(d);
+  home.resources[d.good] = Math.max(home.resources[d.good], d.amount);
+  home.resources[k2] = home.cap;
+  G.deliverContract(d, home);
+  assert.equal(home.resources[k2], home.cap);
+  assert.match(G.GAME.messages[0].msg, /gik tabt/);
+  // The contracts panel shows the goods
+  G.openInfo('contracts');
+  assert.ok(G.GAME.contracts.some(x => x.rewardGoods));
 });

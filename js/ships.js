@@ -196,10 +196,20 @@ function unloadShip(ship, isl) {
 }
 
 // keep: minimum stock per good that must stay on the island
-function loadShip(ship, isl, goods, keep = {}) {
+// Room for a good at the other end of the leg: its free storage (or what the rival still buys), less what's on board.
+// Ships only load what can be delivered, so they don't end up carrying the same goods back and forth.
+function roomAt(dest, k, ship) {
+  if (!dest) return Infinity;
+  const room = dest.owner === 'rival'
+    ? (rivalGoods(dest).includes(k) ? 0 : RIVAL_BUY_MAX - dest.resources[k])
+    : dest.cap - dest.resources[k];
+  return Math.max(0, room - ship.cargo[k]);
+}
+
+function loadShip(ship, isl, goods, keep = {}, dest = null) {
   if (isl.owner === 'rival') { buyFromRival(ship, isl, goods); return; }
   let free = SHIP_TYPES[ship.type].cargo - cargoTotal(ship);
-  const spare = (k) => isl.resources[k] - (keep[k] || 0);
+  const spare = (k) => Math.min(isl.resources[k] - (keep[k] || 0), roomAt(dest, k, ship));
   // Share the hold between the chosen goods; a second pass tops up with whatever is left
   for (let pass = 0; pass < 2 && free >= 1; pass++) {
     const wanted = goods.filter(k => spare(k) >= 1);
@@ -216,17 +226,25 @@ function loadShip(ship, isl, goods, keep = {}) {
 
 // Loads a leg and remembers what went on board. When nothing could be loaded, says why:
 // the minimum stock ("behold mindst") is at or above what the island has, or there's simply none.
-function loadLeg(ship, r, isl, goods, keep, leg) {
+function loadLeg(ship, r, isl, goods, keep, leg, dest) {
   const before = { ...ship.cargo };
-  loadShip(ship, isl, goods, keep);
+  loadShip(ship, isl, goods, keep, dest);
   const loaded = Object.fromEntries(RES_KEYS.filter(k => ship.cargo[k] > before[k]).map(k => [k, ship.cargo[k] - before[k]]));
   let note = '';
   if (goods.length && !Object.keys(loaded).length && !isWarship(ship) && isl.owner !== 'rival') {
+    const free = SHIP_TYPES[ship.type].cargo - cargoTotal(ship);
+    const stuck = RES_KEYS.filter(k => ship.cargo[k] >= 1);
+    const noRoom = goods.filter(k => isl.resources[k] - (keep[k] || 0) >= 1 && roomAt(dest, k, ship) < 1);
     const blocked = goods.filter(k => isl.resources[k] >= 1 && isl.resources[k] - (keep[k] || 0) < 1);
-    note = blocked.length
-      ? `minimumslageret er for højt (${blocked.map(k => `${RES_ICONS[k]} ${Math.floor(isl.resources[k])} ≤ ${keep[k]}`).join(', ')})`
-      : `${isl.name} har ingen af varerne på lager`;
-    warnOnce(`load-${ship.id}-${leg}`, `⛵ ${ship.name} sejlede tom fra ${isl.name}: ${note}`, 300);
+    note = free < 1
+      ? `lastrummet er fuldt af varer, der ikke kunne losses (${stuck.map(k => `${Math.floor(ship.cargo[k])} ${RES_ICONS[k]}`).join(' ')}) – lagrene i begge ender er fulde`
+      : noRoom.length === goods.filter(k => isl.resources[k] - (keep[k] || 0) >= 1).length && noRoom.length
+        ? `der er ikke plads til ${noRoom.map(k => RES_ICONS[k]).join('')} på ${dest?.name ?? 'modtageren'}`
+        : blocked.length
+          ? `minimumslageret er for højt (${blocked.map(k => `${RES_ICONS[k]} ${Math.floor(isl.resources[k])} ≤ ${keep[k]}`).join(', ')})`
+          : `${isl.name} har ingen af varerne på lager`;
+    // Nothing to deliver because the other end is full isn't a problem worth a warning
+    if (!noRoom.length || free < 1) warnOnce(`load-${ship.id}-${leg}`, `⛵ ${ship.name} sejlede tom fra ${isl.name}: ${note}`, 300);
   }
   r.lastLoad = r.lastLoad || {};
   r.lastLoad[leg] = { tick: GAME.tick, loaded, note, ship: ship.name };
@@ -239,12 +257,12 @@ function finishShipStop(ship) {
   if (ship.state === 'loading') {
     const isl = islandOfBuilding(from);
     unloadShip(ship, isl);          // return cargo from the last trip
-    loadLeg(ship, r, isl, r.res, r.keepRes, 'out');
+    loadLeg(ship, r, isl, r.res, r.keepRes, 'out', islandOfBuilding(to));
     sailTo(ship, to, 'toTo', r.waypoints);
   } else if (ship.state === 'unloading') {
     const isl = islandOfBuilding(to);
     unloadShip(ship, isl);
-    loadLeg(ship, r, isl, r.back, r.keepBack, 'back');
+    loadLeg(ship, r, isl, r.back, r.keepBack, 'back', islandOfBuilding(from));
     ship.trips++;
     sailTo(ship, from, 'toFrom', [...r.waypoints].reverse());
   }

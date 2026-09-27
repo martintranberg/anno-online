@@ -21,9 +21,9 @@ function messageLevel(msg, toast) {
 }
 GAME.messageLog = [];
 
-function notify(msg, toast = true, level = null) {
+function notify(msg, toast = true, level = null, key = null) {
   level = level || messageLevel(msg, toast);
-  const m = { msg, at: Date.now(), level, tick: GAME.tick };
+  const m = { msg, at: Date.now(), level, tick: GAME.tick, key };
   GAME.messages.unshift(m);
   GAME.messageLog.unshift(m);
   GAME.messageLog.length = Math.min(GAME.messageLog.length, 80);
@@ -33,11 +33,27 @@ function notify(msg, toast = true, level = null) {
 }
 
 // Same warning at most once per `cooldown` ticks
+// A warning is shown at most once per `cooldown` ticks while its problem lasts. When the problem is
+// solved, resolveWarning() takes it off the screen straight away (it stays in the message log).
 function warnOnce(key, msg, cooldown = 120) {
   const last = warnedAt.get(key);
-  if (last !== undefined && GAME.tick - last < cooldown) return;
+  if (last !== undefined && GAME.tick - last < cooldown) {
+    // Still going: keep the text on screen up to date (e.g. how many workers are missing)
+    const shown = GAME.messages.find(m => m.key === key);
+    if (shown && shown.msg !== msg) { shown.msg = msg; renderMessages(); }
+    return;
+  }
   warnedAt.set(key, GAME.tick);
-  notify(msg);
+  GAME.messages = GAME.messages.filter(m => m.key !== key);
+  notify(msg, true, null, key);
+}
+
+function resolveWarning(key) {
+  if (!warnedAt.has(key)) return;
+  warnedAt.delete(key);
+  const before = GAME.messages.length;
+  GAME.messages = GAME.messages.filter(m => m.key !== key);
+  if (GAME.messages.length !== before) renderMessages();
 }
 
 function renderMessages() {
@@ -80,7 +96,12 @@ function collectAlerts() {
       if (islandOfBuilding(b) !== isl || !DEFS[b.type].produces || b.paused) continue;
       if (REASONS[b.status] && !(b.status === 'nocoins' && GAME.bankrupt)) counts[b.status] = (counts[b.status] || 0) + 1;
     }
-    for (const [st, n] of Object.entries(counts)) add(1, PROD_STATUS[st]?.icon || '⚠', `${n} bygning${n > 1 ? 'er' : ''} på ${isl.name} ${REASONS[st]}`, production(isl));
+    for (const [st, n] of Object.entries(counts)) {
+      if (st === 'noworkers') continue; // covered by the shortage line below, which also counts services and shipyards
+      add(1, PROD_STATUS[st]?.icon || '⚠', `${n} bygning${n > 1 ? 'er' : ''} på ${isl.name} ${REASONS[st]}`, production(isl));
+    }
+    const ws = isl.workerShortage;
+    if (ws && isl.pop > 0) add(1, '👷', `${isl.name} mangler ${ws.missing} arbejder${ws.missing > 1 ? 'e' : ''} til ${ws.buildings} bygning${ws.buildings > 1 ? 'er' : ''}`, production(isl));
     const houses = GAME.buildings.filter(b => DEFS[b.type].house && islandOfBuilding(b) === isl && !houseLinked(b)).length;
     if (houses) add(1, '🛤️', `${houses} bolig${houses > 1 ? 'er' : ''} på ${isl.name} mangler vej`, production(isl));
   }
@@ -345,6 +366,7 @@ function renderInfo() {
       <div class="btns"><span>🪙 Skat</span><span class="seg">${Object.entries(TAX_LEVELS).map(([k, t]) =>
         `<button data-tax="${k}" class="${(isl.tax || 'normal') === k ? '' : 'alt'}" title="${Math.round(t.mult * 100)}% skat · tilfredshed ${t.mood >= 0 ? '+' : ''}${t.mood}">${t.name}</button>`).join('')}</span></div>
       <div class="row"><span>👷 Ledige arbejdere</span><b>${isl.workersFree ?? isl.pop}</b></div>
+      ${isl.workerShortage ? `<p class="err">👷 Mangler ${isl.workerShortage.missing} arbejder${isl.workerShortage.missing > 1 ? 'e' : ''} til ${isl.workerShortage.buildings} bygning${isl.workerShortage.buildings > 1 ? 'er' : ''} (${esc(isl.workerShortage.names.join(', '))}). En bygning får kun arbejdere, hvis der er nok til hele holdet.</p>` : ''}
       <div class="row"><span>Behov</span><b>${needs.map(n => needIcon(isl, n)).join('<br>')}</b></div>
       ${isl.hunger ? '<p class="err">Beboerne sulter! Byg fiskere eller farme.</p>' : ''}
       <div class="btns"><span>Boliger må opgradere</span><button data-act="upgrade" class="${allow ? '' : 'alt'}">${allow ? '✅ Ja' : '⛔ Nej'}</button></div>
@@ -539,7 +561,7 @@ function renderContracts(title, body, sel) {
     const time = c.accepted ? `⌛ ${Math.max(0, c.deadline - GAME.tick)} s tilbage` : `Tilbuddet gælder ${Math.max(0, CONTRACT_OFFER_TIME - (GAME.tick - c.offeredAt))} s`;
     return `<div class="ship-card">
       <div><b>${c.amount} ${RES_ICONS[c.good]} ${RESOURCES[c.good].name}</b> <small>${who}</small></div>
-      <div class="muted">Betaling ${c.reward} 🪙 (handelsmanden ville give ${c.amount * PRICES[c.good]}) · ${time}</div>
+      <div class="muted">Betaling: <b>${contractRewardText(c)}</b>${c.rewardGoods ? ' (til den ø, der leverer)' : ''} · handelsmanden ville give ${c.amount * PRICES[c.good]} 🪙 · ${time}</div>
       <div class="btns"><span class="${sources.length ? '' : 'muted'}">${c.accepted ? (sources.length ? `Kan leveres fra ${sources.map(i => esc(i.name)).join(', ')}` : 'Ingen havn har nok endnu') : ''}</span>
       ${c.accepted ? `<button data-deliver="${c.id}" ${sources.length ? '' : 'disabled'}>Lever</button>` : `<button data-accept="${c.id}">Accepter</button>`}</div></div>`;
   };

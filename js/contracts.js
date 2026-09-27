@@ -12,19 +12,44 @@ const contractGoods = () => {
 };
 const contractById = (id) => GAME.contracts.find(c => c.id === id);
 
+// Goods a contract can pay with: useful building materials and goods a tier ahead of where you are,
+// so a contract can be a shortcut to something you can't make yet
+const CONTRACT_PAY_GOODS = [
+  [], ['planks', 'stone', 'fish', 'pork', 'wool'], ['cloth', 'bricks', 'tools', 'beer'], ['wine', 'tools', 'bricks'], ['jewelry', 'wine']
+];
+const CONTRACT_GOODS_SHARE = 0.45; // share of offers that pay in goods instead of coins
+const CONTRACT_GOODS_BONUS = 1.25; // goods are worth this much more than the coins would be
+
 function offerContract() {
   const goods = contractGoods();
   const good = goods[Math.floor(Math.random() * goods.length)];
   const rivalOffers = GAME.rival && rivalRelation() >= 75 && Math.random() < 0.4;
   const amount = Math.round((20 + Math.random() * 40) * (1 + (GAME.tierReached - 1) * 0.5) / 5) * 5;
   GAME.contractCounter = (GAME.contractCounter || 0) + 1;
+  const value = Math.round(amount * PRICES[good] * (rivalOffers ? 1.9 : 1.6) + 50);
   const c = {
     id: `c_${GAME.contractCounter}`, from: rivalOffers ? 'rival' : 'trader', good, amount,
-    reward: Math.round(amount * PRICES[good] * (rivalOffers ? 1.9 : 1.6) + 50),
+    reward: value, rewardGoods: null,
     offeredAt: GAME.tick, accepted: false, deadline: null
   };
+  // Some contracts pay in goods: something other than what's delivered, up to a tier ahead
+  if (Math.random() < CONTRACT_GOODS_SHARE) {
+    const pay = CONTRACT_PAY_GOODS.slice(1, Math.min(CONTRACT_PAY_GOODS.length, GAME.tierReached + 2)).flat().filter(k => k !== good);
+    const k = pay[Math.floor(Math.random() * pay.length)];
+    const n = Math.max(5, Math.round(value * CONTRACT_GOODS_BONUS / PRICES[k] / 5) * 5);
+    c.rewardGoods = { [k]: Math.min(n, WAREHOUSE_CAP) };
+    c.reward = 0;
+  }
   GAME.contracts.push(c);
-  notify(`📜 Ny kontrakt fra ${c.from === 'rival' ? RIVAL_NAME : 'handelsmanden'}: ${c.amount} ${RES_ICONS[good]} ${RESOURCES[good].name.toLowerCase()} for ${c.reward} 🪙`, false);
+  notify(`📜 Ny kontrakt fra ${c.from === 'rival' ? RIVAL_NAME : 'handelsmanden'}: ${c.amount} ${RES_ICONS[good]} ${RESOURCES[good].name.toLowerCase()} for ${contractRewardText(c)}`, false);
+}
+
+// "320 🪙" or "30 🛠️ Værktøj"
+function contractRewardText(c) {
+  const parts = [];
+  if (c.reward) parts.push(`${c.reward} 🪙`);
+  for (const [k, n] of Object.entries(c.rewardGoods || {})) parts.push(`${n} ${RES_ICONS[k]} ${RESOURCES[k].name.toLowerCase()}`);
+  return parts.join(' + ');
 }
 
 function contractsTick() {
@@ -61,10 +86,17 @@ function deliverContract(c, isl = contractSources(c)[0]) {
   if (!isl) return `Ingen af dine havne har ${c.amount} ${RESOURCES[c.good].name.toLowerCase()}`;
   isl.resources[c.good] -= c.amount;
   GAME.coins += c.reward;
+  // Goods are delivered to the island that filled the contract (as much as its storage holds)
+  let lost = 0;
+  for (const [k, n] of Object.entries(c.rewardGoods || {})) {
+    const put = Math.min(n, Math.max(0, isl.cap - isl.resources[k]));
+    isl.resources[k] += put;
+    lost += n - put;
+  }
   GAME.contractsDone = (GAME.contractsDone || 0) + 1;
   GAME.contracts.splice(GAME.contracts.indexOf(c), 1);
   if (c.from === 'rival') changeRelation(6);
-  notify(`✅ Kontrakt leveret fra ${isl.name}: ${c.amount} ${RES_ICONS[c.good]} (+${c.reward} 🪙)`);
+  notify(`✅ Kontrakt leveret fra ${isl.name}: ${c.amount} ${RES_ICONS[c.good]} (+${contractRewardText(c)})${lost ? ` – ${lost} gik tabt, lageret var fuldt` : ''}`);
   sfx('coins');
   saveGame();
   return null;

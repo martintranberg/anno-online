@@ -248,6 +248,7 @@ function tick() {
       isl.harvested[def.harvest.key] = (isl.harvested[def.harvest.key] || 0) + made;
       depleteTile(src);
     }
+    if (def.harvest) resolveWarning(`depleted-${b.id}`);
     for (const [r, n] of inputs) { R[r] -= n; isl.flowOut[r] += n; }
     R[def.produces] = Math.min(isl.cap, R[def.produces] + made);
     isl.flowIn[def.produces] += made;
@@ -295,7 +296,7 @@ function tick() {
     }
     const fed = isl.needsMet.food;
     const hasFood = FOOD_KEYS.some(k => isl.resources[k] > 0);
-    if (fed) isl.hunger = 0;
+    if (fed) { isl.hunger = 0; resolveWarning(`hunger-${isl.name}`); }
     else {
       if (++isl.hunger === 1 && isl.pop > 0) warnOnce(`hunger-${isl.name}`, `🍽️ Beboerne på ${isl.name} sulter!`, 60);
       if (isl.hunger % STARVE_TICKS === 0 && isl.pop > 0) isl.pop--;
@@ -315,6 +316,7 @@ function tick() {
       if (GAME.tick % 4 === 0) isl.pop--;
       warnOnce(`mood-${isl.name}`, `😠 Beboerne på ${isl.name} er utilfredse og flytter! Sænk skatten eller dæk deres behov.`, 120);
     } else if (fed && hasFood && isl.pop < isl.popCap && (mood >= 45 || GAME.tick % 2 === 0)) {
+      resolveWarning(`mood-${isl.name}`);
       const bonus = mood >= 75 ? 1 : 0;
       // Settlers arrive gradually: about one every other second, a little faster on big islands
       isl.pop = Math.min(isl.popCap, isl.pop + (GAME.tick % 2 === 0 ? 1 : 0) + bonus + Math.floor(isl.popCap / 150));
@@ -325,13 +327,20 @@ function tick() {
       tax += byL[L] * HOUSE_LEVELS[L].tax * (happy ? 1 : 0.5) * taxMult(isl);
     }
 
-    if (isl.pop > 0 && GAME.buildings.some(b => DEFS[b.type].workers && !b.staffed && !b.paused && islandOfBuilding(b) === isl)) {
-      warnOnce(`workers-${isl.name}`, `👷 Der mangler arbejdere på ${isl.name} – byg flere boliger`, 180);
-    }
+    if (mood >= 30) resolveWarning(`mood-${isl.name}`);
+
+    // Worker shortage: which buildings stand empty and how many workers they would need beyond those free
+    const short = GAME.buildings.filter(b => DEFS[b.type].workers && !b.staffed && !b.paused && islandOfBuilding(b) === isl);
+    const missing = short.reduce((s, b) => s + workersOf(b), 0) - (isl.workersFree || 0);
+    isl.workerShortage = short.length ? { buildings: short.length, missing: Math.max(1, missing), names: [...new Set(short.map(b => DEFS[b.type].name.toLowerCase()))] } : null;
+    if (isl.pop > 0 && short.length) {
+      const s = isl.workerShortage;
+      warnOnce(`workers-${isl.name}`, `👷 ${isl.name} mangler ${s.missing} arbejder${s.missing > 1 ? 'e' : ''} til ${s.names.slice(0, 3).join(', ')}${s.names.length > 3 ? ' m.fl.' : ''} (${isl.workersFree} ledige) – byg flere boliger`, 180);
+    } else resolveWarning(`workers-${isl.name}`);
     for (const k of RES_KEYS) {
       if (isl.cap && isl.flowIn[k] > 0 && isl.resources[k] >= isl.cap) {
         warnOnce(`full-${isl.name}-${k}`, `📦 Lageret på ${isl.name} er fuldt af ${RESOURCES[k].name.toLowerCase()}`, 240);
-      }
+      } else if (isl.resources[k] < isl.cap - 1) resolveWarning(`full-${isl.name}-${k}`);
     }
   }
 
@@ -382,7 +391,7 @@ function updateBankruptcy(net) {
     updateIslandStats();
   } else if (!GAME.bankrupt && net < 0 && GAME.coins / -net < 120) {
     warnOnce('lowcoins', `⚠ Mønterne slipper op om ca. ${Math.max(1, Math.round(GAME.coins / -net))} sekunder! Sæt skatten op, sæt bygninger på pause eller sælg varer.`, 90);
-  }
+  } else resolveWarning('lowcoins');
 }
 
 // One house per island may upgrade when the island's houses are (nearly) full, the residents are content,
