@@ -85,11 +85,16 @@ function step(bot) {
     if (wc && act('forester', [wc.x, wc.y], { maxDist: 5 })) return true;
   }
   // A woodcutter or stonecutter that has emptied its area is moved to fresh forest / rock
-  const empty = G.GAME.buildings.find(b => G.DEFS[b.type].harvest && b.status === 'noresource' && G.islandOfBuilding(b) === home);
-  if (empty && relocate(bot, empty)) return true;
+  const empty = G.GAME.buildings.find(b => G.DEFS[b.type].harvest && b.status === 'noresource');
+  if (empty && (bot.relocAt?.[empty.id] || 0) <= G.GAME.tick) {
+    if (relocate(bot, empty)) return true;
+    (bot.relocAt ||= {})[empty.id] = G.GAME.tick + 300; // nowhere better right now: try again later
+  }
   // Short of planks with coins to spare: ask the trader for some
   home.trade = home.trade || {};
   home.trade.planks = { buy: G.GAME.coins > 500 && R.planks < 40 ? 80 : null };
+  // Later on, buy the upgrade materials the islands can't make (yet)
+  if (G.GAME.tierReached >= 2) home.trade.tools = { buy: G.GAME.coins > 2000 && R.tools < 30 ? 60 : null };
 
   // 2. Food before growth
   if (!food.ok && count(bot, 'fisher') < 2 + home.pop / 25 && act('fisher', null, { maxDist: 45 })) return true;
@@ -158,9 +163,16 @@ function step(bot) {
 }
 
 // Colonies the bot founds, in order. `builds` are placed on the colony, `back` is shipped home.
+// Residents of Borgere and up (they want meat and cloth), and of Købmænd and up (beer)
+const upperPop = (G) => [...G.GAME.islands.values()].reduce((s, i) => { const p = G.popByLevel(i); return s + p[2] + p[3] + p[4]; }, 0);
+// How many of a producer are needed for a demand per second, with a margin
+const needed = (demand, rate) => Math.max(1, Math.ceil(demand * 1.3 / rate));
+
 const COLONY_PLANS = [
-  { key: 'sheep',  tier: 1, pick: (i) => i.fertility.includes('sheep'),  builds: ['sheepfarm', 'weaver'], back: ['wool', 'cloth'] },
-  { key: 'hops',   tier: 2, pick: (i) => i.fertility.includes('hops'),   builds: ['hopfarm'], back: ['hops'] },
+  { key: 'sheep',  tier: 1, pick: (i) => i.fertility.includes('sheep'),  builds: ['sheepfarm', 'weaver'], back: ['wool', 'cloth'],
+    scale: (G) => needed(upperPop(G) * G.NEED_RATES.cloth, G.DEFS.weaver.rate) },
+  { key: 'hops',   tier: 2, pick: (i) => i.fertility.includes('hops'),   builds: ['hopfarm'], back: ['hops'],
+    scale: (G) => needed((G.totalMerchants() + G.totalNobles()) * G.NEED_RATES.beer, G.DEFS.brewery.rate) },
   { key: 'ore',    tier: 2, pick: (i) => i.ore,                          builds: ['mine', 'woodcutter', 'charcoal'], back: ['ore', 'coal'] },
   { key: 'grapes', tier: 3, pick: (i) => i.fertility.includes('grapes'), builds: ['vineyard', 'winery'], back: ['grapes', 'wine'] },
   { key: 'gold',   tier: 3, pick: (i) => i.gold,                         builds: ['goldmine'], back: ['gold'] }
@@ -175,7 +187,22 @@ function shipsStep(bot) {
   if (first && !bot.explored && first.state === 'idle') { first.state = 'autoExplore'; G.autoExplore(first); bot.explored = true; return true; }
   assignShips(bot);
   if (yard.queue || G.GAME.coins < 400) return false;
+  // Keep one ship exploring while there's sea left to find and a colony plan without a known island
+  const explorer = G.GAME.ships.find(s => s.id === bot.explorerId);
+  const unknownLeft = G.GAME.seen.reduce((a, b) => a + b, 0) < G.GAME.seen.length * 0.9;
+  if (!explorer && unknownLeft && bot.wantsIsland && G.hasCost(G.homeIsland().resources, G.SHIP_TYPES.jolle.cost) && G.startShipBuild(yard, 'jolle') === null) {
+    bot.explorerPending = true;
+    bot.log.push(`${G.GAME.tick}: ship jolle (explorer)`);
+    return true;
+  }
+  // Busy routes (the last trip home came back full) get another ship, up to three per route
+  const busy = G.GAME.routes.find(r => {
+    const ships = G.GAME.ships.filter(s => s.routeId === r.id);
+    const back = r.lastLoad?.back;
+    return ships.length && ships.length < 3 && back && Object.values(back.loaded).reduce((a, b) => a + b, 0) >= G.SHIP_TYPES[ships[0].type].cargo * 0.9;
+  });
   const unserved = G.GAME.routes.filter(r => !G.GAME.ships.some(s => s.routeId === r.id));
+  if (busy) unserved.push(busy);
   if (G.GAME.ships.length && !unserved.length) return false;
   const len = unserved[0] ? (G.routePath(unserved[0])?.length ?? 999) : 0;
   const type = ['jolle', 'kogge', 'karavel'].find(t => G.SHIP_TYPES[t].range >= len && G.SHIP_TYPES[t].tier <= G.GAME.tierReached &&
@@ -188,9 +215,18 @@ function shipsStep(bot) {
 // Idle ships that aren't exploring take unserved routes they can reach
 function assignShips(bot) {
   const { G } = bot;
+  // A newly launched explorer goes exploring
+  if (bot.explorerPending) {
+    const s = G.GAME.ships.find(x => x.state === 'idle' && !x.routeId && !G.isWarship(x));
+    if (s) { bot.explorerPending = false; bot.explorerId = s.id; s.state = 'autoExplore'; G.autoExplore(s); }
+  }
+  const free = (x) => x.id !== bot.explorerId && (x.state === 'idle' || x.state === 'autoExplore') && !x.routeId && !G.isWarship(x);
   for (const r of G.GAME.routes) {
-    if (G.GAME.ships.some(s => s.routeId === r.id)) continue;
-    const s = G.GAME.ships.find(x => (x.state === 'idle' || x.state === 'autoExplore') && !x.routeId && !G.isWarship(x) && G.assignShip(x, r.id) === null);
+    const n = G.GAME.ships.filter(s => s.routeId === r.id).length;
+    const back = r.lastLoad?.back;
+    const full = n && back && Object.values(back.loaded).reduce((a, b) => a + b, 0) >= 0.9 * G.SHIP_TYPES[G.GAME.ships.find(s => s.routeId === r.id).type].cargo;
+    if (n && !(full && n < 3)) continue;
+    const s = G.GAME.ships.find(x => free(x) && G.assignShip(x, r.id) === null);
     if (s) bot.log.push(`${G.GAME.tick}: ${s.name} sails ${G.routeName(r)}`);
   }
 }
@@ -199,14 +235,16 @@ function foundColony(bot, plan) {
   const { G } = bot;
   const home = G.homeIsland();
   const isl = [...G.GAME.islands.values()]
-    .filter(i => i.discovered && !i.home && i.owner !== 'rival' && !i.pirate && !i.warehouses && i.size >= 30 && plan.pick(i))
+    .filter(i => i.discovered && !i.home && i.owner !== 'rival' && !i.pirate && !i.warehouses && i.size >= (plan.key === 'gold' || plan.key === 'ore' ? 12 : 30) && plan.pick(i))
     .sort((a, b) => Math.hypot(a.anchor[0] - bot.wh.x, a.anchor[1] - bot.wh.y) - Math.hypot(b.anchor[0] - bot.wh.x, b.anchor[1] - bot.wh.y))[0];
   if (!isl) {
-    // Nothing suitable known yet: send an idle ship exploring
-    const s = G.GAME.ships.find(x => x.state === 'idle' && !x.routeId);
+    // Nothing suitable known yet: keep exploring (shipsStep builds an explorer if needed)
+    bot.wantsIsland = plan.key;
+    const s = G.GAME.ships.find(x => x.id === bot.explorerId && x.state === 'idle');
     if (s) { s.state = 'autoExplore'; G.autoExplore(s); }
     return false;
   }
+  bot.wantsIsland = null;
   const pc = G.placementCost('warehouse', isl);
   if (pc.block || G.GAME.coins < 400 || !G.hasCost(home.resources, G.FOUNDING_COST)) return false;
   // The coast facing home keeps the route short
@@ -231,11 +269,15 @@ function colonyStep(bot, plan, col) {
   const act = (type, opts = {}) => tryBuild(bot, type, [col.wh.x, col.wh.y], { island: cisl, maxDist: 40, ...opts });
   if (count(bot, 'house', cisl) < 2) return act('house', { ok: houseSpotOk(G, cisl) }) || clearRoom(bot, col.wh);
   if (count(bot, 'fisher', cisl) < 1 + Math.floor(cisl.pop / 30) && act('fisher')) return true;
+  // The colony's producers, more of them as demand at home grows
+  const target = Math.min(6, plan.scale ? plan.scale(G) : 1);
   for (const type of plan.builds) {
-    if (count(bot, type, cisl) >= 1) continue;
+    if (count(bot, type, cisl) >= target) continue;
     const ok = G.DEFS[type].harvest ? (x, y) => G.harvestLeft({ type, x, y }) > 50 : undefined;
     if (act(type, { ok })) return true;
+    if (count(bot, type, cisl) === 0 && clearRoom(bot, col.wh, () => true, 11)) return true; // no room: fell forest
   }
+  if (count(bot, 'house', cisl) < 2 + target * 2 && cisl.pop >= cisl.popCap - 1 && act('house', { ok: houseSpotOk(G, cisl) })) return true;
   if (cisl.pop >= cisl.popCap - 1 && count(bot, 'house', cisl) < 8 && act('house', { ok: houseSpotOk(G, cisl) })) return true;
   // Wooded islands: fell some forest near the warehouse to make room (at most every few minutes)
   return clearRoom(bot, col.wh);
@@ -262,21 +304,41 @@ function lateGameStep(bot) {
   const amongHouses = (x, y) => G.GAME.buildings.filter(h => G.DEFS[h.type].house && G.islandOfBuilding(h) === home && Math.hypot(h.x - x, h.y - y) < 7).length >= 3;
   const act = (type, opts) => tryBuild(bot, type, null, { maxDist: 50, ...opts });
   const want = (type, n, opts) => count(bot, type) < n && act(type, opts);
+  // Taverns and theatres go where the higher tiers live, or they never reach them
+  const nearLevel = (L) => (x, y) => G.GAME.buildings.some(h => G.DEFS[h.type].house && (h.level || 1) >= L && G.islandOfBuilding(h) === home && !h.cov?.[L >= 3 ? 'theater' : 'tavern'] && Math.hypot(h.x - x, h.y - y) < 8);
+  const unservedAt = (L, svc) => G.GAME.buildings.some(h => G.DEFS[h.type].house && (h.level || 1) >= L && G.islandOfBuilding(h) === home && !h.cov?.[svc]);
   // Wool that reaches home is woven here if the colony has no weaver
   if (R.wool > 10 && want('weaver', 1)) return true;
   if (G.hasCost(R, G.DEFS.chapel.cost) && want('chapel', 1 + Math.floor(houses / 12), { ok: amongHouses })) return true;
+  // Pioneer houses outside every chapel's reach get one of their own (they can't become Borgere without it)
+  const noChapel = (x, y) => G.GAME.buildings.some(h => G.DEFS[h.type].house && G.islandOfBuilding(h) === home && !h.cov?.chapel && Math.hypot(h.x - x, h.y - y) < 8);
+  if (G.GAME.buildings.some(h => G.DEFS[h.type].house && G.islandOfBuilding(h) === home && !h.cov?.chapel) && count(bot, 'chapel') < 10 &&
+      G.hasCost(R, G.DEFS.chapel.cost)) {
+    if (act('chapel', { ok: noChapel })) return true;
+    if (clearRoom(bot, bot.wh, (t) => noChapel(t.x, t.y), 50)) return true;
+  }
   if (G.GAME.tierReached >= 2) {
-    if (want('grainfarm', 2, { maxDist: 70 })) return true;
+    // Meat for everyone from Borgere up: pig farms, and grain farms to feed them
+    const pigs = needed(upperPop(G) * G.NEED_RATES.meat, G.DEFS.pigfarm.rate);
+    if (want('grainfarm', Math.ceil(pigs * G.DEFS.pigfarm.consumes.grain / G.DEFS.grainfarm.rate) + 1, { maxDist: 70 })) return true;
+    if (want('pigfarm', pigs)) return true;
     if (R.hops > 5 && want('brewery', 1)) return true;
-    if (want('tavern', 1 + Math.floor(houses / 12), { ok: amongHouses })) return true;
+    if (unservedAt(2, 'tavern') && count(bot, 'tavern') < 8) {
+      if (act('tavern', { ok: nearLevel(2) })) return true;
+      // No room among the Borgere: fell forest there
+      if (clearRoom(bot, bot.wh, (t) => nearLevel(2)(t.x, t.y), 50)) return true;
+    }
     if (want('claypit', 1, { maxDist: 70 })) return true;
     if (count(bot, 'claypit') && want('brickworks', 1)) return true;
     if ((R.ore > 5 || R.coal > 5) && want('smithy', 1)) return true;
     if (R.ore > 5 && R.coal < 5 && want('charcoal', 1)) return true;
-    if (want('pigfarm', 2)) return true;
+
   }
   if (G.GAME.tierReached >= 3) {
-    if (want('theater', 1 + Math.floor(houses / 15), { ok: amongHouses })) return true;
+    if (unservedAt(3, 'theater') && count(bot, 'theater') < 6) {
+      if (act('theater', { ok: nearLevel(3) })) return true;
+      if (clearRoom(bot, bot.wh, (t) => nearLevel(3)(t.x, t.y), 50)) return true;
+    }
     if (R.grapes > 5 && want('winery', 1)) return true;
     if (R.gold > 5 && want('goldsmith', 1)) return true;
     if (R.gold > 5 && R.coal < 5 && want('charcoal', 2)) return true;
@@ -360,4 +422,35 @@ function snapshot(G, bot) {
   };
 }
 
-module.exports = { simulate, createBot, step };
+// Why the home island's houses don't reach the next tier: every condition upgradeHouses() checks, per level
+function diagnoseUpgrade(G) {
+  const home = G.homeIsland();
+  const out = [];
+  const houses = G.GAME.buildings.filter(b => G.DEFS[b.type].house && G.islandOfBuilding(b) === home);
+  if (home.pop < home.popCap * 0.9) out.push(`boligerne er ikke fulde (${home.pop}/${home.popCap})`);
+  if ((home.mood ?? 60) < 50) {
+    const f = G.moodFactors(home, G.popByLevel(home)).map(([k, v]) => `${k} ${v > 0 ? '+' : ''}${v}`).join(', ');
+    out.push(`tilfredshed ${Math.round(home.mood)} % (skal være 50): ${f}`);
+  }
+  const levels = [...new Set(houses.map(h => h.level || 1))].sort();
+  for (const L of levels) {
+    if (L >= G.MAX_LEVEL) continue;
+    const at = houses.filter(h => (h.level || 1) === L);
+    const cur = G.HOUSE_LEVELS[L], next = G.HOUSE_LEVELS[L + 1];
+    const reasons = [];
+    const needsNow = cur.needs.filter(n => !home.needsMet[n]);
+    if (needsNow.length) reasons.push(`mangler nu: ${needsNow.join(', ')}`);
+    const needsNext = next.needs.filter(n => !G.needAvailable(home, n));
+    if (needsNext.length) reasons.push(`ikke til rådighed: ${needsNext.join(', ')}`);
+    const svc = next.services.filter(s => !at.some(h => h.cov?.[s]));
+    if (svc.length) reasons.push(`ingen bolig i rækkevidde af: ${svc.join(', ')}`);
+    const both = at.filter(h => G.servicesMet(h, L) && G.servicesMet(h, L + 1)).length;
+    if (!svc.length && !both) reasons.push('ingen bolig har alle offentlige bygninger på én gang');
+    const cost = Object.entries(cur.upgrade || {}).filter(([r, n]) => (r === 'coins' ? G.GAME.coins : home.resources[r]) < n);
+    if (cost.length) reasons.push(`materialer mangler: ${cost.map(([r, n]) => `${r} ${Math.floor(r === 'coins' ? G.GAME.coins : home.resources[r])}/${n}`).join(', ')}`);
+    out.push(`${cur.name} (${at.length}) → ${next.name}: ${reasons.join('; ') || 'alt er opfyldt'}`);
+  }
+  return out;
+}
+
+module.exports = { simulate, createBot, step, diagnoseUpgrade };

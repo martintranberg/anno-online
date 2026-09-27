@@ -4,7 +4,7 @@
 //   node tests/sim-report.js                      40 minutes, seeds 1-3, normal difficulty
 //   node tests/sim-report.js --minutes 60 --seeds 5 --difficulty hard --size large
 //
-const { simulate } = require('./bot');
+const { simulate, diagnoseUpgrade } = require('./bot');
 
 const arg = (name, def) => {
   const i = process.argv.indexOf(`--${name}`);
@@ -22,7 +22,12 @@ for (let seed = 1; seed <= seeds; seed++) {
   const res = simulate({ seed, settings: { difficulty, size }, seconds: minutes * 60, every: 300 });
   console.log(`Kort ${seed} (${((Date.now() - t0) / 1000).toFixed(1)} s realtid)`);
   console.table(res.rows);
-  console.log(`  Sult i ${res.hungryTicks} s · laveste mønter ${Math.round(res.minCoins)} · sidste handlinger: ${res.bot.log.slice(-4).join(' | ')}\n`);
+  console.log(`  Sult i ${res.hungryTicks} s · laveste mønter ${Math.round(res.minCoins)} · sidste handlinger: ${res.bot.log.slice(-4).join(' | ')}`);
+  const G = res.G, home = G.homeIsland();
+  console.log(`  Opgave: ${G.QUESTS[G.GAME.questIndex]?.text || 'alle fuldført'}`);
+  console.log(`  Kolonier: ${Object.keys(res.bot.colonies).join(', ') || 'ingen'} · lager: ${Object.entries(home.resources).filter(([, v]) => v >= 1).map(([k, v]) => `${k} ${Math.floor(v)}`).join(', ')}`);
+  for (const line of diagnoseUpgrade(G)) console.log(`  Opgradering: ${line}`);
+  console.log('');
   finals.push({ seed, ...res.final, hungerSec: res.hungryTicks, minCoins: Math.round(res.minCoins) });
 }
 console.log('Samlet:');

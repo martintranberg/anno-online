@@ -531,8 +531,18 @@ const PAN_KEYS = {
 };
 const keysDown = new Set();
 
+// True while the player types in a field (sell amounts, names, ...): shortcuts must not fire then
+const isTyping = (e) => {
+  const t = e.target;
+  return !!t && (t.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(t.tagName));
+};
+
 window.addEventListener('keydown', (e) => {
   const k = e.key.toLowerCase();
+  if (isTyping(e)) {
+    if (k === 'escape') e.target.blur();
+    return;
+  }
   if (k === 'escape' && GAME.phase === 'play') {
     // Esc closes the game menu, then drops the tool, then closes the info panel, then the build panel
     const gm = document.getElementById('game-menu');

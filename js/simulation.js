@@ -20,6 +20,20 @@ function consume(isl, keys, amount) {
 }
 
 const inStock = (isl, need) => NEED_INFO[need].keys.some(k => isl.resources[k] >= 1);
+// A need the next house level has is available for upgrades when the island makes enough of it for today's
+// consumers plus the upgraded house (meat is often eaten as fast as it's made, so the stock sits at 0), or
+// when the stock lasts at least a minute for them. Otherwise houses would upgrade faster than the supply,
+// run out and lose their residents again.
+const UPGRADE_STOCK_SECONDS = 60;
+function needAvailable(isl, need) {
+  const consumers = popByLevel(isl).reduce((s, p, L) => s + (L >= NEED_FROM[need] ? p : 0), 0);
+  const perSecond = NEED_RATES[need] * (consumers + HOUSE_LEVELS[NEED_FROM[need]].cap);
+  const made = NEED_INFO[need].keys.reduce((s, k) => s + (isl.flowIn?.[k] || 0), 0);
+  // Goods also counted as food are shared with everyone else's meals, so only a met need counts as covered
+  if (made >= perSecond * 0.95 && isl.needsMet[need] !== false) return true;
+  const stock = NEED_INFO[need].keys.reduce((s, k) => s + isl.resources[k], 0);
+  return stock >= Math.max(1, perSecond * UPGRADE_STOCK_SECONDS);
+}
 
 // ----- Natural resources -----
 let rocksDirty = false; // set when quarrying visibly changes a rock tile; mountains are rebuilt once per tick
@@ -403,7 +417,7 @@ function upgradeHouses(islands) {
     const b = GAME.buildings.find(h => DEFS[h.type].house && islandOfBuilding(h) === isl && (h.level || 1) < MAX_LEVEL &&
       !h.lockLevel && !h.fire &&
       HOUSE_LEVELS[h.level || 1].needs.every(n => isl.needsMet[n]) && servicesMet(h, h.level || 1) &&
-      HOUSE_LEVELS[(h.level || 1) + 1].needs.every(n => inStock(isl, n)) && servicesMet(h, (h.level || 1) + 1) &&
+      HOUSE_LEVELS[(h.level || 1) + 1].needs.every(n => needAvailable(isl, n)) && servicesMet(h, (h.level || 1) + 1) &&
       hasCost(isl.resources, HOUSE_LEVELS[h.level || 1].upgrade));
     if (!b) continue;
     payCost(isl.resources, HOUSE_LEVELS[b.level].upgrade);

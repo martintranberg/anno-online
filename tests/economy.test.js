@@ -259,3 +259,23 @@ test('production overview shows every building, its output and the island resour
   // Survives a save and reload
   G.saveGame();
 });
+
+test('a need counts as available for upgrades when it is produced and fully met, even with an empty stock', () => {
+  const { G, home } = setup();
+  home.resources.pork = 0;
+  home.resources.beef = 0;
+  home.flowIn = G.emptyStock();
+  home.needsMet.meat = true;
+  assert.equal(G.needAvailable(home, 'meat'), false, 'nothing made, nothing in stock');
+  home.flowIn.pork = 0.4;
+  assert.equal(G.needAvailable(home, 'meat'), true, 'made and eaten as fast as it comes');
+  home.flowIn.pork = 0.01;
+  assert.equal(G.needAvailable(home, 'meat'), false, 'a trickle that could not feed another house');
+  home.flowIn.pork = 0.4;
+  home.needsMet.meat = false;
+  assert.equal(G.needAvailable(home, 'meat'), false, 'made but not enough for those who want it already');
+  home.resources.pork = 1;
+  assert.equal(G.needAvailable(home, 'meat'), false, 'a few units that would be gone in seconds do not count');
+  home.resources.pork = 150;
+  assert.equal(G.needAvailable(home, 'meat'), true, 'enough in stock for a while');
+});

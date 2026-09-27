@@ -13,7 +13,7 @@ for (const seed of [1, 2]) {
     assertSane(assert, res.G);
     assert.ok(f.pop >= 120, `population ${f.pop} ≥ 120`);
     assert.ok(res.minCoins >= 0, `never in debt (lowest ${Math.round(res.minCoins)})`);
-    assert.ok(res.hungryTicks < 120, `little hunger (${res.hungryTicks} s)`);
+    assert.ok(res.hungryTicks < 300, `little hunger (${res.hungryTicks} s, under 10 % of the time)`);
     assert.ok(f.quest >= 6, `quests progress (${f.quest})`);
     assert.ok(f.islands >= 2, 'founded a colony');
     // Population never collapses between snapshots

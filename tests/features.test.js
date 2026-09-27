@@ -321,6 +321,20 @@ test('help opens with F1 and every topic renders', () => {
   }
 });
 
+test('typing numbers in a field does not trigger the build shortcuts', () => {
+  const { game, G } = setup();
+  const input = G.document.createElement('input');
+  let blurred = false;
+  input.blur = () => { blurred = true; };
+  const before = game.api.openCategory;
+  game.fireWindow('keydown', { key: '2', target: input });
+  assert.equal(game.api.openCategory, before, 'the build menu is untouched while typing');
+  game.fireWindow('keydown', { key: 'Escape', target: input });
+  assert.ok(blurred, 'Esc leaves the field');
+  game.fireWindow('keydown', { key: '2', target: G.document.body });
+  assert.equal(game.api.openCategory, G.CATEGORIES[1].id, 'the shortcut still works outside fields');
+});
+
 test('the demolish tool fells forest (click or drag) and the wood goes to the warehouse', () => {
   const { G, home } = setup();
   revealAll(G);
@@ -433,4 +447,31 @@ test('contracts can pay in goods, delivered to the island that fills them', () =
   // The contracts panel shows the goods
   G.openInfo('contracts');
   assert.ok(G.GAME.contracts.some(x => x.rewardGoods));
+});
+
+test('the rival never takes the last free island with iron ore, gold, grapes, sheep or hops', () => {
+  const { G } = setup();
+  revealAll(G);
+  const ore = [...G.GAME.islands.values()].filter(i => i.ore);
+  assert.ok(ore.length >= 1);
+  // Give the rival every ore island but one
+  for (const isl of ore.slice(1)) isl.owner = 'rival';
+  const last = ore[0];
+  for (let i = 0; i < 15; i++) {
+    G.rivalExpand(G.rivalIslands());
+    if (G.GAME.rival.plan) { G.GAME.rival.plan.at = G.GAME.tick; G.carryOutPlan(G.GAME.rival); }
+  }
+  assert.notEqual(last.owner, 'rival', `${last.name} stays free`);
+  assert.equal(G.planIsland(G.GAME.rival.plan), null);
+});
+
+test('the rival never starts on the only island with some resource', () => {
+  for (let seed = 1; seed <= 6; seed++) {
+    const { G } = newGame({ size: 'medium' }, seed);
+    placeFirstWarehouse(G);
+    const home = G.rivalIslands()[0];
+    const all = [...G.GAME.islands.values()];
+    for (const k of ['ore', 'gold']) if (home[k]) assert.ok(all.filter(i => i[k]).length > 1, `map ${seed}: ${k}`);
+    for (const f of ['grapes', 'sheep', 'hops']) if (home.fertility.includes(f)) assert.ok(all.filter(i => i.fertility.includes(f)).length > 1, `map ${seed}: ${f}`);
+  }
 });

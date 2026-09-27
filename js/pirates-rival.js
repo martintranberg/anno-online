@@ -348,11 +348,18 @@ function rivalSettle(isl, size = 4) {
 }
 
 // The rival's home: a big island far from yours
+// Every resource must stay within the player's reach: the rival never takes the last island
+// (not already theirs) with iron ore, gold, grapes, sheep or hops
+const RESOURCE_SOURCES = [(i) => i.ore, (i) => i.gold, (i) => i.fertility.includes('grapes'), (i) => i.fertility.includes('sheep'), (i) => i.fertility.includes('hops')];
+const lastSourceIsland = (isl) => RESOURCE_SOURCES.some(has => has(isl) &&
+  [...GAME.islands.values()].filter(o => has(o) && o.owner !== 'rival' && !o.pirate).length <= 1);
+
 function initRival() {
   GAME.rival = { buildings: [], counter: 0, next: diff().rivalEvery, growIn: 60, ship: null, relation: RIVAL_RELATION_START, plan: null };
   const start = [...GAME.islands.values()].find(i => i.start) || homeIsland();
   const sx = start.anchor[0], sy = start.anchor[1];
-  const cands = [...GAME.islands.values()].filter(i => i !== start && !i.pirate && !i.warehouses && i.size >= 40)
+  // Never the only island with some resource (the far big island often holds the gold)
+  const cands = [...GAME.islands.values()].filter(i => i !== start && !i.pirate && !i.warehouses && i.size >= 40 && !lastSourceIsland(i))
     .sort((a, b) => Math.hypot(b.anchor[0] - sx, b.anchor[1] - sy) - Math.hypot(a.anchor[0] - sx, a.anchor[1] - sy));
   for (const isl of cands) {
     if (rivalSettle(isl, 7)) { isl.name = 'Rødhavn'; break; }
@@ -391,7 +398,9 @@ function rivalExpand(mine) {
   const fromStart = (i) => Math.hypot(i.anchor[0] - start.anchor[0], i.anchor[1] - start.anchor[1]);
   const reserved = new Set([...GAME.islands.values()].filter(i => !i.start && !i.pirate && i.size >= 12)
     .sort((a, b) => fromStart(a) - fromStart(b)).slice(0, 2));
-  const free = [...GAME.islands.values()].filter(i => !i.owner && !i.pirate && !i.start && !i.home && !i.warehouses && i.size >= 20 && !reserved.has(i));
+  // Nor the last island (not yet the rival's) with iron ore, gold, grapes, sheep or hops
+  const free = [...GAME.islands.values()].filter(i => !i.owner && !i.pirate && !i.start && !i.home && !i.warehouses && i.size >= 20 &&
+    !reserved.has(i) && !lastSourceIsland(i));
   if (!free.length) return;
   const d = (i) => mine.length ? Math.min(...mine.map(m => Math.hypot(m.anchor[0] - i.anchor[0], m.anchor[1] - i.anchor[1]))) : -fromStart(i);
   free.sort((a, b) => d(a) - d(b));
