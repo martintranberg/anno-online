@@ -417,7 +417,7 @@ function gameLoop(t) {
   infoTimer += dt;
   if (infoTimer > 500) {
     infoTimer = 0;
-    renderInfo();
+    if (!infoPointerDown) renderInfo();
     renderQuest();
     renderMessages();
   }

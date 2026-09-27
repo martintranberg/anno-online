@@ -125,3 +125,30 @@ test('every info panel renders', () => {
   G.refreshMenuState();
   for (const cat of G.CATEGORIES) G.openBuildCategory(cat.id);
 });
+
+test('panel buttons work: economy tabs, island picker, tax buttons', () => {
+  const { game, G } = newGame({}, 12);
+  const wh = placeFirstWarehouse(G);
+  runTicks(G, 2);
+  const body = game.el('info-body');
+  const click = (sel) => {
+    const el = body.querySelectorAll(sel)[0];
+    assert.ok(el, `button ${sel} exists`);
+    el.click();
+  };
+  G.openInfo('economy');
+  click('[data-tab="production"]');
+  assert.equal(G.GAME.selectedInfo.tab, 'production', 'switch to production');
+  assert.match(body.innerHTML, /naturressourcer/);
+  click('[data-tab="overview"]');
+  assert.equal(G.GAME.selectedInfo.tab, 'overview', 'and back to the overview');
+  click('[data-tab="production"]');
+  assert.equal(G.GAME.selectedInfo.tab, 'production', 'and to production again');
+  click('[data-isl]');
+  // Warehouse panel: tax buttons change the island's tax
+  G.openInfo('building', wh.id);
+  click('[data-tax="high"]');
+  assert.equal(G.homeIsland().tax, 'high');
+  click('[data-act="upgrade"]');
+  assert.equal(G.homeIsland().allowUpgrade, false, 'upgrade toggle');
+});

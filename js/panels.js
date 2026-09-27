@@ -129,6 +129,12 @@ const needIcon = (isl, n) => `${NEED_INFO[n].icon} ${NEED_INFO[n].name} ${isl.ne
 const goodsChecks = (field, list) => RES_KEYS.map(k =>
   `<label class="chk"><input type="checkbox" data-list="${field}" data-res="${k}" ${list.includes(k) ? 'checked' : ''}>${RES_ICONS[k]} ${RESOURCES[k].name}</label>`).join('');
 
+// The panel is rebuilt twice a second; a rebuild between mouse-down and mouse-up would swallow the click,
+// so the periodic refresh waits while a mouse button is held down on the panel
+let infoPointerDown = false;
+document.getElementById('info').addEventListener('mousedown', () => { infoPointerDown = true; });
+window.addEventListener('mouseup', () => { infoPointerDown = false; });
+
 function renderInfo() {
   const sel = GAME.selectedInfo;
   if (!sel) return;
@@ -621,6 +627,7 @@ function renderEconomy(title, body, sel) {
       return `<h4>${esc(isl.name)} · 👥 ${isl.pop}/${isl.popCap}</h4>${rows || '<p class="muted">Ingen varer</p>'}`;
     }).join('')}
     <p class="muted">Tallene i parentes er produktion minus forbrug (uden skibe).</p>`;
+  bindTabs();
 }
 
 // ----- Production overview (the "Produktion" tab of the economy panel) -----

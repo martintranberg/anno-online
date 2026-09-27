@@ -42,7 +42,7 @@ class FakeElement {
     this.tagName = tag.toUpperCase();
     this.id = id;
     this.hidden = false;
-    this.innerHTML = '';
+    this._html = '';
     this.textContent = '';
     this.value = '';
     this.checked = false;
@@ -62,16 +62,46 @@ class FakeElement {
     };
     this._ctx = null;
   }
+  // Setting innerHTML replaces the child elements, like in a browser
+  get innerHTML() { return this._html; }
+  set innerHTML(v) { this._html = String(v); this._parsedEls = null; }
   addEventListener(type, fn) { (this.listeners[type] ||= []).push(fn); }
   removeEventListener() {}
   dispatch(type, extra = {}) {
     const ev = { type, target: this, stopPropagation() {}, preventDefault() {}, ...extra };
-    for (const fn of this.listeners[type] || []) fn(ev);
+    for (const fn of [...(this.listeners[type] || [])]) fn(ev);
   }
   click() { this.dispatch('click'); }
-  // Panels look up their buttons right after setting innerHTML; any selector yields a (detached) element
-  querySelector(sel) { return new FakeElement('div', sel); }
-  querySelectorAll() { return []; }
+  // Panels look up their buttons right after setting innerHTML. Simple selectors (`[data-x]`, `[data-x="v"]`,
+  // `tag[data-x]`) are matched against the tags in innerHTML, so tests can click them; the same element objects
+  // are returned until innerHTML changes. Anything not found yields a detached element (querySelector) or none.
+  _parse() {
+    if (this._parsedEls) return this._parsedEls;
+    const els = [];
+    for (const m of String(this.innerHTML).matchAll(/<([a-zA-Z][\w-]*)((?:\s+[\w-]+(?:="[^"]*")?)*)\s*\/?>/g)) {
+      const el = new FakeElement(m[1]);
+      el.attrs = {};
+      for (const a of m[2].matchAll(/([\w-]+)(?:="([^"]*)")?/g)) {
+        const val = (a[2] ?? '').replace(/&quot;/g, '"').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&');
+        el.attrs[a[1]] = val;
+        if (a[1].startsWith('data-')) el.dataset[a[1].slice(5).replace(/-(\w)/g, (_, c) => c.toUpperCase())] = val;
+      }
+      el.value = el.attrs.value ?? '';
+      el.checked = 'checked' in el.attrs;
+      el.disabled = 'disabled' in el.attrs;
+      el.className = el.attrs.class ?? '';
+      els.push(el);
+    }
+    this._parsedEls = els;
+    return els;
+  }
+  _matches(el, sel) {
+    const m = /^([a-zA-Z]*)\[([\w-]+)(?:="([^"]*)")?\]$/.exec(sel.trim());
+    if (!m) return false;
+    return (!m[1] || el.tagName === m[1].toUpperCase()) && m[2] in el.attrs && (m[3] === undefined || el.attrs[m[2]] === m[3]);
+  }
+  querySelector(sel) { return this._parse().find(el => this._matches(el, sel)) || new FakeElement('div', sel); }
+  querySelectorAll(sel) { return this._parse().filter(el => this._matches(el, sel)); }
   appendChild(c) { this.children.push(c); return c; }
   contains() { return false; }
   getContext() { return (this._ctx ||= fakeContext2D()); }
