@@ -4,7 +4,7 @@
 // The game autosaves to localStorage after every action, every 10 s and when the page closes.
 // The map is stored as one character per tile; decoration is regenerated from NOISE_SEED.
 const SAVE_KEY = 'anno-online-save';
-const SAVE_VERSION = 4;
+const SAVE_VERSION = 5;
 const AUTOSAVE_TICKS = 10;
 const TYPE_CODES = { grass: 'g', forest: 'f', water: 'w', beach: 'b', rock: 'r' };
 const CODE_TYPES = Object.fromEntries(Object.entries(TYPE_CODES).map(([t, c]) => [c, t]));
@@ -28,20 +28,23 @@ function saveGame(manual = false) {
     // Only tiles that differ from "full" are stored: [tile index, amount]
     wood: GAME.grid.flatMap((t, i) => t.type === 'forest' && t.wood < t.woodMax ? [[i, t.wood]] : []),
     stone: GAME.grid.flatMap((t, i) => t.type === 'rock' && t.stone < ROCK_STONE ? [[i, t.stone]] : []),
-    buildings: GAME.buildings.map(({ id, type, x, y, queue, level, paused, lockLevel, fire }) => ({ id, type, x, y, queue, level, paused, lockLevel, fire })),
+    buildings: GAME.buildings.map(({ id, type, x, y, queue, level, paused, lockLevel, fire, roadExempt }) => ({ id, type, x, y, queue, level, paused, lockLevel, fire, roadExempt })),
     roads: [...GAME.roads],
     // Islands are matched on load by their anchor tile, since ids come from re-labelling the map
     islands: [...GAME.islands.values()].map(i => ({ anchor: i.anchor, name: i.name, home: i.home, start: i.start,
                                                      resources: i.resources, pop: i.pop, fertility: i.fertility, supplied: i.supplied,
                                                      ore: i.ore, gold: i.gold, trade: i.trade, allowUpgrade: i.allowUpgrade,
                                                      owner: i.owner, pirate: i.pirate, mood: i.mood, tax: i.tax,
-                                                     natureStart: i.natureStart, natureFromLoad: i.natureFromLoad, harvested: i.harvested })),
+                                                     natureStart: i.natureStart, natureFromLoad: i.natureFromLoad, harvested: i.harvested,
+                                                     festival: i.festival, festivalCooldown: i.festivalCooldown })),
     ore: GAME.grid.flatMap((t, i) => t.ore > 0 ? [[i, t.ore]] : []),
     gold: GAME.grid.flatMap((t, i) => t.gold > 0 ? [[i, t.gold]] : []),
     oreAssigned: true,
     goldAssigned: true,
     pirates: GAME.pirates && { fort: GAME.pirates.fort, fortHp: GAME.pirates.fortHp, nextRaid: GAME.pirates.nextRaid },
-    rival: GAME.rival && { buildings: GAME.rival.buildings, counter: GAME.rival.counter, next: GAME.rival.next, growIn: GAME.rival.growIn },
+    rival: GAME.rival && { buildings: GAME.rival.buildings, counter: GAME.rival.counter, next: GAME.rival.next, growIn: GAME.rival.growIn,
+                           relation: GAME.rival.relation, plan: GAME.rival.plan },
+    contracts: GAME.contracts, contractCounter: GAME.contractCounter, nextContract: GAME.nextContract, contractsDone: GAME.contractsDone,
     bankrupt: GAME.bankrupt,
     events: GAME.events,
     won: GAME.won,
@@ -108,7 +111,7 @@ function loadGame() {
     return false;
   }
   if (data && data.v === 2) { data = migrateV2(data); migratedFrom = 2; }
-  else if (data && data.v === 3) migratedFrom = 3;
+  else if (data && (data.v === 3 || data.v === 4)) migratedFrom = data.v;
   else if (data && data.v !== SAVE_VERSION) oldSaveIgnored = true;
   if (!data || (data.v !== SAVE_VERSION && !migratedFrom) || !validMapSize(data.mapSize) ||
       typeof data.terrain !== 'string' || data.terrain.length !== data.mapSize * data.mapSize) {
@@ -138,6 +141,8 @@ function loadGame() {
   for (const b of GAME.buildings) {
     const def = DEFS[b.type];
     if (def.house) b.level = b.level || 1;
+    // Houses from before houses needed roads keep working without one
+    if (def.house && data.v < 5) b.roadExempt = true;
     for (let dy = 0; dy < def.h; dy++) {
       for (let dx = 0; dx < def.w; dx++) GAME.occupancy.set(`${b.x + dx},${b.y + dy}`, b.id);
     }
@@ -151,7 +156,8 @@ function loadGame() {
       Object.assign(isl, { name: saved.name, home: saved.home, start: saved.start, pop: saved.pop, fertility: saved.fertility || [], supplied: saved.supplied,
                            ore: saved.ore, gold: saved.gold, trade: saved.trade, allowUpgrade: saved.allowUpgrade,
                            owner: saved.owner || null, pirate: saved.pirate, mood: saved.mood ?? MOOD_START, tax: saved.tax || 'normal',
-                           natureStart: saved.natureStart, natureFromLoad: saved.natureFromLoad, harvested: saved.harvested });
+                           natureStart: saved.natureStart, natureFromLoad: saved.natureFromLoad, harvested: saved.harvested,
+                           festival: saved.festival || 0, festivalCooldown: saved.festivalCooldown || 0 });
       Object.assign(isl.resources, saved.resources); // merge: resources added later keep 0
     }
     GAME.islands.set(c.id, isl);
@@ -181,6 +187,10 @@ function loadGame() {
   GAME.events = data.events ?? true;
   GAME.won = !!data.won;
   GAME.bankrupt = !!data.bankrupt;
+  GAME.contracts = data.contracts || [];
+  GAME.contractCounter = data.contractCounter || 0;
+  GAME.nextContract = data.nextContract ?? 120;
+  GAME.contractsDone = data.contractsDone || 0;
   GAME.history = data.history || [];
   GAME.routeCounter = data.routeCounter || GAME.routes.length;
   GAME.ships = (data.ships || []).filter(s => SHIP_TYPES[s.type]).map(s => {
@@ -264,8 +274,10 @@ function openNewGameDialog(canCancel) {
     <label class="ng-check"><input type="checkbox" id="ng-events" ${ngChoice.events ? 'checked' : ''}> 🔥 Begivenheder: brand, storm og pirater</label>`;
   const hint = () => {
     const d = DIFFICULTIES[ngChoice.difficulty];
+    const best = loadHighscores()[`${ngChoice.size}-${ngChoice.difficulty}`];
     document.getElementById('ng-hint').textContent =
-      `${d.coins} mønter at starte med · ${d.events < 1 ? 'færre' : d.events > 1 ? 'flere' : 'normale'} brande og storme · rivalen tager op til ${d.rivalMax} øer`;
+      `${d.coins} mønter at starte med · ${d.events < 1 ? 'færre' : d.events > 1 ? 'flere' : 'normale'} brande og storme · rivalen tager op til ${d.rivalMax} øer` +
+      (best ? ` · 🏆 rekord ${best.score} point` : '');
   };
   hint();
   el.querySelectorAll('[data-ng]').forEach(b => b.addEventListener('click', () => {
@@ -394,7 +406,9 @@ optEvents.addEventListener('change', () => {
 
 function showVictory() {
   GAME.won = true;
+  recordHighscore();
   const merchants = Math.floor(totalMerchants());
+  document.getElementById('victory-score').textContent = `${computeScore().total} point`;
   document.getElementById('victory-stats').innerHTML =
     `👥 ${totalPopulation()} beboere · ${merchants} Købmænd · ${Math.floor(totalNobles())} Adelige<br>🏝️ ${[...GAME.islands.values()].filter(i => i.warehouses).length} øer · ⛵ ${GAME.ships.length} skibe<br>⏱️ ${Math.floor(GAME.tick / 60)} minutter`;
   document.getElementById('victory').hidden = false;
@@ -403,6 +417,7 @@ function showVictory() {
 document.getElementById('victory-close').addEventListener('click', () => { document.getElementById('victory').hidden = true; });
 document.addEventListener('click', (e) => { if (!gameMenu.contains(e.target)) gameMenu.hidden = true; });
 document.getElementById('btn-save').addEventListener('click', () => { saveGame(true); gameMenu.hidden = true; });
+document.getElementById('btn-score').addEventListener('click', () => { gameMenu.hidden = true; openInfo('score'); });
 document.getElementById('btn-new').addEventListener('click', () => { gameMenu.hidden = true; newGame(); });
 document.getElementById('btn-islands').addEventListener('click', () => {
   if (GAME.selectedInfo?.kind === 'islands') closeInfo(); else openInfo('islands');
@@ -417,6 +432,10 @@ document.getElementById('btn-economy').addEventListener('click', () => {
 document.querySelectorAll('#speed button').forEach(b => b.addEventListener('click', () => setSpeed(Number(b.dataset.speed))));
 let speedBeforePause = 1;
 window.addEventListener('keydown', (e) => {
+  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z' && e.target === document.body) {
+    e.preventDefault();
+    undoDemolition();
+  }
   if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') {
     e.preventDefault();
     saveGame(true);

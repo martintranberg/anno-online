@@ -27,6 +27,7 @@
     <button id="btn-menu" title="Menu">☰</button>
     <div id="game-menu" hidden>
       <button id="btn-save">💾 Gem spil <small>Ctrl+S</small></button>
+      <button id="btn-score">🏆 Point og rekorder</button>
       <div id="saved-at"></div>
       <div class="menu-title">Gemmepladser</div>
       <div id="save-slots"></div>
@@ -50,7 +51,9 @@
     <div class="victory-box">
       <div class="victory-title">🏆 Monumentet står færdigt!</div>
       <p>Dit ørige er blevet en blomstrende handelsmagt. Tillykke – du har vundet spillet!</p>
+      <div id="victory-score" class="victory-score"></div>
       <div id="victory-stats"></div>
+      <p>Spil videre og hæv pointene – kontrakter, flere øer og Adelige giver point.</p>
       <button id="victory-close">Spil videre</button>
     </div>
   </div>
@@ -101,6 +104,8 @@
   <script src="js/ships.js"></script>
   <script src="js/pirates-rival.js"></script>
   <script src="js/routes.js"></script>
+  <script src="js/contracts.js"></script>
+  <script src="js/life.js"></script>
   <script src="js/panels.js"></script>
   <script src="js/minimap-sound.js"></script>
   <script src="js/save.js"></script>

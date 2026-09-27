@@ -83,9 +83,16 @@ function renderQuest() {
   if (GAME.phase !== 'play') { el.hidden = true; return; }
   el.hidden = false;
   const q = QUESTS[GAME.questIndex];
-  el.innerHTML = q
+  const offers = (GAME.contracts || []).filter(c => !c.accepted).length, active = (GAME.contracts || []).filter(c => c.accepted).length;
+  const contracts = offers || active
+    ? `<button class="quest-link" data-open-contracts>📜 Kontrakter: ${active ? `${active} i gang` : ''}${active && offers ? ' · ' : ''}${offers ? `${offers} nye tilbud` : ''} ›</button>` : '';
+  const html = (q
     ? `<b>📜 Opgave ${GAME.questIndex + 1}/${QUESTS.length}</b><div>${esc(q.text)}${q.progress ? ` <span class="muted">(${q.progress()})</span>` : ''}</div><small>Belønning: ${q.reward} 🪙</small>`
-    : '<b>🏆 Alle opgaver er fuldført!</b><div>Byg videre på dit øriget.</div>';
+    : `<b>🏆 Alle opgaver er fuldført!</b><div>Byg videre – point: ${computeScore().total}</div>`) + contracts;
+  if (el.innerHTML !== html) {
+    el.innerHTML = html;
+    el.querySelector('[data-open-contracts]')?.addEventListener('click', () => openInfo('contracts'));
+  }
 }
 
 // ===== INFO PANEL =====
@@ -150,6 +157,9 @@ function renderInfo() {
   if (sel.kind === 'routes') { renderRoutes(title, body); return; }
   if (sel.kind === 'islands') { renderIslands(title, body); return; }
   if (sel.kind === 'rival') { renderRival(title, body, sel); return; }
+  if (sel.kind === 'contracts') { renderContracts(title, body, sel); return; }
+  if (sel.kind === 'good') { renderGood(title, body, sel); return; }
+  if (sel.kind === 'score') { renderScore(title, body); return; }
   if (sel.kind === 'pirates') { renderPirates(title, body); return; }
   if (sel.kind === 'route') { renderRoute(title, body, sel); return; }
 
@@ -228,8 +238,9 @@ function renderInfo() {
       <p class="muted">Fælles lager for hele øen · ${isl.warehouses} lager${isl.warehouses > 1 ? 'e' : ''} · plads til ${isl.cap} af hver vare</p>
       <div class="row"><span>🌱 Frugtbarhed</span><b>${fertTxt(isl)}${isl.ore ? '<br>⛏️ Jernmalm' : ''}</b></div>
       <div class="stock">${RES_KEYS.map(k => `
-        <div class="res"><span>${RES_ICONS[k]} ${RESOURCES[k].name}</span><b>${Math.floor(isl.resources[k])} / ${isl.cap}</b>${bar(isl.resources[k], isl.cap)}</div>`).join('')}
+        <div class="res clickable" data-good="${k}" title="Hvor kommer ${RESOURCES[k].name.toLowerCase()} fra, og hvor går det hen?"><span>${RES_ICONS[k]} ${RESOURCES[k].name}</span><b>${Math.floor(isl.resources[k])} / ${isl.cap}</b>${bar(isl.resources[k], isl.cap)}</div>`).join('')}
       </div>
+      <p class="muted">Klik på en vare for at se, hvor den laves og bruges.</p>
       <div class="row"><span>👥 Beboere</span><b>${isl.pop} / ${isl.popCap}</b></div>
       <div class="row"><span>Fordeling</span><b>${HOUSE_LEVELS.map((_, L) => L).filter(L => L && byL[L] > 0.5).map(L => `${tierName(L)} ${Math.round(byL[L])}`).join(' · ') || '–'}</b></div>
       <div class="row"><span>${moodIcon(mood)} Tilfredshed</span><b class="${mood < 30 ? 'err' : ''}">${mood}%</b></div>
@@ -242,6 +253,8 @@ function renderInfo() {
       <div class="row"><span>Behov</span><b>${needs.map(n => needIcon(isl, n)).join('<br>')}</b></div>
       ${isl.hunger ? '<p class="err">Beboerne sulter! Byg fiskere eller farme.</p>' : ''}
       <div class="btns"><span>Boliger må opgradere</span><button data-act="upgrade" class="${allow ? '' : 'alt'}">${allow ? '✅ Ja' : '⛔ Nej'}</button></div>
+      <div class="btns"><span>🎉 Fest ${isl.festival > 0 ? `<small>(i gang, ${isl.festival} s)</small>` : isl.festivalCooldown > 0 ? `<small>(igen om ${isl.festivalCooldown} s)</small>` : `<small>+${FESTIVAL_MOOD} tilfredshed i ${FESTIVAL_TICKS} s · ${fmtCost(festivalCost(isl))}</small>`}</span>
+        <button data-act="festival" ${isl.festival > 0 || isl.festivalCooldown > 0 || !hasCost(isl.resources, festivalCost(isl)) ? 'disabled' : ''}>Hold fest</button></div>
       <div class="row"><span>Næste lager</span><b>${isl.pop >= need ? fmtCost(extraWarehouseCost(isl.warehouses)) : `kræver ${need} beboere`}</b></div>
       ${shipsHere.length ? `<h4>Skibe på ruter hertil</h4>${shipsHere.map(s => `<div class="row"><span>${esc(s.name)}</span><b>${SHIP_STATE_TEXT[s.state]}</b></div>`).join('')}` : ''}
       <h4>🛒 Handelsmand</h4>
@@ -260,6 +273,12 @@ function renderInfo() {
       saveGame();
       renderInfo();
     });
+    body.querySelector('[data-act="festival"]')?.addEventListener('click', () => {
+      const err = holdFestival(isl);
+      if (err) showToast(`❌ ${err}`);
+      renderInfo();
+    });
+    body.querySelectorAll('[data-good]').forEach(el => el.addEventListener('click', () => openInfo('good', el.dataset.good)));
     body.querySelectorAll('[data-tax]').forEach(el => el.addEventListener('click', () => {
       isl.tax = el.dataset.tax;
       sfx('click');
@@ -407,6 +426,87 @@ function bindMoveCopy(body, b) {
   body.querySelector('[data-act="copy"]')?.addEventListener('click', () => { closeInfo(); selectTool(b.type); });
 }
 
+// What went on board the last time a ship loaded this leg, or why nothing did
+function lastLoadLine(r, leg) {
+  const l = r.lastLoad?.[leg];
+  if (!l) return '';
+  const goods = Object.entries(l.loaded).map(([k, n]) => `${Math.floor(n)} ${RES_ICONS[k]}`).join(' ');
+  const ago = Math.max(0, GAME.tick - l.tick);
+  return `<p class="${goods ? 'muted' : 'err'}">Sidst lastet (${esc(l.ship)}, for ${ago} s siden): ${goods || `intet – ${esc(l.note || 'ingen varer valgt')}`}</p>`;
+}
+
+function renderContracts(title, body, sel) {
+  title.textContent = '📜 Kontrakter';
+  const list = GAME.contracts || [];
+  const card = (c) => {
+    const who = c.from === 'rival' ? `⚑ ${RIVAL_NAME}` : '🛒 Handelsmanden';
+    const sources = contractSources(c);
+    const time = c.accepted ? `⌛ ${Math.max(0, c.deadline - GAME.tick)} s tilbage` : `Tilbuddet gælder ${Math.max(0, CONTRACT_OFFER_TIME - (GAME.tick - c.offeredAt))} s`;
+    return `<div class="ship-card">
+      <div><b>${c.amount} ${RES_ICONS[c.good]} ${RESOURCES[c.good].name}</b> <small>${who}</small></div>
+      <div class="muted">Betaling ${c.reward} 🪙 (handelsmanden ville give ${c.amount * PRICES[c.good]}) · ${time}</div>
+      <div class="btns"><span class="${sources.length ? '' : 'muted'}">${c.accepted ? (sources.length ? `Kan leveres fra ${sources.map(i => esc(i.name)).join(', ')}` : 'Ingen havn har nok endnu') : ''}</span>
+      ${c.accepted ? `<button data-deliver="${c.id}" ${sources.length ? '' : 'disabled'}>Lever</button>` : `<button data-accept="${c.id}">Accepter</button>`}</div></div>`;
+  };
+  const active = list.filter(c => c.accepted), offers = list.filter(c => !c.accepted);
+  body.innerHTML = `
+    <p class="muted">Handelsmanden – og ${RIVAL_NAME}, når I er venner – beder om varer til en god pris. Accepter et tilbud og lever varerne fra en havn inden fristen. Svigtede kontrakter med rivalen skader forholdet.</p>
+    <h4>I gang</h4>${active.length ? active.map(card).join('') : '<p class="muted">Ingen.</p>'}
+    <h4>Tilbud</h4>${offers.length ? offers.map(card).join('') : `<p class="muted">Ingen lige nu – der kommer nye cirka hvert ${Math.round(CONTRACT_EVERY / 60)}. minut.</p>`}
+    <div class="row"><span>Leverede kontrakter</span><b>${GAME.contractsDone || 0}</b></div>
+    ${sel.error ? `<p class="err">${esc(sel.error)}</p>` : ''}`;
+  body.querySelectorAll('[data-accept]').forEach(el => el.addEventListener('click', () => { sel.error = acceptContract(contractById(el.dataset.accept)) || ''; renderInfo(); }));
+  body.querySelectorAll('[data-deliver]').forEach(el => el.addEventListener('click', () => { sel.error = deliverContract(contractById(el.dataset.deliver)) || ''; renderInfo(); }));
+}
+
+// One good across all islands: who makes it, who uses it, which routes carry it, what the trader does with it
+function renderGood(title, body, sel) {
+  const k = sel.id;
+  if (!RESOURCES[k]) { closeInfo(); return; }
+  title.textContent = `${RES_ICONS[k]} ${RESOURCES[k].name}`;
+  const islands = [...GAME.islands.values()].filter(i => i.warehouses);
+  const makers = GAME.buildings.filter(b => DEFS[b.type].produces === k);
+  const users = GAME.buildings.filter(b => DEFS[b.type].consumes?.[k]);
+  const needs = Object.entries(NEED_INFO).filter(([, n]) => n.keys.includes(k)).map(([id, n]) => `${n.icon} ${n.name} (fra ${tierName(NEED_FROM[id])})`);
+  const bline = (b) => {
+    const st = PROD_STATUS[b.status || 'idle'] || PROD_STATUS.idle, isl = islandOfBuilding(b);
+    return `<div class="row"><span>${esc(DEFS[b.type].name)} <small class="muted">${esc(isl.name)}</small></span><b>${st.icon} ${rate(b.made || 0)}/s <button class="link" data-show="${b.id}">›</button></b></div>`;
+  };
+  const routes = GAME.routes.filter(r => r.res.includes(k) || r.back.includes(k));
+  body.innerHTML = `
+    <h4>Lager pr. ø</h4>
+    ${islands.map(i => `<div class="row"><span>${esc(i.name)}</span><b>${Math.floor(i.resources[k])} / ${i.cap}
+      <small class="${(i.flowIn?.[k] || 0) - (i.flowOut?.[k] || 0) < 0 ? 'err' : 'muted'}">(${(i.flowIn?.[k] || 0) - (i.flowOut?.[k] || 0) >= 0 ? '+' : ''}${rate((i.flowIn?.[k] || 0) - (i.flowOut?.[k] || 0))}/s)</small></b></div>`).join('')}
+    <h4>Laves af</h4>${makers.length ? makers.map(bline).join('') : `<p class="muted">Ingen bygninger laver ${RESOURCES[k].name.toLowerCase()}.</p>`}
+    <h4>Bruges af</h4>${users.length ? users.map(bline).join('') : ''}
+    ${needs.length ? `<div class="row"><span>Beboere</span><b>${needs.join('<br>')}</b></div>` : ''}
+    ${!users.length && !needs.length ? '<p class="muted">Ingen bruger den endnu.</p>' : ''}
+    <h4>Handelsruter</h4>${routes.length ? routes.map(r => `<div class="row"><span>${esc(routeName(r))}</span><b>${r.res.includes(k) ? 'ud' : ''}${r.res.includes(k) && r.back.includes(k) ? ' og ' : ''}${r.back.includes(k) ? 'retur' : ''} <button class="link" data-route="${r.id}">›</button></b></div>`).join('') : '<p class="muted">Ingen ruter fragter den.</p>'}
+    <h4>Handelsmanden</h4>
+    <p class="muted">Betaler ${PRICES[k]} 🪙 · sælger for ${buyPrice(k)} 🪙.${islands.filter(i => i.trade?.[k]?.sell != null || i.trade?.[k]?.buy != null).map(i => ` ${esc(i.name)}: ${i.trade[k].sell != null ? `sælg over ${i.trade[k].sell}` : ''}${i.trade[k].buy != null ? ` køb op til ${i.trade[k].buy}` : ''}.`).join('')}</p>`;
+  body.querySelectorAll('[data-show]').forEach(el => el.addEventListener('click', () => {
+    const b = buildingById(el.dataset.show), def = DEFS[b.type];
+    centerOn(b.x + (def.w - 1) / 2, b.y + (def.h - 1) / 2);
+    openInfo('building', b.id);
+  }));
+  body.querySelectorAll('[data-route]').forEach(el => el.addEventListener('click', () => openInfo('route', el.dataset.route)));
+}
+
+function renderScore(title, body) {
+  title.textContent = '🏆 Point';
+  const s = computeScore(), hs = loadHighscores();
+  const key = `${GAME.settings.size}-${GAME.settings.difficulty}`;
+  body.innerHTML = `
+    <div class="row"><span><b>I alt</b></span><b>${s.total}</b></div>
+    ${Object.entries(s.parts).filter(([, v]) => v).map(([k, v]) => `<div class="row"><span>${SCORE_LABELS[k]}</span><b>${v}</b></div>`).join('')}
+    <h4>Rekorder i denne browser</h4>
+    ${Object.keys(hs).length ? Object.entries(hs).sort((a, b) => b[1].score - a[1].score).map(([k, v]) => {
+      const [size, diff] = k.split('-');
+      return `<div class="row ${k === key ? 'current' : ''}"><span>${MAP_SIZES[size]?.name || size} kort · ${DIFFICULTIES[diff]?.name || diff}${v.won ? ' 🏆' : ''}</span><b>${v.score} <small class="muted">(${v.minutes} min)</small></b></div>`;
+    }).join('') : '<p class="muted">Ingen endnu.</p>'}
+    <p class="muted">Pointene tæller alt, du har bygget op. Efter monumentet kan du spille videre og hæve din rekord.</p>`;
+}
+
 function renderRival(title, body, sel) {
   const b = GAME.rival?.buildings.find(x => x.id === sel.id);
   if (!b) { closeInfo(); return; }
@@ -415,8 +515,16 @@ function renderRival(title, body, sel) {
   title.textContent = `⚑ ${def.name} – ${isl.name}`;
   const goods = rivalGoods(isl);
   const price = buyoutPrice(isl);
+  const rel = rivalRelation();
+  const plan = planIsland(GAME.rival.plan);
   body.innerHTML = `
     <p class="muted">Denne ø tilhører ${RIVAL_NAME}. Du kan ikke bygge her, men du kan handle: tegn en rute til deres lager.</p>
+    <h4>Forhold</h4>
+    <div class="row"><span>${relationIcon(rel)} ${relationText(rel)}</span><b>${Math.round(rel)} / 100</b></div>${bar(rel, 100)}
+    <p class="muted">Handel og leverede kontrakter forbedrer forholdet; opkøb af deres øer og svigtede kontrakter skader det. Under 25: ingen handel, og de betaler pirater for at plyndre dig. Over 75: 10 % bedre priser og kontrakter.</p>
+    <div class="btns"><span>🎁 Gave (+${RIVAL_GIFT_RELATION})</span><button data-act="gift" ${GAME.coins >= RIVAL_GIFT ? '' : 'disabled'}>Send ${RIVAL_GIFT} 🪙</button></div>
+    ${plan ? `<p class="err">⚑ De planlægger en koloni på ${esc(plan.name)} om ${Math.max(0, GAME.rival.plan.at - GAME.tick)} s</p>` : ''}
+    ${!rivalTrades() ? '<p class="err">De handler ikke med dig lige nu.</p>' : ''}
     <h4>De sælger (returlast)</h4>
     ${goods.map(k => `<div class="row"><span>${RES_ICONS[k]} ${RESOURCES[k].name}</span><b>${Math.floor(isl.resources[k])} stk · ${rivalSellPrice(k)} 🪙</b></div>`).join('')}
     <h4>De køber (udlast)</h4>
@@ -425,8 +533,9 @@ function renderRival(title, body, sel) {
     <p class="muted">Køb kolonien ud. Deres bygninger forsvinder, og lageret med varerne bliver dit.</p>
     <div class="btns"><span class="${GAME.coins >= price ? '' : 'err'}">${price} 🪙</span><button data-act="buyout" ${GAME.coins >= price ? '' : 'disabled'}>🤝 Køb øen</button></div>
     ${sel.error ? `<p class="err">${esc(sel.error)}</p>` : ''}`;
+  body.querySelector('[data-act="gift"]').addEventListener('click', () => { sel.error = sendGift() || ''; renderInfo(); });
   body.querySelector('[data-act="buyout"]').addEventListener('click', () => {
-    if (!confirm(`Købe ${isl.name} af ${RIVAL_NAME} for ${price} mønter?`)) return;
+    if (!confirm(`Købe ${isl.name} af ${RIVAL_NAME} for ${price} mønter? Det skader forholdet til dem.`)) return;
     sel.error = buyRivalIsland(isl) || '';
     if (!sel.error) {
       const wh = GAME.buildings.find(x => x.type === 'warehouse' && islandOfBuilding(x) === isl);
@@ -544,9 +653,11 @@ function renderRoute(title, body, sel) {
     <h4>Varer ud (${fromName} → ${toName})</h4>
     <div class="goods">${goodsChecks('res', r.res)}</div>
     ${keepInputs(r, 'res', 'keepRes', fromName)}
+    ${lastLoadLine(r, 'out')}
     <h4>Returlast (${toName} → ${fromName})</h4>
     <div class="goods">${goodsChecks('back', r.back)}</div>
     ${keepInputs(r, 'back', 'keepBack', toName)}
+    ${lastLoadLine(r, 'back')}
     <h4>Skibe på ruten</h4>
     ${onRoute.length ? onRoute.map(s => `<div class="row"><span>${esc(s.name)} <small>(${SHIP_STATE_TEXT[s.state]})</small></span><button class="link" data-unassign="${s.id}">Fjern</button></div>`).join('') : '<p class="muted">Ingen skibe endnu.</p>'}
     ${others.length ? `<label>Sæt skib på <select data-f="ship">${others.map(s =>

@@ -15,12 +15,11 @@ const centre = (tiles) => [tiles.reduce((s, t) => s + t.x, 0) / tiles.length, ti
 const startIsland = (G) => [...G.GAME.islands.values()].find(i => i.start);
 
 // A building touching a warehouse would block the roads that have to reach it, so keep a free ring around them
-function besideWarehouse(G, type, x, y) {
-  return G.footprintNeighbors({ type, x, y }).some(([nx, ny]) => {
-    const occ = G.GAME.occupancy.get(`${nx},${ny}`);
-    return occ && occ !== 'road' && G.buildingById(occ)?.type === 'warehouse';
-  });
+function besideWarehouse(G, type, x, y, whTiles) {
+  return G.footprintNeighbors({ type, x, y }).some(([nx, ny]) => whTiles.has(`${nx},${ny}`));
 }
+const warehouseTiles = (G) => new Set(G.GAME.buildings.filter(b => b.type === 'warehouse')
+  .flatMap(b => [[0, 0], [1, 0], [0, 1], [1, 1]].map(([dx, dy]) => `${b.x + dx},${b.y + dy}`)));
 
 // Tiles from which a road could reach a warehouse: flood fill over roads and buildable ground,
 // starting next to every warehouse
@@ -51,8 +50,9 @@ function findSpot(G, type, x, y, { island = null, maxDist = 40, ok = () => true 
     .filter(t => (!island || t.island === island.id) && Math.hypot(t.x - x, t.y - y) <= maxDist)
     .sort((a, b) => Math.hypot(a.x - x, a.y - y) - Math.hypot(b.x - x, b.y - y));
   const reach = G.needsRoad(G.DEFS[type]) ? roadReachable(G) : null;
+  const whTiles = warehouseTiles(G);
   for (const t of tiles) {
-    if (type !== 'warehouse' && besideWarehouse(G, type, t.x, t.y)) continue;
+    if (type !== 'warehouse' && besideWarehouse(G, type, t.x, t.y, whTiles)) continue;
     if (reach && !G.footprintNeighbors({ type, x: t.x, y: t.y }).some(([nx, ny]) => reach.has(`${nx},${ny}`))) continue;
     if (!G.checkPlacement(t.x, t.y, type).ok || !ok(t.x, t.y)) continue;
     return [t.x, t.y];

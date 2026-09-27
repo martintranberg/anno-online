@@ -1467,7 +1467,62 @@ function drawWatchtower(U, V, rnd) {
   flag(U + 0.7, V + 0.3, 38, 12, '#2a5aa8');
 }
 
+// Park: lawn with a gravel path, trees, flower beds and a bench
+function drawPark(U, V, rnd) {
+  ground(U, V, 2, 2, '#6aac48', rnd, '#5a9a3a');
+  poly('#d8ccb0', [P(U + 0.1, V + 0.9), P(U + 1.9, V + 0.9), P(U + 1.9, V + 1.1), P(U + 0.1, V + 1.1)], null);
+  poly('#d8ccb0', [P(U + 0.9, V + 0.1), P(U + 1.1, V + 0.1), P(U + 1.1, V + 1.9), P(U + 0.9, V + 1.9)], null);
+  for (const [u, v] of [[U + 0.45, V + 0.45], [U + 1.55, V + 1.5]]) {
+    for (let i = 0; i < 7; i++) dot(P(u - 0.2 + rnd() * 0.4, v - 0.2 + rnd() * 0.4, 1), 1.6, ['#e05050', '#f0c040', '#f4f0e0', '#b890e0'][Math.floor(rnd() * 4)]);
+  }
+  // Bench
+  walls(U + 1.25, V + 0.55, U + 1.65, V + 0.65, 3, 4.5, '#7a5030', '#9a7048');
+  post(U + 1.3, V + 0.62, 3); post(U + 1.6, V + 0.62, 3);
+  tree(U + 1.5, V + 0.3, 0.9);
+  tree(U + 0.35, V + 1.55, 1);
+  bush(U + 1.75, V + 1.0, 0.18);
+}
+
+// Fountain: round stone basin with a jet of water
+function drawFountain(U, V, rnd) {
+  ground(U, V, 1, 1, '#b0a890', rnd, '#8a8272');
+  const c = cylinder(U + 0.5, V + 0.5, 0, 0.36, 5, '#b8b0a0', '#5aa8d0');
+  cylinder(U + 0.5, V + 0.5, 5, 0.08, 9, '#c8c0b0', '#e0dcd0');
+  const top = P(U + 0.5, V + 0.5, 16);
+  const t = animTime / 300;
+  for (let i = 0; i < 6; i++) {
+    const a = i / 6 * Math.PI * 2 + t * 0.3, k = ((t + i / 6) % 1);
+    const x = top.x + Math.cos(a) * 10 * k, y = top.y - 8 * Math.sin(k * Math.PI) + 10 * k * k + Math.sin(a) * 4 * k;
+    dot({ x, y }, 1.4, `rgba(220,240,255,${(0.9 - k * 0.6).toFixed(2)})`);
+  }
+  dot({ x: top.x, y: top.y - 2 }, 2.2, 'rgba(230,245,255,0.9)');
+  void c;
+}
+
+// Statue: a bronze figure on a stone plinth, with hedges around it
+function drawStatue(U, V, rnd) {
+  ground(U, V, 2, 2, '#b0a890', rnd, '#8a8272');
+  for (let i = 1; i < 4; i++) {
+    line(P(U + 0.1, V + i * 0.5), P(U + 1.9, V + i * 0.5), 'rgba(80,70,60,0.2)', 0.6);
+    line(P(U + i * 0.5, V + 0.1), P(U + i * 0.5, V + 1.9), 'rgba(80,70,60,0.2)', 0.6);
+  }
+  for (const [u, v] of [[U + 0.25, V + 0.25], [U + 1.75, V + 0.25], [U + 0.25, V + 1.75], [U + 1.75, V + 1.75]]) bush(u, v, 0.2, '#2e6a28');
+  const pl = walls(U + 0.7, V + 0.7, U + 1.3, V + 1.3, 0, 14, '#d8d0bc', '#e8e0cc');
+  stones(pl.L); stones(pl.R);
+  // Figure: legs, cloak, head and a raised arm with a sword
+  const b = P(U + 1, V + 1, 14);
+  poly('#6a5a3a', [{ x: b.x - 5, y: b.y }, { x: b.x + 5, y: b.y }, { x: b.x + 3, y: b.y - 18 }, { x: b.x - 3, y: b.y - 18 }], '#3a2e1a');
+  poly('#8a7a4a', [{ x: b.x, y: b.y }, { x: b.x + 5, y: b.y }, { x: b.x + 3, y: b.y - 18 }, { x: b.x, y: b.y - 18 }], null);
+  dot({ x: b.x, y: b.y - 21 }, 3.2, '#7a6a3a');
+  line({ x: b.x + 3, y: b.y - 16 }, { x: b.x + 8, y: b.y - 26 }, '#6a5a3a', 2);
+  line({ x: b.x + 8, y: b.y - 26 }, { x: b.x + 10, y: b.y - 34 }, '#c8c8c0', 1.4);
+  dot({ x: b.x - 1, y: b.y - 22 }, 1, '#b8a870');
+}
+
 const BUILDING_RENDERERS = {
+  park: drawPark,
+  fountain: drawFountain,
+  statue: drawStatue,
   theater: drawTheater,
   vineyard: drawVineyard,
   winery: drawWinery,

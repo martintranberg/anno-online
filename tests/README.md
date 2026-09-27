@@ -4,7 +4,7 @@ Testene kører de rigtige spilfiler (`js/*.js`, i den rækkefølge `index.html` 
 DOM, så der ikke skal installeres noget. Kræver Node 20 eller nyere.
 
 ```
-npm test             # alle tests, inkl. lange simulationer (ca. 40 s)
+npm test             # alle tests, inkl. lange simulationer (ca. 45 s)
 npm run test:quick   # alt undtagen simulationerne (ca. 10 s)
 npm run sim          # balancerapport: botten spiller flere kort og viser udviklingen
 npm run sim -- --minutes 90 --seeds 6 --difficulty hard --size large
@@ -16,6 +16,7 @@ npm run sim -- --minutes 90 --seeds 6 --difficulty hard --size large
 | `rules.test.js` | Placeringsregler, veje, tåge, kanaler og broer, nedrivning, flytning, pipette |
 | `economy.test.js` | Produktion, beboere og behov, husniveau 1-4, opgradering af produktion, udtømning og skovfoged, skat og tilfredshed, fallit, brand, opgaver |
 | `ships.test.js` | Sejlruter, kolonier, handelsruter, handelsmanden, udforskning, pirater, fregatter, vagttårne, piratfortet, rivalen |
+| `features.test.js` | Boliger og vej, pynt, fester, kontrakter, rivalens forhold og varslede kolonier, fortryd, skibenes lasterapport, vogne på vejene, point, de nye paneler |
 | `save.test.js` | Gem og indlæs, migrering af version 3-gem, gemmepladser, ødelagte filer, nyt spil |
 | `sim.test.js` | Botten spiller hele spil: økonomien må ikke gå i stå, crashe eller give umulige tal |
 

@@ -201,6 +201,7 @@ function colonyStep(bot) {
 function simulate({ seed = 1, settings = {}, seconds = 2400, every = 300, decideEvery = 4 } = {}) {
   const { G } = newGame({ size: 'medium', ...settings }, seed);
   const bot = createBot(G);
+  G.GAME.camera.zoom = 0.4; // far out: no carts and walkers to animate, so simulations run faster
   const rows = [];
   let hungryTicks = 0, minCoins = Infinity;
   for (let t = 1; t <= seconds; t++) {

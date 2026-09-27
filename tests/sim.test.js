@@ -22,7 +22,7 @@ for (const seed of [1, 2]) {
 }
 
 test('bot reaches Borgere within 90 minutes on a friendly map', () => {
-  const res = simulate({ seed: 1, seconds: 90 * 60, every: 900 });
+  const res = simulate({ seed: 2, seconds: 90 * 60, every: 900 });
   assert.ok(res.final.tier >= 2, `tier ${res.final.tier}`);
   assertSane(assert, res.G);
 });

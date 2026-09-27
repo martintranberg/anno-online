@@ -90,7 +90,9 @@ function pirateTick() {
   const R = PF.ship;
   if (!R) {
     const prey = GAME.ships.filter(s => !isWarship(s) && s.routeId);
-    if (!prey.length || --PF.nextRaid > 0) return;
+    // A hostile rival pays the pirates, so they come twice as often
+    PF.nextRaid -= GAME.rival && rivalRelation() < 25 ? 2 : 1;
+    if (!prey.length || PF.nextRaid > 0) return;
     const dock = fortDock(PF);
     if (!dock) return;
     PF.ship = { pirate: true, type: 'kogge', name: 'Piratskibet', x: dock[0], y: dock[1], dir: [1, 0], path: [],
@@ -274,8 +276,11 @@ function rivalGoods(isl) {
   return [...out];
 }
 const rivalIslands = () => [...GAME.islands.values()].filter(i => i.owner === 'rival');
-const rivalSellPrice = (k) => Math.ceil(PRICES[k] * BUY_MARKUP * 0.9);
-const rivalBuyPrice = (k) => Math.round(PRICES[k] * 1.15);
+// Friends (relation 75+) get 10% better prices both ways
+const rivalFriendly = () => rivalRelation() >= 75;
+const rivalSellPrice = (k) => Math.ceil(PRICES[k] * BUY_MARKUP * 0.9 * (rivalFriendly() ? 0.9 : 1));
+const rivalBuyPrice = (k) => Math.round(PRICES[k] * 1.15 * (rivalFriendly() ? 1.1 : 1));
+const rivalTrades = () => rivalRelation() >= 25;
 
 // Top-left tile of a free w×h spot on the island, satisfying `ok(x, y)`, nearest (cx, cy)
 function findSpot(isl, w, h, cx, cy, ok = () => true, maxD = 99) {
@@ -344,7 +349,7 @@ function rivalSettle(isl, size = 4) {
 
 // The rival's home: a big island far from yours
 function initRival() {
-  GAME.rival = { buildings: [], counter: 0, next: diff().rivalEvery, growIn: 60, ship: null };
+  GAME.rival = { buildings: [], counter: 0, next: diff().rivalEvery, growIn: 60, ship: null, relation: RIVAL_RELATION_START, plan: null };
   const start = [...GAME.islands.values()].find(i => i.start) || homeIsland();
   const sx = start.anchor[0], sy = start.anchor[1];
   const cands = [...GAME.islands.values()].filter(i => i !== start && !i.pirate && !i.warehouses && i.size >= 40)
@@ -371,6 +376,7 @@ function rivalTick() {
     const isl = mine[Math.floor(Math.random() * mine.length)];
     if (R.buildings.filter(b => islandOfBuilding(b) === isl).length < 14) rivalGrow(isl, 1);
   }
+  if (R.plan && GAME.tick >= R.plan.at) carryOutPlan(R);
   if (GAME.settings.rival && --R.next <= 0) {
     R.next = diff().rivalEvery;
     if (mine.length < diff().rivalMax) rivalExpand(mine);
@@ -390,10 +396,34 @@ function rivalExpand(mine) {
   const d = (i) => mine.length ? Math.min(...mine.map(m => Math.hypot(m.anchor[0] - i.anchor[0], m.anchor[1] - i.anchor[1]))) : -fromStart(i);
   free.sort((a, b) => d(a) - d(b));
   for (const isl of free.slice(0, 3)) {
+    // Islands you know about are announced first, so you can get there before them
+    if (isl.discovered && !GAME.rival.plan) {
+      GAME.rival.plan = { island: isl.anchor, at: GAME.tick + RIVAL_PLAN_TICKS };
+      notify(`⚑ ${RIVAL_NAME} sender et skib til ${isl.name} og grundlægger en koloni om ${RIVAL_PLAN_TICKS} sekunder – kom før dem!`);
+      sfx('alarm');
+      return;
+    }
+    if (isl.discovered) continue;
     if (!rivalSettle(isl)) continue;
-    notify(isl.discovered ? `⚑ ${RIVAL_NAME} har grundlagt en koloni på ${isl.name}!` : `⚑ ${RIVAL_NAME} har grundlagt en ny koloni et sted på kortet`);
-    sfx('alarm');
+    notify(`⚑ ${RIVAL_NAME} har grundlagt en ny koloni et sted på kortet`);
     return;
+  }
+}
+
+// The announced colony: founded unless you got there first
+const planIsland = (plan) => plan && GAME.islands.get(tileAt(plan.island[0], plan.island[1])?.island);
+function carryOutPlan(R) {
+  const isl = planIsland(R.plan);
+  R.plan = null;
+  if (!isl) return;
+  if (isl.warehouses || isl.owner) {
+    notify(`⚑ Du kom før ${RIVAL_NAME} til ${isl.name}!`);
+    changeRelation(-5);
+    return;
+  }
+  if (rivalSettle(isl)) {
+    notify(`⚑ ${RIVAL_NAME} har grundlagt en koloni på ${isl.name}`);
+    sfx('alarm');
   }
 }
 
@@ -440,6 +470,7 @@ function updateRivalShip(dt) {
 
 // Your ship arrives at a rival harbour: the rival buys what it doesn't make itself
 function sellToRival(ship, isl) {
+  if (!rivalTrades()) { warnOnce('rival-embargo', `⚑ ${RIVAL_NAME} vil ikke handle med ${ship.name} – forbedr forholdet med en gave`, 120); return; }
   const own = rivalGoods(isl);
   let income = 0;
   for (const k of RES_KEYS) {
@@ -452,12 +483,14 @@ function sellToRival(ship, isl) {
   }
   if (income) {
     GAME.coins += income;
+    changeRelation(1);
     notify(`⚑ ${RIVAL_NAME} købte varer af ${ship.name} for ${income} 🪙`, false);
   }
 }
 
 // ... and you buy the chosen return goods from its stock
 function buyFromRival(ship, isl, goods) {
+  if (!rivalTrades()) return;
   let free = SHIP_TYPES[ship.type].cargo - cargoTotal(ship), spent = 0;
   const wanted = goods.filter(k => rivalGoods(isl).includes(k) && isl.resources[k] >= 1);
   for (const k of wanted) {
@@ -508,6 +541,7 @@ function buyRivalIsland(isl) {
   recomputeConnectivity();
   minimapDirty = true;
   notify(`🤝 Du har købt ${isl.name} af ${RIVAL_NAME}!`);
+  changeRelation(-30);
   sfx('coins');
   saveGame();
   return null;

@@ -229,6 +229,14 @@ function clipZ(tri, level, keepBelow) {
   return out.length >= 3 ? out : null;
 }
 
+// Rebuilds only the rock tiles (and tiles that were quarried away) instead of the whole map
+function redecorateRocks(changed = []) {
+  for (const t of GAME.grid) if (t.type === 'rock') { t.mountain = null; decorateTile(t); }
+  for (const t of changed) { t.mountain = null; decorateTile(t); }
+  groupRocks(GAME.grid, tileAt);
+  groundLayer.dirty = true;
+}
+
 function groupRocks(grid, at) {
   const assigned = new Set();
   let gid = 0;

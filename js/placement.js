@@ -220,6 +220,7 @@ function finishMove(tx, ty) {
   b.y = ty;
   for (let dy = 0; dy < def.h; dy++) for (let dx = 0; dx < def.w; dx++) GAME.occupancy.set(`${tx + dx},${ty + dy}`, b.id);
   b.harvestAt = null;
+  b.roadExempt = false; // a moved house needs a road like any new one
   cancelMove();
   if (b.type === 'warehouse') invalidateRoutes();
   updateIslandStats();
@@ -462,13 +463,13 @@ function placeRoads(tiles) {
     if (isRoad(t.tx, t.ty) || !canPlaceBuilding(t.tx, t.ty, DEFS.road, true)) continue;
     const key = `${t.tx},${t.ty}`;
     const tile = tileAt(t.tx, t.ty);
-    if (tile.type === 'forest') { tile.type = 'grass'; felled++; }
+    if (tile.type === 'forest') { tile.type = 'grass'; decorateTile(tile); felled++; } // re-dress just this tile as grass
     if (tile.canal) bridges++;
     GAME.roads.add(key);
     GAME.occupancy.set(key, 'road');
     built++;
   }
-  if (felled) decorateTerrain(GAME.grid); // re-dress the cleared tiles as grass
+
   if (bridges) {
     const before = GAME.islands.size;
     recomputeIslands(); // a bridge can join two islands into one
@@ -558,6 +559,7 @@ function demolishAt(tx, ty) {
     GAME.occupancy.delete(key);
     if (wasBridge) recomputeIslands(); // removing a bridge may split the island again
     log(`✓ ${wasBridge ? 'Bro' : 'Vej'} fjernet ved ${key}`, 'ok');
+    rememberDemolition({ road: true, x: tx, y: ty, bridge: wasBridge });
     recomputeConnectivity();
     saveGame();
     return;
@@ -584,16 +586,19 @@ function demolishAt(tx, ty) {
     for (let dx = 0; dx < def.w; dx++) GAME.occupancy.delete(`${b.x + dx},${b.y + dy}`);
   }
   // Ships lose routes that used this warehouse
-  if (b.type === 'warehouse') {
-    for (const r of GAME.routes.filter(r => r.from === b.id || r.to === b.id)) deleteRoute(r);
-  }
+  const lostRoutes = b.type === 'warehouse' ? GAME.routes.filter(r => r.from === b.id || r.to === b.id) : [];
+  for (const r of lostRoutes) deleteRoute(r);
 
   updateIslandStats();
   for (const r of RES_KEYS) isl.resources[r] = Math.min(isl.resources[r], isl.cap);
+  const refund = {};
   for (const r in def.cost) {
-    if (r === 'coins') GAME.coins += Math.floor(def.cost[r] / 2);
-    else isl.resources[r] = Math.min(isl.cap, isl.resources[r] + Math.floor(def.cost[r] / 2));
+    const n = Math.floor(def.cost[r] / 2);
+    if (r === 'coins') GAME.coins += n;
+    else isl.resources[r] = Math.min(isl.cap, isl.resources[r] + n);
+    refund[r] = n;
   }
+  rememberDemolition({ building: b, refund, routes: lostRoutes.map(r => ({ ...r, _path: null })) });
 
   log(`✓ ${def.name} revet ned`, 'ok');
   sfx('demolish');

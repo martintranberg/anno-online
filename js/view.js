@@ -81,7 +81,7 @@ function refreshMenuState() {
 }
 
 // Render a building (or tool) into a card canvas by temporarily redirecting `ctx`
-const PREVIEW_H = { house: 40, woodcutter: 52, sawmill: 62, warehouse: 74, stonecutter: 52, road: 10,
+const PREVIEW_H = { park: 40, fountain: 50, statue: 70, house: 40, woodcutter: 52, sawmill: 62, warehouse: 74, stonecutter: 52, road: 10,
                     canal: 10, fisher: 46, grainfarm: 40, pigfarm: 44, cattlefarm: 50, shipyard: 70,
                     sheepfarm: 40, weaver: 60, hopfarm: 60, brewery: 62, forester: 44,
                     claypit: 36, brickworks: 70, charcoal: 50, mine: 44, smithy: 64, marketplace: 36, chapel: 80,
@@ -254,6 +254,9 @@ function render() {
   if (raider && seenAt(raider.x, raider.y) && inView(P(raider.x, raider.y), 60, 30, 60)) {
     items.push({ depth: raider.x + raider.y, draw: () => drawShip(raider, false) });
   }
+  if (cam.zoom >= LIFE_ZOOM) {
+    for (const w of life.walkers) if (inView(P(w.x, w.y), 20, 20, 20)) items.push({ depth: w.x + w.y, draw: () => drawWalker(w) });
+  }
   for (const s of GAME.ships) {
     if (inView(P(s.x, s.y), 60, 30, 60)) {
       items.push({ depth: s.x + s.y, draw: () => drawShip(s, sel?.kind === 'ship' && sel.id === s.id) });
@@ -265,7 +268,7 @@ function render() {
 
   // Warning bubbles over production buildings without a road link
   for (const b of visibleBuildings) {
-    if (needsRoad(DEFS[b.type]) && !GAME.connected.has(b.id)) drawNoRoadIcon(b);
+    if (needsRoad(DEFS[b.type]) && !GAME.connected.has(b.id) && !b.roadExempt) drawNoRoadIcon(b);
   }
 
   drawRouteOverlay();

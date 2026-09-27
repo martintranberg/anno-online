@@ -300,6 +300,11 @@ canvas { display: block; width: 100%; height: 100%; }
 #info-body .chip.warn { background: rgba(200,90,50,0.22); }
 #info-body .tip { display: flex; gap: 6px; align-items: baseline; padding: 3px 0; border-bottom: 1px solid rgba(90,64,40,0.12); }
 #info-body .tip span:nth-child(2) { flex: 1; }
+#info-body .res.clickable { cursor: pointer; border-radius: 3px; }
+#info-body .res.clickable:hover { background: rgba(201,162,78,0.18); }
+#info-body .row.current { background: rgba(201,162,78,0.25); }
+#quest .quest-link { display: block; margin-top: 5px; background: none; border: none; padding: 0; color: #2a5aa8; font-size: 12px; cursor: pointer; text-align: left; }
+.victory-score { font-family: Georgia, serif; font-size: 28px; color: #7a4a10; margin: 6px 0; }
 #info-body .tabs { display: flex; gap: 4px; margin-bottom: 8px; }
 #info-body .tabs button { flex: 1; background: #b8a27a !important; color: #3a2616 !important; }
 #info-body .tabs button.current { background: #4a6fa5 !important; color: #fff !important; }

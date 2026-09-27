@@ -23,9 +23,18 @@ const inStock = (isl, need) => NEED_INFO[need].keys.some(k => isl.resources[k] >
 
 // ----- Natural resources -----
 let rocksDirty = false; // set when quarrying visibly changes a rock tile; mountains are rebuilt once per tick
+const quarriedTiles = []; // rock tiles quarried away since the last rebuild
 
 // Tiles within `r` of a building's footprint, nearest first
+// (cached per building and position: foresters and harvesters ask every tick)
 function tilesAround(b, r) {
+  const key = `${r}:${b.x},${b.y}`;
+  if (b._around?.key === key) return b._around.tiles;
+  const tiles = tilesAroundUncached(b, r);
+  if (b.id) Object.defineProperty(b, '_around', { value: { key, tiles }, writable: true, configurable: true, enumerable: false });
+  return tiles;
+}
+function tilesAroundUncached(b, r) {
   const def = DEFS[b.type], cx = b.x + (def.w - 1) / 2, cy = b.y + (def.h - 1) / 2, out = [];
   for (let y = b.y - r; y < b.y + def.h + r; y++) {
     for (let x = b.x - r; x < b.x + def.w + r; x++) {
@@ -68,6 +77,7 @@ function depleteTile(t) {
     if (t.stone <= 0) {
       t.type = 'grass';
       t.quarried = true;
+      quarriedTiles.push(t);
       rocksDirty = true;
     } else if (stage !== t.stoneStage) {
       rocksDirty = true;
@@ -167,13 +177,18 @@ function moodFactors(isl, byL) {
   if (isl.hunger) f.push(['Sult', -35]);
   for (const n of ['meat', 'cloth', 'beer', 'wine', 'jewelry']) {
     const wanted = byL.some((p, L) => L >= NEED_FROM[n] && p > 0.5);
-    if (wanted && isl.needsMet[n] === false) f.push([`Mangler ${NEED_INFO[n].name.toLowerCase()}`, -12]);
+    if (wanted && isl.needsMet[n] === false) f.push([`Mangler ${NEED_INFO[n].name.toLowerCase()}`, -10]);
   }
   const houses = GAME.buildings.filter(b => DEFS[b.type].house && islandOfBuilding(b) === isl);
   if (houses.length) {
     const served = houses.filter(b => b.cov?.market && servicesMet(b, b.level || 1)).length / houses.length;
-    f.push(['Offentlige bygninger', Math.round((served - 0.5) * 30)]);
+    f.push(['Offentlige bygninger', Math.round(served * 25 - 10)]);
+    const noRoad = houses.filter(b => !houseLinked(b)).length / houses.length;
+    if (noRoad > 0.05) f.push(['Boliger uden vej', -Math.round(noRoad * 15)]);
+    const beauty = Math.round(houses.reduce((s, b) => s + (b.beauty || 0), 0) / houses.length);
+    if (beauty) f.push(['Pynt og parker', beauty]);
   }
+  if (isl.festival > 0) f.push(['Fest', FESTIVAL_MOOD]);
   if (GAME.bankrupt) f.push(['Fallit – byen forfalder', -15]);
   if (GAME.buildings.some(b => b.fire && islandOfBuilding(b) === isl)) f.push(['Brand', -8]);
   return f;
@@ -301,7 +316,8 @@ function tick() {
       warnOnce(`mood-${isl.name}`, `😠 Beboerne på ${isl.name} er utilfredse og flytter! Sænk skatten eller dæk deres behov.`, 120);
     } else if (fed && hasFood && isl.pop < isl.popCap && (mood >= 45 || GAME.tick % 2 === 0)) {
       const bonus = mood >= 75 ? 1 : 0;
-      isl.pop = Math.min(isl.popCap, isl.pop + 1 + bonus + Math.floor(isl.popCap / 60));
+      // Settlers arrive gradually: about one every other second, a little faster on big islands
+      isl.pop = Math.min(isl.popCap, isl.pop + (GAME.tick % 2 === 0 ? 1 : 0) + bonus + Math.floor(isl.popCap / 150));
     } else if (isl.pop < Math.min(isl.popCap, FREE_SETTLERS)) isl.pop++; // first settlers come even without food
 
     for (let L = 1; L <= MAX_LEVEL; L++) {
@@ -335,11 +351,16 @@ function tick() {
   traderTick();
   pirateTick();
   rivalTick();
+  relationTick();
+  contractsTick();
+  festivalTick();
+  lifeTick();
+  if (GAME.tick % 30 === 0 && GAME.phase === 'play') recordHighscore();
   repairShips();
   for (const s of GAME.ships) reveal(s.x, s.y, SHIP_SIGHT);
   if (GAME.tick % 10 === 0) recordHistory(islands);
   checkQuests();
-  if (rocksDirty) { rocksDirty = false; decorateTerrain(GAME.grid); } // rebuild shrinking mountains
+  if (rocksDirty) { rocksDirty = false; redecorateRocks(quarriedTiles.splice(0)); } // rebuild shrinking mountains
   if (GAME.tick % 5 === 0) minimapDirty = true;
 
   GAME.tick++;
@@ -403,6 +424,7 @@ function gameLoop(t) {
   updateTrader(gdt);
   updatePirates(gdt);
   updateRivalShip(gdt);
+  updateLife(gdt);
 
   acc += gdt;
   while (acc >= 1000) {
@@ -439,7 +461,7 @@ function updateHud() {
     !isl.warehouses ? ' (intet lager)' : isl.pop ? ` ${moodIcon(isl.mood ?? MOOD_START)}` : '';
   document.getElementById('island-name').textContent = `📍 ${isl ? (known ? isl.name : 'Ukendt ø') : 'Havet'} ${fert}${extra}`;
   document.getElementById('tick').textContent = `Tick: ${GAME.tick}${GAME.speed === 0 ? ' · ⏸ Pause' : ''}`;
-  const unlinked = GAME.buildings.filter(b => needsRoad(DEFS[b.type]) && !GAME.connected.has(b.id)).length;
+  const unlinked = GAME.buildings.filter(b => needsRoad(DEFS[b.type]) && !GAME.connected.has(b.id) && !b.roadExempt).length;
   document.getElementById('status').textContent =
     unlinked ? `⚠ ${unlinked} bygning${unlinked > 1 ? 'er' : ''} mangler vej til lager` : '';
   const hungry = [...GAME.islands.values()].filter(i => i.hunger > 0 && i.pop > 0).map(i => i.name);
@@ -489,7 +511,8 @@ function finishInit(loaded) {
     refreshMenuState();
     log('Gemt spil indlæst', 'ok');
     showToast(migratedFrom === 2 ? '📂 Dit spil er opdateret til den nye version (boliger og mønter er nulstillet)'
-      : migratedFrom === 3 ? '📂 Dit spil er opdateret: nye øer at udforske, pirater, en rival og Adelige' : '📂 Dit gemte spil er indlæst');
+      : migratedFrom === 3 ? '📂 Dit spil er opdateret: nye øer at udforske, pirater, en rival og Adelige'
+      : migratedFrom === 4 ? '📂 Dit spil er opdateret: kontrakter, fester, pynt og vogne på vejene. Nye boliger skal have vej.' : '📂 Dit gemte spil er indlæst');
   } else {
     // Setup phase: the player picks where the first (free) warehouse goes
     openBuildCategory('harbor');

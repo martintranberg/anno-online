@@ -21,7 +21,8 @@ test('settlers arrive, a fisher feeds them and production needs workers and a ro
   assert.ok(houses.every(Boolean), 'three houses near the warehouse');
   const fisher = build(G, 'fisher', wh.x, wh.y);
   assert.ok(fisher && G.GAME.connected.has(fisher.id), 'fisher connected');
-  runTicks(G, 3);
+  assert.ok(houses.every(h => G.houseLinked(h)), 'houses are connected by road');
+  runTicks(G, 8);
   assert.ok(home.pop >= 3, 'free settlers move in without food');
   runTicks(G, 60);
   assert.ok(fisher.staffed, 'fisher has workers');

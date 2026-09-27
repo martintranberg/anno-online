@@ -288,9 +288,12 @@ const servicesMet = (b, L) => HOUSE_LEVELS[L].services.every(s => b.cov?.[s]);
 
 // A house's capacity: full for its level when its goods needs (last tick) and services are met, otherwise
 // the level below. Houses out of any market's reach only hold a couple of self-sufficient pioneers.
+// Houses need a road to the warehouse to get their goods (houses built before this rule are exempt)
+const houseLinked = (b) => b.roadExempt || GAME.connected.has(b.id);
+
 function houseCap(b, isl) {
   const L = b.level || 1;
-  if (!b.cov?.market) return UNSERVED_CAP;
+  if (!b.cov?.market || !houseLinked(b)) return UNSERVED_CAP;
   const met = HOUSE_LEVELS[L].needs.every(n => isl.needsMet[n] !== false) && servicesMet(b, L);
   return HOUSE_LEVELS[met || L === 1 ? L : L - 1].cap;
 }
@@ -311,6 +314,12 @@ function updateIslandStats() {
     if (b.type === 'warehouse') { isl.warehouses++; isl.cap += def.storage; }
     b.cov = coverageOf(b, isl);
     if (def.house) {
+      // Best decoration in reach
+      b.beauty = 0;
+      for (const d of GAME.buildings) {
+        const bd = DEFS[d.type].beauty;
+        if (bd && bd.bonus > b.beauty && islandOfBuilding(d) === isl && !d.paused && footprintGap(b, d) <= bd.radius) b.beauty = bd.bonus;
+      }
       const c = houseCap(b, isl);
       isl.popCap += c;
       isl.levelCap[b.level || 1] += c;

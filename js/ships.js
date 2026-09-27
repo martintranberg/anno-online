@@ -214,6 +214,24 @@ function loadShip(ship, isl, goods, keep = {}) {
   }
 }
 
+// Loads a leg and remembers what went on board. When nothing could be loaded, says why:
+// the minimum stock ("behold mindst") is at or above what the island has, or there's simply none.
+function loadLeg(ship, r, isl, goods, keep, leg) {
+  const before = { ...ship.cargo };
+  loadShip(ship, isl, goods, keep);
+  const loaded = Object.fromEntries(RES_KEYS.filter(k => ship.cargo[k] > before[k]).map(k => [k, ship.cargo[k] - before[k]]));
+  let note = '';
+  if (goods.length && !Object.keys(loaded).length && !isWarship(ship) && isl.owner !== 'rival') {
+    const blocked = goods.filter(k => isl.resources[k] >= 1 && isl.resources[k] - (keep[k] || 0) < 1);
+    note = blocked.length
+      ? `minimumslageret er for højt (${blocked.map(k => `${RES_ICONS[k]} ${Math.floor(isl.resources[k])} ≤ ${keep[k]}`).join(', ')})`
+      : `${isl.name} har ingen af varerne på lager`;
+    warnOnce(`load-${ship.id}-${leg}`, `⛵ ${ship.name} sejlede tom fra ${isl.name}: ${note}`, 300);
+  }
+  r.lastLoad = r.lastLoad || {};
+  r.lastLoad[leg] = { tick: GAME.tick, loaded, note, ship: ship.name };
+}
+
 function finishShipStop(ship) {
   const r = shipRoute(ship);
   const from = r && buildingById(r.from), to = r && buildingById(r.to);
@@ -221,12 +239,12 @@ function finishShipStop(ship) {
   if (ship.state === 'loading') {
     const isl = islandOfBuilding(from);
     unloadShip(ship, isl);          // return cargo from the last trip
-    loadShip(ship, isl, r.res, r.keepRes);
+    loadLeg(ship, r, isl, r.res, r.keepRes, 'out');
     sailTo(ship, to, 'toTo', r.waypoints);
   } else if (ship.state === 'unloading') {
     const isl = islandOfBuilding(to);
     unloadShip(ship, isl);
-    loadShip(ship, isl, r.back, r.keepBack);
+    loadLeg(ship, r, isl, r.back, r.keepBack, 'back');
     ship.trips++;
     sailTo(ship, from, 'toFrom', [...r.waypoints].reverse());
   }

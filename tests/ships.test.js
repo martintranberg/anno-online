@@ -172,7 +172,11 @@ test('the rival settles free islands but never the two nearest your start', () =
   const start = [...G.GAME.islands.values()].find(i => i.start);
   const d = (i) => Math.hypot(i.anchor[0] - start.anchor[0], i.anchor[1] - start.anchor[1]);
   const reserved = [...G.GAME.islands.values()].filter(i => !i.start && !i.pirate && i.size >= 12).sort((a, b) => d(a) - d(b)).slice(0, 2);
-  for (let i = 0; i < 10; i++) G.rivalExpand(G.rivalIslands());
+  for (let i = 0; i < 10; i++) {
+    G.rivalExpand(G.rivalIslands());
+    // Known islands are announced first and settled when the warning time is up
+    if (G.GAME.rival.plan) { G.GAME.rival.plan.at = G.GAME.tick; G.carryOutPlan(G.GAME.rival); }
+  }
   assert.ok(G.rivalIslands().length >= 2, 'rival expanded');
   for (const r of reserved) assert.notEqual(r.owner, 'rival', `${r.name} stays free`);
   // Rival timer

@@ -74,6 +74,7 @@ const GAME = {
   bankrupt: false,         // coins below zero: most production stops
   moving: null,            // id of the building being relocated
   shipOrder: null,         // { id } while the player picks a destination for a ship
+  contracts: [],           // offers and accepted contracts (see contracts.js)
   coins: 0,
   tierReached: 1,          // highest house level reached so far (unlocks buildings and ships)
   questIndex: 0,
@@ -205,6 +206,27 @@ const TAX_LEVELS = {
 };
 const MOOD_START = 60;
 
+// Coins have uses beyond building: festivals and decorations lift the mood
+const FESTIVAL_TICKS = 120;        // how long a festival lifts the mood
+const FESTIVAL_COOLDOWN = 600;     // ticks before the island can hold another
+const FESTIVAL_MOOD = 20;
+const festivalCost = (isl) => ({ coins: 150 + 3 * Math.round(isl.pop) });
+
+// Contracts: the trader (and the rival, when on good terms) ask for goods by a deadline, for a good price
+const CONTRACT_EVERY = 240;        // ticks between new offers
+const CONTRACT_MAX_OFFERS = 3;
+const CONTRACT_TIME = 900;         // ticks to deliver after accepting
+const CONTRACT_OFFER_TIME = 300;   // an offer disappears if not accepted in time
+
+// Relations with the rival (0-100): trading and gifts improve them, buying their islands and failed
+// contracts hurt. Bad relations: no trade and pirates paid to raid you. Good relations: better prices, contracts.
+const RIVAL_RELATION_START = 50;
+const RIVAL_GIFT = 300;            // coins per gift
+const RIVAL_GIFT_RELATION = 10;
+const RIVAL_PLAN_TICKS = 120;      // warning before the rival settles a discovered island
+
+const UNDO_SECONDS = 15;           // a demolition can be undone this long
+
 // What each resident consumes per second, by need
 const NEED_RATES = { food: 0.02, meat: 0.008, cloth: 0.006, beer: 0.008, wine: 0.006, jewelry: 0.004 };
 const NEED_INFO = {
@@ -250,7 +272,7 @@ const upkeepOf = (b) => (DEFS[b.type].upkeep || 0) * UPKEEP_FACTOR * PROD_LEVELS
 
 // workers: residents needed to run it · upkeep: coins/s · tier: house level needed to unlock
 const DEFS = {
-  house: { id: 'house', name: 'Bolig', w: 2, h: 2, cost: { coins: 30, planks: 10 }, house: true,
+  house: { id: 'house', name: 'Bolig', w: 2, h: 2, cost: { coins: 30, planks: 10 }, house: true, needsRoad: true,
     desc: 'Bolig for 6 pionerer. De første 4 beboere på en ø klarer sig uden mad; resten skal have fisk eller kød. Opgraderes til Borgere (12), Købmænd (20) og Adelige (30).' },
   woodcutter: { id: 'woodcutter', name: 'Skovhugger', w: 2, h: 2, cost: { coins: 30, planks: 10 }, workers: 2, upkeep: 0.04,
     produces: 'wood', rate: 0.8, near: { terrain: 'forest', label: 'skov' },
@@ -341,6 +363,13 @@ const DEFS = {
   shipyard: { id: 'shipyard', name: 'Skibsbygger', w: 3, h: 3, cost: { coins: 150, planks: 40, stone: 20 }, workers: 5, upkeep: 0.1,
     coastal: true, needsRoad: true,
     desc: 'Bygger skibe. Skal ligge ved havet og have vej til et lager. Klik på den for at bygge skibe.' },
+  // Decorations: houses within reach get happier (the best one in reach counts, they don't stack)
+  park: { id: 'park', name: 'Park', w: 2, h: 2, cost: { coins: 150, planks: 5 }, upkeep: 0.04, beauty: { radius: 6, bonus: 8 },
+    desc: 'Træer, bænke og blomster. Beboere inden for 6 felter bliver gladere (+8 tilfredshed).' },
+  fountain: { id: 'fountain', name: 'Springvand', w: 1, h: 1, cost: { coins: 300, stone: 10 }, upkeep: 0.05, tier: 2, beauty: { radius: 5, bonus: 12 },
+    desc: 'Et springvand på pladsen. Beboere inden for 5 felter bliver gladere (+12 tilfredshed).' },
+  statue: { id: 'statue', name: 'Statue', w: 2, h: 2, cost: { coins: 900, stone: 20, bricks: 10 }, upkeep: 0.1, tier: 3, beauty: { radius: 8, bonus: 18 },
+    desc: 'En statue af øens grundlægger. Beboere inden for 8 felter bliver gladere (+18 tilfredshed).' },
   warehouse: { id: 'warehouse', name: 'Lager', w: 2, h: 2, cost: {}, storage: WAREHOUSE_CAP, upkeep: 0.05,
     desc: 'Lageret samler varer for hele øen. Første lager på en ny ø skal ligge ved havet, og skibet har 30 planker og 20 fisk med som startforsyning.' },
   road: { id: 'road', name: 'Vej', w: 1, h: 1, cost: {},
@@ -371,6 +400,7 @@ const CATEGORIES = [
   { id: 'terrain', name: 'Terræn', icon: '🛤️', items: ['road', 'canal', 'demolish'] },
   { id: 'housing', name: 'Boliger', icon: '🏠', items: ['house'] },
   { id: 'public', name: 'Offentligt', icon: '🏪', items: ['marketplace', 'chapel', 'tavern', 'firestation', 'theater', 'monument'] },
+  { id: 'decor', name: 'Pynt', icon: '🌳', items: ['park', 'fountain', 'statue'] },
   { id: 'production', name: 'Produktion', icon: '🪵', items: ['woodcutter', 'forester', 'sawmill', 'stonecutter', 'sheepfarm', 'weaver'] },
   { id: 'industry', name: 'Industri', icon: '⚒️', items: ['claypit', 'brickworks', 'charcoal', 'mine', 'smithy', 'goldmine', 'goldsmith'] },
   { id: 'food', name: 'Mad & drikke', icon: '🌾', items: ['fisher', 'grainfarm', 'pigfarm', 'cattlefarm', 'hopfarm', 'brewery', 'vineyard', 'winery'] },
